@@ -3,13 +3,13 @@
 namespace deepshogi {
 
 /**
- * 候補手データを作成する。
- * @param move 着手
- * @param visits 訪問回数
- * @param playouts プレイアウト回数
- * @param policy 予想着手確率
- * @param value 予想勝率
- * @param variations 予想進行
+ * Create candidate move data.
+ * @param move Move
+ * @param visits Number of visits
+ * @param playouts Number of playouts
+ * @param policy Predicted move probability
+ * @param value Predicted win rate
+ * @param variations Predicted sequence
  */
 Candidate::Candidate(
     Move move, int32_t color, int32_t visits, int32_t playouts,
@@ -24,13 +24,13 @@ Candidate::Candidate(
 }
 
 /**
- * 候補手データを作成する。
- * @param move 着手
- * @param color 手番
- * @param visits 訪問回数
- * @param playouts プレイアウト回数
- * @param policy 予想着手確率
- * @param value 予想勝率
+ * Create candidate move data.
+ * @param move Move
+ * @param color Side to move
+ * @param visits Number of visits
+ * @param playouts Number of playouts
+ * @param policy Predicted move probability
+ * @param value Predicted win rate
  */
 Candidate::Candidate(
     Move move, int32_t color, int32_t visits, int32_t playouts,
@@ -40,56 +40,56 @@ Candidate::Candidate(
 }
 
 /**
- * 着手を取得する。
- * @return 着手
+ * Get the move.
+ * @return Move
  */
 Move Candidate::getMove() const {
   return _move;
 }
 
 /**
- * 手番を取得する。
- * @return 手番
+ * Get the side to move.
+ * @return Side to move
  */
 int32_t Candidate::getColor() const {
   return _color;
 }
 
 /**
- * 訪問回数を取得する。
- * @return 訪問回数
+ * Get the number of visits.
+ * @return Number of visits
  */
 int32_t Candidate::getVisits() const {
   return _visits;
 }
 
 /**
- * プレイアウト回数を取得する。
- * @return プレイアウト回数
+ * Get the number of playouts.
+ * @return Number of playouts
  */
 int32_t Candidate::getPlayouts() const {
   return _playouts;
 }
 
 /**
- * 予想着手確率を取得する。
- * @return 予想着手確率
+ * Get the predicted move probability.
+ * @return Predicted move probability
  */
 float Candidate::getPolicy() const {
   return _policy;
 }
 
 /**
- * 予想勝率を取得する。
- * @return 予想勝率
+ * Get the predicted win rate.
+ * @return Predicted win rate
  */
 float Candidate::getValue() const {
   return _value;
 }
 
 /**
- * 予想進行を取得する。
- * @return 予想進行
+ * Get the predicted sequence.
+ * @return Predicted sequence
  */
 std::vector<Move> Candidate::getVariations() const {
   return _variations;

@@ -1,27 +1,28 @@
 #include "Evaluator.h"
 
-#define DIR_H (0)    // 移動:打
-#define DIR_U (1)    // 移動:上
-#define DIR_D (2)    // 移動:下
-#define DIR_R (3)    // 移動:右
-#define DIR_L (4)    // 移動:左
-#define DIR_UR (5)   // 移動:右上
-#define DIR_UL (6)   // 移動:左上
-#define DIR_DR (7)   // 移動:右下
-#define DIR_DL (8)   // 移動:左下
-#define DIR_KR (9)   // 移動:桂馬右
-#define DIR_KL (10)  // 移動:桂馬左
+// Move directions
+#define DIR_H (0)    // Move: Drop
+#define DIR_U (1)    // Move: Up
+#define DIR_D (2)    // Move: Down
+#define DIR_R (3)    // Move: Right
+#define DIR_L (4)    // Move: Left
+#define DIR_UR (5)   // Move: Up-Right
+#define DIR_UL (6)   // Move: Up-Left
+#define DIR_DR (7)   // Move: Down-Right
+#define DIR_DL (8)   // Move: Down-Left
+#define DIR_KR (9)   // Move: Knight-Right
+#define DIR_KL (10)  // Move: Knight-Left
 
 namespace deepshogi {
 
 /**
- * 指定された着手のPolicyインデックスを取得する。
- * @param board 盤面
- * @param move 着手
- * @return Policyインデックス
+ * Get the Policy index for the specified move.
+ * @param board Board
+ * @param move Move
+ * @return Policy index
  */
 static int32_t getPolicyIndex(const Board* board, Move move) {
-  // 駒番号と移動方向を計算する
+  // Calculate piece number and move direction
   int32_t move_x = 0;
   int32_t move_y = 0;
   int32_t piece = 0;
@@ -49,62 +50,62 @@ static int32_t getPolicyIndex(const Board* board, Move move) {
     }
   }
 
-  // 後手番の場合は移動座標を反転する
+  // Reverse move coordinates for white's turn
   if (board->getColor() == COLOR_WHITE) {
     move_x = -move_x;
     move_y = -move_y;
   }
 
-  // 移動方向を判定する
+  // Determine move direction
   int32_t dir = 0;
 
-  if (move_x == 0 && move_y == 0) {  // 打
+  if (move_x == 0 && move_y == 0) {  // Drop
     dir = DIR_H;
-  } else if (move_x == 0 && move_y < 0) {  // 上
+  } else if (move_x == 0 && move_y < 0) {  // Up
     dir = DIR_U;
-  } else if (move_x == 0 && move_y > 0) {  // 下
+  } else if (move_x == 0 && move_y > 0) {  // Down
     dir = DIR_D;
-  } else if (move_x < 0 && move_y == 0) {  // 右
+  } else if (move_x < 0 && move_y == 0) {  // Right
     dir = DIR_R;
-  } else if (move_x > 0 && move_y == 0) {  // 左
+  } else if (move_x > 0 && move_y == 0) {  // Left
     dir = DIR_L;
-  } else if (move_x < 0 && move_y == move_x) {  // 右上
+  } else if (move_x < 0 && move_y == move_x) {  // Up-Right
     dir = DIR_UR;
-  } else if (move_x > 0 && move_y == -move_x) {  // 左上
+  } else if (move_x > 0 && move_y == -move_x) {  // Up-Left
     dir = DIR_UL;
-  } else if (move_x < 0 && move_y == -move_x) {  // 右下
+  } else if (move_x < 0 && move_y == -move_x) {  // Down-Right
     dir = DIR_DR;
-  } else if (move_x > 0 && move_y == move_x) {  // 左下
+  } else if (move_x > 0 && move_y == move_x) {  // Down-Left
     dir = DIR_DL;
-  } else if (move_x == -1 && move_y == -2) {  // 桂馬右
+  } else if (move_x == -1 && move_y == -2) {  // Knight-Right
     dir = DIR_KR;
-  } else if (move_x == 1 && move_y == -2) {  // 桂馬左
+  } else if (move_x == 1 && move_y == -2) {  // Knight-Left
     dir = DIR_KL;
   } else {
     std::cerr << "Invalid move direction: " << move_x << ", " << move_y << std::endl;
     throw std::invalid_argument("Invalid move direction");
   }
 
-  // Policyインデックスを計算する
+  // Calculate Policy index
   int32_t index = 0;
 
-  if (piece == 0) {  // 歩
+  if (piece == 0) {  // Pawn
     index =
         0 + ((dir == DIR_U)   ? 0
              : (dir == DIR_H) ? 1
                               : -1);
-  } else if (piece == 1) {  // 香車
+  } else if (piece == 1) {  // Lance
     index =
         2 + ((dir == DIR_U)   ? 0
              : (dir == DIR_H) ? 1
                               : -3);
-  } else if (piece == 2) {  // 桂馬
+  } else if (piece == 2) {  // Knight
     index =
         4 + ((dir == DIR_KR)   ? 0
              : (dir == DIR_KL) ? 1
              : (dir == DIR_H)  ? 2
                                : -5);
-  } else if (piece == 3) {  // 銀
+  } else if (piece == 3) {  // Silver
     index =
         7 + ((dir == DIR_U)    ? 0
              : (dir == DIR_UR) ? 1
@@ -113,7 +114,7 @@ static int32_t getPolicyIndex(const Board* board, Move move) {
              : (dir == DIR_DL) ? 4
              : (dir == DIR_H)  ? 5
                                : -8);
-  } else if (piece == 4) {  // 角
+  } else if (piece == 4) {  // Bishop
     index =
         13 + ((dir == DIR_UR)   ? 0
               : (dir == DIR_UL) ? 1
@@ -121,7 +122,7 @@ static int32_t getPolicyIndex(const Board* board, Move move) {
               : (dir == DIR_DL) ? 3
               : (dir == DIR_H)  ? 4
                                 : -14);
-  } else if (piece == 5) {  // 飛車
+  } else if (piece == 5) {  // Rook
     index =
         18 + ((dir == DIR_U)   ? 0
               : (dir == DIR_D) ? 1
@@ -129,7 +130,7 @@ static int32_t getPolicyIndex(const Board* board, Move move) {
               : (dir == DIR_L) ? 3
               : (dir == DIR_H) ? 4
                                : -19);
-  } else if (piece == 6) {  // 金
+  } else if (piece == 6) {  // Gold
     index =
         23 + ((dir == DIR_U)    ? 0
               : (dir == DIR_D)  ? 1
@@ -139,7 +140,7 @@ static int32_t getPolicyIndex(const Board* board, Move move) {
               : (dir == DIR_UL) ? 5
               : (dir == DIR_H)  ? 6
                                 : -24);
-  } else if (piece == 7) {  // 玉
+  } else if (piece == 7) {  // King
     index =
         30 + ((dir == DIR_U)    ? 0
               : (dir == DIR_D)  ? 1
@@ -150,7 +151,7 @@ static int32_t getPolicyIndex(const Board* board, Move move) {
               : (dir == DIR_DR) ? 6
               : (dir == DIR_DL) ? 7
                                 : -31);
-  } else if (piece == 8) {  // と金
+  } else if (piece == 8) {  // Promoted Pawn
     index =
         38 + ((dir == DIR_U)    ? 0
               : (dir == DIR_D)  ? 1
@@ -159,7 +160,7 @@ static int32_t getPolicyIndex(const Board* board, Move move) {
               : (dir == DIR_UR) ? 4
               : (dir == DIR_UL) ? 5
                                 : -39);
-  } else if (piece == 9) {  // 成香
+  } else if (piece == 9) {  // Promoted Lance
     index =
         44 + ((dir == DIR_U)    ? 0
               : (dir == DIR_D)  ? 1
@@ -168,7 +169,7 @@ static int32_t getPolicyIndex(const Board* board, Move move) {
               : (dir == DIR_UR) ? 4
               : (dir == DIR_UL) ? 5
                                 : -45);
-  } else if (piece == 10) {  // 成桂
+  } else if (piece == 10) {  // Promoted Knight
     index =
         50 + ((dir == DIR_U)    ? 0
               : (dir == DIR_D)  ? 1
@@ -179,7 +180,7 @@ static int32_t getPolicyIndex(const Board* board, Move move) {
               : (dir == DIR_KR) ? 6
               : (dir == DIR_KL) ? 7
                                 : -51);
-  } else if (piece == 11) {  // 成銀
+  } else if (piece == 11) {  // Promoted Silver
     index =
         58 + ((dir == DIR_U)    ? 0
               : (dir == DIR_D)  ? 1
@@ -190,7 +191,7 @@ static int32_t getPolicyIndex(const Board* board, Move move) {
               : (dir == DIR_DR) ? 6
               : (dir == DIR_DL) ? 7
                                 : -59);
-  } else if (piece == 12) {  // 馬
+  } else if (piece == 12) {  // Horse
     index =
         66 + ((dir == DIR_U)    ? 0
               : (dir == DIR_D)  ? 1
@@ -201,7 +202,7 @@ static int32_t getPolicyIndex(const Board* board, Move move) {
               : (dir == DIR_DR) ? 6
               : (dir == DIR_DL) ? 7
                                 : -67);
-  } else if (piece == 13) {  // 龍
+  } else if (piece == 13) {  // Dragon
     index =
         74 + ((dir == DIR_U)    ? 0
               : (dir == DIR_D)  ? 1
@@ -222,13 +223,13 @@ static int32_t getPolicyIndex(const Board* board, Move move) {
     throw std::invalid_argument("Invalid index");
   }
 
-  // 番号を返す
+  // Return the index
   return index;
 }
 
 /**
- * 評価結果オブジェクトを作成する。
- * @param processor 推論を実行するオブジェクト
+ * Create evaluation result object.
+ * @param processor Object to execute inference
  */
 Evaluator::Evaluator(Processor* processor)
     : _processor(processor),
@@ -238,7 +239,7 @@ Evaluator::Evaluator(Processor* processor)
 }
 
 /**
- * モデルによる評価結果をクリアする。
+ * Clear evaluation results from the model.
  */
 void Evaluator::clear() {
   _policies.clear();
@@ -247,30 +248,30 @@ void Evaluator::clear() {
 }
 
 /**
- * モデルによる評価を実行する。
- * @param board 評価対象の盤面
+ * Execute evaluation by the model.
+ * @param board Board to be evaluated
  */
 void Evaluator::evaluate(Board* board) {
-  // 評価済みなら何もしない。
+  // Do nothing if already evaluated.
   if (_evaluated) {
     return;
   }
 
-  // 現在の盤面の評価を実行する。
+  // Execute evaluation for the current board.
   float inputs[MODEL_INPUT_SIZE];
   float outputs[MODEL_OUTPUT_SIZE];
 
   board->getInputs(inputs);
   _processor->execute(inputs, outputs, 1);
 
-  // 候補手の一覧を作成する
+  // Create list of candidate moves
   std::vector<Move> legal_moves = board->getLegalMoves();
 
   for (Move move : legal_moves) {
-    // Policyのインデックスを計算する
+    // Calculate Policy index
     int32_t idx = getPolicyIndex(board, move);
 
-    // 移動先の座標を計算する
+    // Calculate destination coordinates
     int32_t x = move.getDstX();
     int32_t y = move.getDstY();
 
@@ -279,43 +280,43 @@ void Evaluator::evaluate(Board* board) {
       y = BOARD_SIZE - 1 - y;
     }
 
-    // Policyを追加する
+    // Add Policy
     int32_t index = ((idx * BOARD_SIZE * BOARD_SIZE) + (x * BOARD_SIZE + y));
 
     _policies.emplace_back(move, outputs[index], 0);
   }
 
-  // 予測勝率を取得する。
+  // Get predicted win rate.
   _value = outputs[MODEL_PREDICTIONS * BOARD_SIZE * BOARD_SIZE + 0] * 2 - 1;
 
-  // 白番の場合は先後番の評価値を反転する。
+  // Reverse evaluation value for white's turn.
   if (board->getColor() == COLOR_WHITE) {
     _value = -_value;
   }
 
-  // 評価済みのフラグを立てる。
+  // Set evaluated flag.
   _evaluated = true;
 }
 
 /**
- * モデルによる評価結果が設定されていればtrueを返す。
- * @return モデルによる評価結果が設定されていればtrue
+ * Return true if evaluation results from the model are set.
+ * @return True if evaluation results from the model are set
  */
 bool Evaluator::isEvaluated() {
   return _evaluated;
 }
 
 /**
- * モデルによる推論結果の予測候補手の一覧を取得する。
- * @return 予測候補手の一覧
+ * Get list of predicted candidate moves from model inference results.
+ * @return List of predicted candidate moves
  */
 std::vector<Policy> Evaluator::getPolicies() {
   return _policies;
 }
 
 /**
- * モデルによる推論結果の予想勝率を取得する。
- * @return モデルによる推論結果の予想勝率
+ * Get predicted win rate from model inference results.
+ * @return Predicted win rate from model inference results
  */
 float Evaluator::getValue() {
   return _value;

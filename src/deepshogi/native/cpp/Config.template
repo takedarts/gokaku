@@ -1,17 +1,17 @@
 #pragma once
 
-// 定数値
+// Constant values
 #define BOARD_SIZE   (${BOARD_SIZE})
 #define COLOR_BLACK  (${COLOR_BLACK})
 #define COLOR_WHITE  (${COLOR_WHITE})
 #define COLOR_NONE   (${COLOR_NONE})
 
-// 相手の手番を取得するマクロ
+// Macro to get the opponent's color
 #define OPPOSITE_COLOR(c)  (c * -1)
-// 相対的な手番を取得するマクロ
+// Macro to get the relative color
 #define RELATIVE_COLOR(c1, c2)  (c1 * c2)
 
-// 駒の数値（cshogiの駒番号と対応）
+// Piece values (corresponds to cshogi piece numbers)
 #define PIECE_EMPTY             (${PIECE_EMPTY})
 #define PIECE_PROMOTE           (${PIECE_PROMOTE})
 
@@ -59,7 +59,7 @@
 #define PIECE_HAND_ROOK         (${PIECE_HAND_ROOK})
 #define PIECE_HAND_END          (${PIECE_HAND_END})
 
-// モデルの設定値
+// Model configuration values
 #define MODEL_FEATURES     (${MODEL_FEATURES})
 #define MODEL_PREDICTIONS  (${MODEL_PREDICTIONS})
 #define MODEL_INPUT_SIZE   (${MODEL_INPUT_SIZE})

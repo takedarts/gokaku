@@ -1,62 +1,62 @@
 ################################################################
-# 全体の設定
+# Global settings
 ################################################################
-# プログラム名
+# Program name
 NAME = 'Gokaku'
-# バージョン番号
+# Version number
 VERSION = '2.1'
-# 作者名
+# Author name
 AUTHOR = 'Atsushi Takeda'
 
 ################################################################
-# 定数値 (手番の値はcshogiと異なる)
+# Constant values (the value for side to move is different from cshogi)
 ################################################################
-# 盤面の大きさ
+# Board size
 BOARD_SIZE = 9
 
-# 先手番の値
+# Value for black (first player)
 COLOR_BLACK = 1
-# 後手番の値
+# Value for white (second player)
 COLOR_WHITE = -1
-# 先手番でも後手番でもない値（引き分け等に使用）
+# Value for neither black nor white (used for draws, etc.)
 COLOR_NONE = 0
 
-# 入玉ルール - 27点法
+# Nyugyoku rule - 27 points method
 NYUGYOKU_RULE_27 = 0
-# 入玉ルール - 24点法
+# Nyugyoku rule - 24 points method
 NYUGYOKU_RULE_24 = 1
 
-# 終局理由 - なし
+# End reason - none
 RESULT_NONE = 0
-# 終局理由 - 詰み
+# End reason - checkmate
 RESULT_TSUMI = 1
-# 終局理由 - 入玉
+# End reason - nyugyoku
 RESULT_NYUGYOKU = 2
-# 終局理由 - 千日手
+# End reason - repetition
 RESULT_SENNICHITE = 3
-# 終局理由 - 最長手数
+# End reason - maximum moves
 RESULT_MAX_MOVES = 4
 
-# 勝率から将棋用点数に変換する際のスケール
+# Scale for converting win rate to shogi score
 SHOGI_SCORE_SCALE = 600
 
 
 def get_opposite_color(color: int) -> int:
-    '''指定された手番の相手の手番を取得する。
+    '''Get the opposite side to move for the specified color.
     Args:
-        color (int): 手番
+        color (int): Side to move
     Returns:
-        int: 相手の手番
+        int: Opponent's side to move
     '''
     return color * -1
 
 
 def get_color_name(color: int) -> str:
-    '''手番を表す文字列を取得する。
+    '''Get the string representing the side to move.
     Args:
-        color (int): 石の色
+        color (int): Piece color
     Returns:
-        str: 石の色を表す文字列
+        str: String representing the piece color
     '''
     if color == COLOR_BLACK:
         return 'black'
@@ -67,7 +67,7 @@ def get_color_name(color: int) -> str:
 
 
 def get_result_name(result: int) -> str:
-    '''終局理由の名前を取得する。'''
+    '''Get the name of the end reason.'''
     if result == RESULT_NONE:
         return 'none'
     elif result == RESULT_TSUMI:
@@ -83,11 +83,11 @@ def get_result_name(result: int) -> str:
 
 
 def get_shogi_score(win_chance: float) -> int:
-    '''盤面評価値から将棋用の点数に変換する。
+    '''Convert board evaluation value to shogi score.
     Args:
-        win_chance (float): 予想勝率
+        win_chance (float): Expected win rate
     Returns:
-        int: 将棋用の点数
+        int: Shogi score
     '''
     import math
 
@@ -99,7 +99,7 @@ def get_shogi_score(win_chance: float) -> int:
 
 
 ################################################################
-# 駒番号（cshogiの駒番号と対応）
+# Piece numbers (corresponds to cshogi piece numbers)
 ################################################################
 PIECE_EMPTY = 0
 PIECE_PROMOTE = 8
@@ -149,44 +149,44 @@ PIECE_HAND_GOLD = 6
 PIECE_HAND_END = 7
 
 ################################################################
-# モデルの設定値
+# Model settings
 ################################################################
-# モデルに入力する盤面特徴量の数
+# Number of board features input to the model
 MODEL_FEATURES = 84
-# モデルに入力するゲーム特徴量の数
+# Number of game features input to the model
 MODEL_INFOS = 80
-# モデルが出力するポリシーの層数
+# Number of policy layers output by the model
 MODEL_POLICIES = 82
-# モデルが出力する盤面予測値の数
+# Number of board predictions output by the model
 MODEL_PREDICTIONS = MODEL_POLICIES * 2 + 1
-# モデルが出力するゲーム予測値の数
+# Number of game predictions output by the model
 MODEL_VALUES = 8
 
-# モデルに入力するデータの大きさ
+# Size of data input to the model
 MODEL_INPUT_SIZE = MODEL_FEATURES * BOARD_SIZE * BOARD_SIZE + MODEL_INFOS
-# モデルが出力するデータの大きさ
+# Size of data output by the model
 MODEL_OUTPUT_SIZE = MODEL_PREDICTIONS * BOARD_SIZE * BOARD_SIZE + MODEL_VALUES
 
 ################################################################
-# デフォルト値
+# Default values
 ################################################################
-# デフォルトの初期盤面
+# Default initial board
 DEFAULT_INITIAL_SFEN = 'lnsgkgsnl/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL b - 1'
-# デフォルトの詰み探索の深さ
+# Default depth for checkmate search
 DEFAULT_CHECK_SEARCH_DEPTH = 31
-# デフォルトの詰み探索のノード数
+# Default number of nodes for checkmate search
 DEFAULT_CHECK_SEARCH_NODE = 10_000
-# デフォルトの同一局面の繰り返し回数
+# Default number of allowed repeats of the same position
 DEFAULT_ALLOWED_REPEATS = 3
-# デフォルトの入玉宣言に必要となる点数
+# Default points required for nyugyoku declaration
 DEFAULT_NYUGYOKU_SCORES = (28, 27)
-# デフォルトの引き分け手数
+# Default number of moves for a draw
 DEFAULT_DRAW_STEPS = 512
 
 ################################################################
-# ロギングの設定
+# Logging settings
 ################################################################
-# ログの形式
+# Log format
 LOGGING_FORMAT = '%(asctime)s [%(levelname)-5.5s] %(message)s (%(module)s.%(funcName)s:%(lineno)s)'
-# 時刻表示の形式
+# Date format for log timestamps
 LOGGING_DATE_FORMAT = '%Y-%m-%d %H:%M:%S'

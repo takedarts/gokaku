@@ -8,63 +8,63 @@
 namespace deepshogi {
 
 /**
- * 評価結果を格納するクラス。
+ * Class to store evaluation results.
  */
 class Evaluator {
  public:
   /**
-   * 評価結果オブジェクトを作成する。
-   * @param processor 推論を実行するオブジェクト
+   * Create evaluation result object.
+   * @param processor Object to execute inference
    */
   Evaluator(Processor* processor);
 
   /**
-   * モデルによる評価結果をクリアする。
+   * Clear evaluation results from the model.
    */
   void clear();
 
   /**
-   * モデルによる評価を実行する。
-   * @param board 評価対象の盤面
+   * Execute evaluation by the model.
+   * @param board Board to be evaluated
    */
   void evaluate(Board* board);
 
   /**
-   * モデルによる評価結果が設定されていればtrueを返す。
-   * @return モデルによる評価結果が設定されていればtrue
+   * Return true if evaluation results from the model are set.
+   * @return True if evaluation results from the model are set
    */
   bool isEvaluated();
 
   /**
-   * モデルによる推論結果の予測候補手の一覧を取得する。
-   * @return 予測候補手の一覧
+   * Get list of predicted candidate moves from model inference results.
+   * @return List of predicted candidate moves
    */
   std::vector<Policy> getPolicies();
 
   /**
-   * モデルによる推論結果の予想勝率を取得する。
-   * @return モデルによる推論結果の予想勝率
+   * Get predicted win rate from model inference results.
+   * @return Predicted win rate from model inference results
    */
   float getValue();
 
  private:
   /**
-   * 推論を実行するオブジェクト。
+   * Object to execute inference.
    */
   Processor* _processor;
 
   /**
-   * モデルによる推論結果の候補手の一覧
+   * List of candidate moves from model inference results
    */
   std::vector<Policy> _policies;
 
   /**
-   * モデルによる推論結果の予想勝率。
+   * Predicted win rate from model inference results.
    */
   float _value;
 
   /**
-   * モデルによる評価結果が設定されていればtrue。
+   * True if evaluation results from the model are set.
    */
   bool _evaluated;
 };

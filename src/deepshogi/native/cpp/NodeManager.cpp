@@ -3,8 +3,8 @@
 namespace deepshogi {
 
 /**
- * ノードオブジェクトの管理クラスを作成する。
- * @param parameter ノードオブジェクトの設定パラメータ
+ * Create a management class for node objects.
+ * @param parameter Configuration parameters for node objects
  */
 NodeManager::NodeManager(NodeParameter parameter)
     : _mutex(),
@@ -15,15 +15,15 @@ NodeManager::NodeManager(NodeParameter parameter)
 }
 
 /**
- * ノードオブジェクトを作成する。
- * 未使用のノードオブジェクトがあればそれを返し、なければ新規作成する。
- * @return ノードオブジェクト
+ * Create a node object.
+ * If there is an unused node object, return it; otherwise, create a new one.
+ * @return Node object
  */
 Node* NodeManager::createNode() {
   std::lock_guard<std::mutex> lock(_mutex);
 
-  // ノードオブジェクトを作成する
-  // 未使用のノードオブジェクトがあればそれを利用する
+  // Create a node object
+  // Use an unused node object if available
   Node* node;
 
   if (_poolNodes.empty()) {
@@ -34,33 +34,33 @@ Node* NodeManager::createNode() {
     _poolNodes.pop_back();
   }
 
-  // 使用中のノードオブジェクトとして登録する
+  // Register as a node object in use
   _usedNodes.insert(node);
 
-  // ノードオブジェクトを返す
+  // Return the node object
   return node;
 }
 
 /**
- * ノードオブジェクトを未使用状態にする。
- * @param node ノードオブジェクト
+ * Set the node object to unused state.
+ * @param node Node object
  */
 void NodeManager::releaseNode(Node* node) {
   std::lock_guard<std::mutex> lock(_mutex);
 
-  // 登録済みのノードオブジェクトでないなら何もしない
+  // Do nothing if not a registered node object
   if (_usedNodes.find(node) == _usedNodes.end()) {
     return;
   }
 
-  // ノードオブジェクトをリセットして未使用状態にする
+  // Reset the node object and set to unused state
   _usedNodes.erase(node);
   _poolNodes.push_back(node);
 }
 
 /**
- * このノード管理オブジェクトのの情報を出力する。
- * @param os 出力先
+ * Output information about this node manager object.
+ * @param os Output destination
  */
 void NodeManager::print(std::ostream& os) {
   os << "NodeManager: nodes=" << _nodes.size();

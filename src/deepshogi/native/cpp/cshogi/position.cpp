@@ -23,7 +23,7 @@
 #include "move.hpp"
 #include "mt64bit.hpp"
 #include "generateMoves.hpp"
-#include "../StackTrace.h"
+#include "StackTrace.h"
 
 namespace deepshogi::cshogi {
 

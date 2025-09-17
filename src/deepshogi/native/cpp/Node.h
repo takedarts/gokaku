@@ -17,286 +17,286 @@ namespace deepshogi {
 class NodeManager;
 
 /**
- * 探索ノードクラス。
+ * Search node class.
  */
 class Node {
  public:
   /**
-   * 探索ノードオブジェクトを作成する。
-   * @param manager ノード管理オブジェクト
-   * @param parameter ノード生成パラメータ
+   * Create a search node object.
+   * @param manager Node manager object
+   * @param parameter Node creation parameters
    */
   Node(NodeManager* manager, const NodeParameter& parameter);
 
   /**
-   * SFEN形式で指定された初期盤面ノードとして設定する。
-   * @param sfen SFEN形式の盤面
+   * Set as the initial board node specified in SFEN format.
+   * @param sfen Board in SFEN format
    */
   void initialize(const std::string sfen);
 
   /**
-   * 探索ノードを評価する。
-   * @param equally 探索回数を均等にする場合はtrue
-   * @param width 探索幅(0の場合は探索幅を自動で調整する)
-   * @param useUcb1 UCB1を使用する場合はtrue・PUCBを使用する場合はfalse
-   * @param searchCheckMove 詰み手筋を探索する場合はtrue
-   * @param temperature 探索の温度パラメータ
-   * @param noise 探索のガンベルノイズの強さ
-   * @return 評価結果
+   * Evaluate the search node.
+   * @param equally If true, equalize the number of searches
+   * @param width Search width (if 0, adjust automatically)
+   * @param useUcb1 If true, use UCB1; if false, use PUCB
+   * @param searchCheckMove If true, search for checkmate moves
+   * @param temperature Temperature parameter for search
+   * @param noise Strength of Gumbel noise for search
+   * @return Evaluation result
    */
   NodeResult evaluate(
       bool equally, int32_t width, bool useUcb1, bool searchCheckMove,
       float temperature, float noise);
 
   /**
-   * 探索ノードの評価値を更新する。
-   * @param value 評価値
+   * Update the evaluation value of the search node.
+   * @param value Evaluation value
    */
   void updateValue(float value);
 
   /**
-   * 探索ノードの評価値をキャンセルする。
-   * @param value 評価値
+   * Cancel the evaluation value of the search node.
+   * @param value Evaluation value
    */
   void cancelValue(float value);
 
   /**
-   * PolicyNetworkの評価値が最も高い候補手を取得する。
-   * @return 候補手
+   * Get the candidate move with the highest PolicyNetwork evaluation value.
+   * @return Candidate move
    */
   Move getPolicyMove();
 
   /**
-   * 着手を取得する。
-   * @return 着手
+   * Get the move.
+   * @return Move
    */
   Move getMove();
 
   /**
-   * 次の手番を取得する。
-   * @return 手番
+   * Get the next side to move.
+   * @return Side to move
    */
   int32_t getColor();
 
   /**
-   * このノードの予想着手確率を取得する。
-   * @return 予想着手確率
+   * Get the predicted move probability of this node.
+   * @return Predicted move probability
    */
   float getPolicy();
 
   /**
-   * 子ノードの一覧を取得する。
-   * @return ノードオブジェクトの一覧
+   * Get the list of child nodes.
+   * @return List of node objects
    */
   std::vector<Node*> getChildren();
 
   /**
-   * 指定した着手を実行したときのノードオブジェクトを取得する。
-   * ノードオブジェクトが存在しない場合は新しく作成したオブジェクトを返す。
-   * 作成したノードオブジェクトはこのノードオブジェクトの子ノードとしては登録されない。
-   * @param move 着手
-   * @return ノードオブジェクトへのポインタ
+   * Get the node object when the specified move is made.
+   * If the node object does not exist, return a newly created object.
+   * The created node object is not registered as a child node of this node object.
+   * @param move Move
+   * @return Pointer to node object
    */
   Node* getChild(const Move& move);
 
   /**
-   * このノードの詰み手筋を取得する。
-   * 積み手筋が見つかっていない場合はMOVE_PASSを返す。
-   * @return 詰み手筋
+   * Get the checkmate move of this node.
+   * If no checkmate move is found, return MOVE_PASS.
+   * @return Checkmate move
    */
   Move getCheckMove() const;
 
   /**
-   * このノードの探索回数を取得する。
-   * @return 探索回数
+   * Get the number of searches for this node.
+   * @return Number of searches
    */
   int32_t getVisits();
 
   /**
-   * プレイアウト数を取得する。
-   * @return プレイアウト数
+   * Get the number of playouts.
+   * @return Number of playouts
    */
   int32_t getPlayouts();
 
   /**
-   * プレイアウト数を設定する。
-   * @param playouts プレイアウト数
+   * Set the number of playouts.
+   * @param playouts Number of playouts
    */
   void setPlayouts(int32_t playouts);
 
   /**
-   * このノードの評価値を取得する。
-   * @return 評価値
+   * Get the evaluation value of this node.
+   * @return Evaluation value
    */
   float getValue();
 
   /**
-   * このノードの評価値の信頼区間の下限を取得する。
-   * @return 信頼区間の下限
+   * Get the lower bound of the confidence interval for the evaluation value of this node.
+   * @return Lower bound of confidence interval
    */
   float getValueLCB();
 
   /**
-   * PUCBに基づいてこのノードの優先度を取得する。
-   * @param totalVisits 探索回数の合計
-   * @return 優先度
+   * Get the priority of this node based on PUCB.
+   * @param totalVisits Total number of searches
+   * @return Priority
    */
   float getPriorityByPUCB(int32_t totalVisits);
 
   /**
-   * UCB1に基づいてこのノードの優先度を取得する。
-   * @param totalVisits 探索回数の合計
-   * @return 優先度
+   * Get the priority of this node based on UCB1.
+   * @param totalVisits Total number of searches
+   * @return Priority
    */
   float getPriorityByUCB1(int32_t totalVisits);
 
   /**
-   * このノードの予想進行を取得する。
-   * @return 予想進行
+   * Get the predicted sequence of this node.
+   * @return Predicted sequence
    */
   std::vector<Move> getVariations();
 
   /**
-   * 指定された盤面オブジェクトに盤面の状態をコピーする。
-   * @param board 盤面オブジェクト
+   * Copy the state of the board to the specified board object.
+   * @param board Board object
    */
   void copyBoardTo(Board* board);
 
   /**
-   * このノードの情報を出力する。
-   * @param os 出力先
+   * Output the information of this node.
+   * @param os Output destination
    */
   void print(std::ostream& os = std::cout);
 
  private:
   /**
-   * 評価同期用のミューテックス。
+   * Mutex for evaluation synchronization.
    */
   std::shared_mutex _evalMutex;
 
   /**
-   * 値同期用のミューテックス。
+   * Mutex for value synchronization.
    */
   std::shared_mutex _valueMutex;
 
   /**
-   * ノード管理オブジェクト。
+   * Node manager object.
    */
   NodeManager* _manager;
 
   /**
-   * このノードで評価する盤面。
+   * Board to be evaluated in this node.
    */
   Board _board;
 
   /**
-   * 着手。
+   * Move.
    */
   Move _move;
 
   /**
-   * 予想着手確率。
+   * Predicted move probability.
    */
   float _policy;
 
   /**
-   * 盤面を評価するオブジェクト。
+   * Object to evaluate the board.
    */
   Evaluator _evaluator;
 
   /**
-   * 詰み手筋の探索深さ。
+   * Search depth for checkmate moves.
    */
   int32_t _checkSearchDepth;
 
   /**
-   * 詰み手筋の探索ノード数。
+   * Number of nodes searched for checkmate moves.
    */
   int32_t _checkSearchNode;
 
   /**
-   * 子ノードの一覧。
+   * List of child nodes.
    */
   std::unordered_map<int32_t, Node*> _children;
 
   /**
-   * 次の着手確率の一覧。
+   * List of next move probabilities.
    */
   std::vector<Policy> _childPolicies;
 
   /**
-   * 子ノードへの登録を待機している候補手の一覧。
+   * List of candidate moves waiting to be registered as child nodes.
    */
   std::queue<Policy> _waitingQueue;
 
   /**
-   * 子ノードへの登録を待機している候補手のセット。
+   * Set of candidate moves waiting to be registered as child nodes.
    */
   std::set<int32_t> _waitingSet;
 
   /**
-   * 詰み手筋の着手。
+   * Checkmate move.
    */
   Move _checkMove;
 
   /**
-   * 浅い（3手）詰み手筋探索を実行済みならtrue。
+   * True if shallow (3-move) checkmate search has been executed.
    */
   bool _checkMoveShallowSearched;
 
   /**
-   * 深い（DfPn）詰み手筋探索を実行済みならtrue。
+   * True if deep (DfPn) checkmate search has been executed.
    */
   bool _checkMoveDeepSearched;
 
   /**
-   * 探索回数。
+   * Number of searches.
    */
   int32_t _visits;
 
   /**
-   * プレイアウト数。
+   * Number of playouts.
    */
   int32_t _playouts;
 
   /**
-   * 予想勝率。
+   * Predicted win rate.
    */
   float _value;
 
   /**
-   * 予想勝率と予想目数の加算回数。
+   * Number of times predicted win rate and predicted points have been added.
    */
   int32_t _count;
 
   /**
-   * このノードの盤面評価を実行する。
-   * @param searchCheckMove 詰み手筋を探索する場合はtrue
+   * Execute board evaluation for this node.
+   * @param searchCheckMove If true, search for checkmate moves
    */
   void _evaluateBoard(bool searchCheckMove);
 
   /**
-   * このノードの状態を評価して、評価結果を返す。
-   * @param equally 探索回数を均等にする場合はtrue
-   * @param width 探索幅(0の場合は探索幅を自動で調整する)
-   * @param useUcb1 UCB1を使用する場合はtrue・PUCBを使用する場合はfalse
-   * @param temperature 探索の温度パラメータ
-   * @param noise 探索のガンベルノイズの強さ
-   * @return 評価結果
+   * Evaluate the state of this node and return the evaluation result.
+   * @param equally If true, equalize the number of searches
+   * @param width Search width (if 0, adjust automatically)
+   * @param useUcb1 If true, use UCB1; if false, use PUCB
+   * @param temperature Temperature parameter for search
+   * @param noise Strength of Gumbel noise for search
+   * @return Evaluation result
    */
   NodeResult _evaluateNode(
       bool equally, int32_t width, bool useUcb1, float temperature, float noise);
 
   /**
-   * ノードの評価情報を初期化する。
+   * Initialize the evaluation information of the node.
    */
   void _reset();
 
   /**
-   * 指定されたノードの継続ノードとしての値を設定する。
-   * @param prevNode 前のノード
-   * @param move 着手
-   * @param policy 予想着手確率
+   * Set the value as a continuation node of the specified node.
+   * @param prevNode Previous node
+   * @param move Move
+   * @param policy Predicted move probability
    */
   void _setAsNextNode(Node* prevNode, const Move& move, float policy);
 };

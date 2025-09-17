@@ -1,4 +1,4 @@
-﻿INITIALIZED = False
+INITIALIZED = False
 
 cdef extern from "cpp/cshogi/init.hpp" namespace 'deepshogi::cshogi':
     void initTable()

@@ -20,20 +20,20 @@
 namespace deepshogi {
 
 /**
- * ゲームを進行するプレイヤを表すクラス。
+ * Class representing a player who progresses the game.
  */
 class Player {
  public:
   /**
-   * プレイヤオブジェクトを作成する。
-   * @param processor 推論を実行するオブジェクト
-   * @param threads スレッドの数
-   * @param nyugyokuScoreBlack 先手番の入玉宣言に必要となる点数
-   * @param nyugyokuScoreWhite 後手番の入玉宣言に必要となる点数
-   * @param drawSteps 引き分けとなるまでの手数
-   * @param checkSearchDepth 詰み手筋の探索深さ
-   * @param checkSearchNode 詰み手筋の探索ノード数
-   * @param evalLeafOnly 葉ノードのみ評価するならばtrue
+   * Create a player object.
+   * @param processor Object that performs inference
+   * @param threads Number of threads
+   * @param nyugyokuScoreBlack Points required for black's entering king declaration
+   * @param nyugyokuScoreWhite Points required for white's entering king declaration
+   * @param drawSteps Number of moves until a draw
+   * @param checkSearchDepth Depth for mate search
+   * @param checkSearchNode Number of nodes for mate search
+   * @param evalLeafOnly True if only leaf nodes are evaluated
    */
   Player(
       Processor* processor, int32_t threads,
@@ -41,174 +41,173 @@ class Player {
       int32_t checkSearchDepth, int32_t checkSearchNode, bool evalLeafOnly);
 
   /**
-   * プレイヤオブジェクトを破棄する。
+   * Destroy the player object.
    */
   virtual ~Player();
 
   /**
-   * プレイヤオブジェクトの状態を初期化する。
-   * @param sfen 初期局面のSFEN
+   * Initialize the state of the player object.
+   * @param sfen Initial position SFEN
    */
   void initialize(const std::string& sfen);
 
   /**
-   * 次の手番を取得する。
-   * @return 手番
+   * Get the next turn.
+   * @return Turn
    */
   int32_t getColor();
 
   /**
-   * 駒を動かす。
-   * @param move 動かす駒の情報
+   * Move a piece.
+   * @param move Information of the piece to move
    */
   void play(const Move& move);
 
   /**
-   * 盤面評価を開始する。
-   * 探索処理は別スレッドで実行される。
-   * 最大訪問回数に0以下の値を指定すると停止命令を指示するまで探索を続ける。
-   * @param equally 探索回数を均等にするならばtrue、UCB1かPUCBを使用するならばfalse
-   * @param useUcb1 探索先の基準としてUCB1を使用するならばtrue、PUCBを使用するならばfalse
-   * @param candidateWidth 候補手の探索幅(0の場合は探索幅を自動で調整する)
-   * @param checkNodeDepth 詰み手筋を探索するノードの最大深さ
-   * @param temperature 探索の温度パラメータ
-   * @param noise 探索のガンベルノイズの強さ
+   * Start board evaluation.
+   * The search process is executed in a separate thread.
+   * @param equally True to make the number of searches equal, false to use UCB1 or PUCB
+   * @param useUcb1 True to use UCB1 as the search criterion, false to use PUCB
+   * @param candidateWidth Search width for candidate moves (if 0, the width is automatically adjusted)
+   * @param checkNodeDepth Maximum depth of nodes for mate search
+   * @param temperature Temperature parameter for search
+   * @param noise Strength of Gumbel noise for search
    */
   void startEvaluation(
       bool equally, bool useUcb1, int32_t candidateWidth, int32_t checkNodeDepth,
       float temperature, float noise);
 
   /**
-   * 探索が終了するまで待機する。
-   * @param visits 探索の訪問回数
-   * @param playouts 探索のプレイアウト回数
-   * @param timelimit 待機する時間（秒）
-   * @param stop 探索を停止するならばtrue
+   * Wait until the search is finished.
+   * @param visits Number of search visits
+   * @param playouts Number of search playouts
+   * @param timelimit Time to wait (seconds)
+   * @param stop True to stop the search
    */
   void waitEvaluation(int32_t visits, int32_t playouts, float timelimit, bool stop);
 
   /**
-   * 候補手の一覧を取得する。
-   * @return 候補手の一覧
+   * Get the list of candidate moves.
+   * @return List of candidate moves
    */
   std::vector<Candidate> getCandidates();
 
   /**
-   * 指定された盤面オブジェクトに盤面の状態をコピーする。
-   * @param board 盤面オブジェクト
+   * Copy the board state to the specified board object.
+   * @param board Board object
    */
   void copyBoardTo(Board* board);
 
  private:
   /**
-   * 同期オブジェクト。
+   * Synchronization object.
    */
   std::mutex _mutex;
 
   /**
-   * 条件変数。
+   * Condition variable for synchronization.
    */
   std::condition_variable _condition;
 
   /**
-   * 探索ノードを管理するオブジェクト。
+   * Object that manages search nodes.
    */
   NodeManager _nodeManager;
 
   /**
-   * スレッド管理オブジェクト。
+   * Thread management object.
    */
   ThreadPool _threadPool;
 
   /**
-   * 探索を実行するスレッド。
+   * Thread that executes the search.
    */
   std::unique_ptr<std::thread> _thread;
 
   /**
-   * ルートノード。
+   * Root node.
    */
   Node* _root;
 
   /**
-   * 葉ノードのみ評価するならばtrue。
+   * True if only leaf nodes are evaluated.
    */
   bool _evalLeafOnly;
 
   /**
-   * 探索の訪問回数。
+   * Number of search visits.
    */
   int32_t _searchVisits;
 
   /**
-   * 探索のプレイアウト回数。
+   * Number of search playouts.
    */
   int32_t _searchPlayouts;
 
   /**
-   * 探索回数を均等にするならtrue。
+   * True if the number of searches is made equal.
    */
   bool _searchEqually;
 
   /**
-   * 探索先の基準としてUCB1を使用するならtrue。
+   * True if UCB1 is used as the search criterion.
    */
   bool _searchUseUcb1;
 
   /**
-   * 候補手の探索幅。
+   * Search width for candidate moves.
    */
   int32_t _searchCandidateWidth;
 
   /**
-   * 詰み探索を行うノードの最大深さ。
+   * Maximum depth of nodes for mate search.
    */
   int32_t _searchCheckNodeDepth;
 
   /**
-   * 探索の温度パラメータ。
+   * Temperature parameter for search.
    */
   float _searchTemperature;
 
   /**
-   * 探索のガンベルノイズの強さ。
+   * Strength of Gumbel noise for search.
    */
   float _searchNoise;
 
   /**
-   * 実行中のスレッド数。
+   * Number of running threads.
    */
   int32_t _runnings;
 
   /**
-   * 探索を一時停止しているならtrue。
+   * True if the search is paused.
    */
   bool _paused;
 
   /**
-   * 探索を停止しているならtrue。
+   * True if the search is stopped.
    */
   bool _stopped;
 
   /**
-   * 探索を終了しているならtrue。
+   * True if the search is terminated.
    */
   bool _terminated;
 
   /**
-   * 探索処理を起動する。
+   * Start the search process.
    */
   void _run();
 
   /**
-   * 探索を実行する。
-   * @return プレイアウト数
+   * Execute the search.
+   * @return Number of playouts
    */
   int32_t _evaluate();
 
   /**
-   * ルートノード以外のノードオブジェクトを返却する。
-   * @param node 返却するノードオブジェクト
+   * Release node objects other than the root node.
+   * @param node Node object to release
    */
   void _releaseNode(Node* node);
 };

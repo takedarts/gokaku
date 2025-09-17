@@ -3,13 +3,13 @@
 namespace deepshogi {
 
 /**
- * パラメータオブジェクトを作成する。
- * @param processor 推論を実行するオブジェクト
- * @param nyugyokuScoreBlack 先手番の入玉宣言に必要となる点数
- * @param nyugyokuScoreWhite 後手番の入玉宣言に必要となる点数
- * @param drawSteps 引き分けとなるまでの手数
- * @param checkSearchDepth 詰み手筋の探索深さ
- * @param checkSearchNode 詰み手筋の探索ノード数
+ * Create a parameter object.
+ * @param processor Object that performs inference
+ * @param nyugyokuScoreBlack Points required for black's entering king declaration
+ * @param nyugyokuScoreWhite Points required for white's entering king declaration
+ * @param drawSteps Number of moves until a draw
+ * @param checkSearchDepth Depth for mate search
+ * @param checkSearchNode Number of nodes for mate search
  */
 NodeParameter::NodeParameter(
     Processor* processor,
@@ -23,48 +23,48 @@ NodeParameter::NodeParameter(
 }
 
 /**
- * 推論を実行するオブジェクトを返す。
- * @return 推論を実行するオブジェクト
+ * Return the object that performs inference.
+ * @return Object that performs inference
  */
 Processor* NodeParameter::getProcessor() const {
   return _processor;
 }
 
 /**
- * 先手番の入玉宣言に必要となる点数を取得する。
- * @return 先手番の入玉宣言に必要となる点数
+ * Get the points required for black's entering king declaration.
+ * @return Points required for black's entering king declaration
  */
 int32_t NodeParameter::getNyugyokuScoreBlack() const {
   return _nyugyokuScoreBlack;
 }
 
 /**
- * 後手番の入玉宣言に必要となる点数を取得する。
- * @return 後手番の入玉宣言に必要となる点数
+ * Get the points required for white's entering king declaration.
+ * @return Points required for white's entering king declaration
  */
 int32_t NodeParameter::getNyugyokuScoreWhite() const {
   return _nyugyokuScoreWhite;
 }
 
 /**
- * 引き分けとなるまでの手数を取得する。
- * @return 引き分けとなるまでの手数
+ * Get the number of moves until a draw.
+ * @return Number of moves until a draw
  */
 int32_t NodeParameter::getDrawSteps() const {
   return _drawSteps;
 }
 
 /**
- * 詰み手筋の探索深さを取得する。
- * @return 詰み手筋の探索深さ
+ * Get the depth for mate search.
+ * @return Depth for mate search
  */
 int32_t NodeParameter::getCheckSearchDepth() const {
   return _checkSearchDepth;
 }
 
 /**
- * 詰み手筋の探索ノード数を取得する。
- * @return 詰み手筋の探索ノード数
+ * Get the number of nodes for mate search.
+ * @return Number of nodes for mate search
  */
 int32_t NodeParameter::getCheckSearchNode() const {
   return _checkSearchNode;

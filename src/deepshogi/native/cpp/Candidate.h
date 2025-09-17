@@ -8,117 +8,117 @@
 namespace deepshogi {
 
 /**
- * 候補手クラス。
+ * Candidate move class.
  */
 class Candidate {
  public:
   /**
-   * 候補手データを作成する。
-   * @param move 着手
-   * @param color 手番
-   * @param visits 訪問回数
-   * @param playouts プレイアウト回数
-   * @param policy 予想着手確率
-   * @param value 予想勝率
-   * @param variations 予想進行
+   * Create candidate move data.
+   * @param move Move
+   * @param color Side to move
+   * @param visits Number of visits
+   * @param playouts Number of playouts
+   * @param policy Predicted move probability
+   * @param value Predicted win rate
+   * @param variations Predicted sequence
    */
   Candidate(
       Move move, int32_t color, int32_t visits, int32_t playouts,
       float policy, float value, std::vector<Move> variations);
 
   /**
-   * 候補手データを作成する。
-   * @param move 着手
-   * @param color 手番
-   * @param visits 訪問回数
-   * @param playouts プレイアウト回数
-   * @param policy 予想着手確率
-   * @param value 予想勝率
+   * Create candidate move data.
+   * @param move Move
+   * @param color Side to move
+   * @param visits Number of visits
+   * @param playouts Number of playouts
+   * @param policy Predicted move probability
+   * @param value Predicted win rate
    */
   Candidate(
       Move move, int32_t color, int32_t visits, int32_t playouts,
       float policy, float value);
 
   /**
-   * インスタンスを破棄する。
+   * Destroy the instance.
    */
   virtual ~Candidate() = default;
 
   /**
-   * 着手を取得する。
-   * @return 着手
+   * Get the move.
+   * @return Move
    */
   Move getMove() const;
 
   /**
-   * 手番を取得する。
-   * @return 手番
+   * Get the side to move.
+   * @return Side to move
    */
   int32_t getColor() const;
 
   /**
-   * 訪問回数を取得する。
-   * @return 訪問回数
+   * Get the number of visits.
+   * @return Number of visits
    */
   int32_t getVisits() const;
 
   /**
-   * プレイアウト回数を取得する。
-   * @return プレイアウト回数
+   * Get the number of playouts.
+   * @return Number of playouts
    */
   int32_t getPlayouts() const;
 
   /**
-   * 予想着手確率を取得する。
-   * @return 予想着手確率
+   * Get the predicted move probability.
+   * @return Predicted move probability
    */
   float getPolicy() const;
 
   /**
-   * 予想勝率を取得する。
-   * @return 予想勝率
+   * Get the predicted win rate.
+   * @return Predicted win rate
    */
   float getValue() const;
 
   /**
-   * 予想進行を取得する。
-   * @return 予想進行
+   * Get the predicted sequence.
+   * @return Predicted sequence
    */
   std::vector<Move> getVariations() const;
 
  private:
   /**
-   * 着手。
+   * Move.
    */
   Move _move;
 
   /**
-   * 手番。
+   * Side to move.
    */
   int32_t _color;
 
   /**
-   * 訪問回数。
+   * Number of visits.
    */
   int32_t _visits;
 
   /**
-   * プレイアウト回数。
+   * Number of playouts.
    */
   int32_t _playouts;
 
   /**
-   * 予想着手確率。
+   * Predicted move probability.
    */
   float _policy;
 
   /**
-   * 予想勝率。
+   * Predicted win rate.
    */
   float _value;
 
   /**
-   * 予想進行。
+   * Predicted sequence.
    */
   std::vector<Move> _variations;
 };

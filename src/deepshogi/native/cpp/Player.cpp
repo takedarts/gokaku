@@ -11,15 +11,15 @@
 namespace deepshogi {
 
 /**
- * プレイヤオブジェクトを作成する。
- * @param processor 推論を実行するオブジェクト
- * @param threads スレッドの数
- * @param nyugyokuScoreBlack 先手番の入玉宣言に必要となる点数
- * @param nyugyokuScoreWhite 後手番の入玉宣言に必要となる点数
- * @param drawSteps 引き分けとなるまでの手数
- * @param checkSearchDepth 詰み手筋の探索深さ
- * @param checkSearchNode 詰み手筋の探索ノード数
- * @param evalLeafOnly 葉ノードのみ評価するならばtrue
+ * Create a player object.
+ * @param processor Object that performs inference
+ * @param threads Number of threads
+ * @param nyugyokuScoreBlack Points required for black's entering king declaration
+ * @param nyugyokuScoreWhite Points required for white's entering king declaration
+ * @param drawSteps Number of moves until a draw
+ * @param checkSearchDepth Depth for mate search
+ * @param checkSearchNode Number of nodes for mate search
+ * @param evalLeafOnly True if only leaf nodes are evaluated
  */
 Player::Player(
     Processor* processor, int32_t threads,
@@ -51,7 +51,7 @@ Player::Player(
 }
 
 /**
- * プレイヤオブジェクトを破棄する。
+ * Destroy the player object.
  */
 Player::~Player() {
   {
@@ -64,85 +64,84 @@ Player::~Player() {
 }
 
 /**
- * プレイヤオブジェクトの状態を初期化する。
- * @param sfen 初期局面のSFEN
+ * Initialize the state of the player object.
+ * @param sfen Initial position SFEN
  */
 void Player::initialize(const std::string& sfen) {
   std::unique_lock<std::mutex> lock(_mutex);
 
-  // スレッドを一時停止する
+  // Pause the thread
   _paused = true;
   _condition.wait(lock, [this]() { return _runnings == 0; });
 
-  // 現在のルートノードを保存する
+  // Save the current root node
   Node* old_root = _root;
 
-  // 初期ノードをルートノードに設定する
+  // Set the initial node as the root node
   _root = _nodeManager.createNode();
   _root->initialize(sfen);
 
-  // ルートノード以外のノードを解放する
+  // Release nodes other than the root node
   _releaseNode(old_root);
 
-  // スレッドを再開する
+  // Resume the thread
   _paused = false;
   _condition.notify_all();
 }
 
 /**
- * 次の手番を取得する。
- * @return 手番
+ * Get the next turn.
+ * @return Turn
  */
 int32_t Player::getColor() {
   return _root->getColor();
 }
 
 /**
- * 駒を動かす。
- * @param move 動かす駒の情報
+ * Move a piece.
+ * @param move Information of the piece to move
  */
 void Player::play(const Move& move) {
   std::unique_lock<std::mutex> lock(_mutex);
 
-  // スレッドを一時停止する
+  // Pause the thread
   _paused = true;
   _condition.wait(lock, [this]() { return _runnings == 0; });
 
-  // 現在のルートノードを保存する
+  // Save the current root node
   Node* old_root = _root;
 
-  // 新しいルートノードを設定する
+  // Set the new root node
   _root = old_root->getChild(move);
 
-  // ルートノード以外のノードを解放する
+  // Release nodes other than the root node
   _releaseNode(old_root);
 
-  // スレッドを再開する
+  // Resume the thread
   _paused = false;
   _condition.notify_all();
 }
 
 /**
- * 盤面評価を開始する。
- * 探索処理は別スレッドで実行される。
- * 最大訪問回数に0以下の値を指定すると停止命令を指示するまで探索を続ける。
- * @param equally 探索回数を均等にするならばtrue、UCB1かPUCBを使用するならばfalse
- * @param useUcb1 探索先の基準としてUCB1を使用するならばtrue、PUCBを使用するならばfalse
- * @param candidateWidth 候補手の探索幅(0の場合は探索幅を自動で調整する)
- * @param checkNodeDepth 詰み手筋を探索するノードの最大深さ
- * @param temperature 探索の温度パラメータ
- * @param noise 探索のガンベルノイズの強さ
+ * Start board evaluation.
+ * The search process is executed in a separate thread.
+ * @param equally True to make the number of searches equal, false to use UCB1 or PUCB
+ * @param useUcb1 True to use UCB1 as the search criterion, false to use PUCB
+ * @param candidateWidth Search width for candidate moves (if 0, the width is automatically adjusted)
+ * @param checkNodeDepth Maximum depth of nodes for mate search
+ * @param temperature Temperature parameter for search
+ * @param noise Strength of Gumbel noise for search
  */
 void Player::startEvaluation(
     bool equally, bool useUcb1, int32_t candidateWidth, int32_t checkNodeDepth,
     float temperature, float noise) {
   std::unique_lock<std::mutex> lock(_mutex);
 
-  // スレッドを一時停止する
+  // Pause the thread
   _paused = true;
   _condition.wait(lock, [this]() { return _runnings == 0; });
 
-  // 探索の設定を変更する
+  // Change the search settings
   _searchVisits = _root->getVisits();
   _searchPlayouts = _root->getPlayouts();
   _searchEqually = equally;
@@ -152,58 +151,58 @@ void Player::startEvaluation(
   _searchTemperature = temperature;
   _searchNoise = noise;
 
-  // 実行状態に設定する
+  // Set to running state
   _stopped = false;
 
-  // スレッドを再開する
+  // Resume the thread
   _paused = false;
   _condition.notify_all();
 }
 
 /**
- * 設定された盤面評価処理が終了するまで待機する。
- * @param visits 探索の訪問回数
- * @param playouts 探索のプレイアウト回数
- * @param timelimit 待機する時間（秒）
- * @param stop 探索を停止するならばtrue
+ * Wait until the configured board evaluation process is finished.
+ * @param visits Number of search visits
+ * @param playouts Number of search playouts
+ * @param timelimit Time to wait (seconds)
+ * @param stop True to stop the search
  */
 void Player::waitEvaluation(int32_t visits, int32_t playouts, float timelimit, bool stop) {
   std::unique_lock<std::mutex> lock(_mutex);
 
-  // 指定された訪問数とプレイアウト数になるまで待機する
+  // Wait until the specified number of visits and playouts is reached
   std::chrono::milliseconds timeout(static_cast<int32_t>(timelimit * 1000.0f));
   _condition.wait_for(lock, timeout, [this, visits, playouts]() {
     return _searchVisits >= visits && _searchPlayouts >= playouts;
   });
 
-  // 探索を停止する
+  // Stop the search
   _stopped = _stopped || stop;
 }
 
 /**
- * 候補手の一覧を取得する。
- * @return 候補手の一覧
+ * Get the list of candidate moves.
+ * @return List of candidate moves
  */
 std::vector<Candidate> Player::getCandidates() {
   std::unique_lock<std::mutex> lock(_mutex);
 
-  // スレッドを一時停止する
+  // Pause the thread
   _paused = true;
   _condition.wait(lock, [this]() { return _runnings == 0; });
 
-  // 候補手の一覧を作成する
+  // Create the list of candidate moves
   std::vector<Candidate> candidates;
 
-  // 詰み手筋の着手がある場合は詰み手筋のみを候補手とする
+  // If there is a mate move, only the mate move is considered as a candidate
   if (_root->getCheckMove() != MOVE_PASS) {
     candidates.emplace_back(
         _root->getCheckMove(), _root->getColor(),
         _root->getVisits() - 1, _root->getPlayouts(),
         1.0f, _root->getColor());
   }
-  // 詰み手筋がない場合は子ノードの一覧を候補手とする
-  // 子ノードに詰み手筋がある場合は評価値を相手勝利に設定する
-  // 詰み手筋がない場合は評価値*0.999をノードの評価値に設定する
+  // If there is no mate move, the list of child nodes is considered as candidates
+  // If a child node has a mate move, set the evaluation value to opponent's win
+  // If there is no mate move, set the evaluation value to node's value * 0.999
   else {
     for (Node* node : _root->getChildren()) {
       if (node->getCheckMove() != MOVE_PASS) {
@@ -218,13 +217,13 @@ std::vector<Candidate> Player::getCandidates() {
     }
   }
 
-  // 候補手がない場合はPolicyNetworkによる着手を追加する
+  // If there are no candidate moves, add a move from the PolicyNetwork
   if (candidates.empty()) {
     candidates.emplace_back(
         _root->getPolicyMove(), _root->getColor(), 0, 0, 1.0f, _root->getValue());
   }
 
-  // スレッドを再開する
+  // Resume the thread
   _paused = false;
   _condition.notify_all();
 
@@ -232,8 +231,8 @@ std::vector<Candidate> Player::getCandidates() {
 }
 
 /**
- * 指定された盤面オブジェクトに盤面の状態をコピーする。
- * @param board 盤面オブジェクト
+ * Copy the board state to the specified board object.
+ * @param board Board object
  */
 void Player::copyBoardTo(Board* board) {
   std::unique_lock<std::mutex> lock(_mutex);
@@ -241,7 +240,7 @@ void Player::copyBoardTo(Board* board) {
 }
 
 /**
- * 探索処理を起動する。
+ * Start the search process.
  */
 void Player::_run() {
   while (true) {
@@ -277,8 +276,8 @@ void Player::_run() {
 }
 
 /**
- * 探索を実行する。
- * @return プレイアウト数
+ * Execute the search.
+ * @return Number of playouts
  */
 int32_t Player::_evaluate() {
   std::vector<Node*> nodes = {_root};
@@ -295,7 +294,7 @@ int32_t Player::_evaluate() {
         search_equally, search_width, search_use_ucb1, search_check_depth > 0,
         search_temperature, search_noise);
 
-    // ノードの評価値を更新する
+    // Update the node's evaluation value
     if (result.getPlayouts() == 1) {
       for (Node* node : nodes) {
         node->updateValue(result.getValue());
@@ -306,22 +305,22 @@ int32_t Player::_evaluate() {
       }
     }
 
-    // ノードのプレイアウト数を更新する
+    // Update the node's playout count
     for (Node* node : nodes) {
       node->setPlayouts(node->getPlayouts() + result.getPlayouts());
     }
 
-    // この探索のプレイアウト数を更新する
+    // Update the playout count for this search
     playouts += result.getPlayouts();
 
-    // 子ノードが存在する場合は次のノードとして設定する
+    // If a child node exists, set it as the next node
     if (result.getNode() != nullptr) {
       nodes.push_back(result.getNode());
     } else {
       break;
     }
 
-    // ルートノードだけに適用する設定項目をリセットする
+    // Reset settings that apply only to the root node
     search_equally = 0;
     search_width = 0;
     search_use_ucb1 = false;
@@ -330,13 +329,13 @@ int32_t Player::_evaluate() {
     search_noise = 0.0f;
   }
 
-  // プレイアウト数を返す
+  // Return the number of playouts
   return playouts;
 }
 
 /**
- * ルートノード以外のノードオブジェクトを返却する。
- * @param node 返却するノードオブジェクト
+ * Release node objects other than the root node.
+ * @param node Node object to release
  */
 void Player::_releaseNode(Node* node) {
   std::vector<Node*> stack = {node};

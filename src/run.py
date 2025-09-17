@@ -67,19 +67,19 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
 
-    # ログ出力を設定する
+    # Set up log output
     start_logging(debug=args.verbose, console=sys.stderr)
 
-    # GPUに関する設定を行う
+    # Configure GPU settings
     if torch.cuda.device_count() != 0:
         torch.backends.cudnn.enabled = True
         torch.backends.cudnn.benchmark = True
         torch.backends.cudnn.deterministic = False
 
-    # 推論オブジェクトを作成する
+    # Create inference object
     processor = Processor(args.model, args.gpus, args.batch_size, args.fp16)
 
-    # GPTオブジェクトを作成する
+    # Create GPT object
     engine = USIEngine(
         processor=processor,
         threads=args.threads,
@@ -101,7 +101,7 @@ def main() -> None:
         client_author=args.client_author,
     )
 
-    # ゲームを実行する
+    # Run the game
     engine.run()
 
 

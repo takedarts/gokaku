@@ -8,205 +8,205 @@ namespace deepshogi {
 class Board {
  public:
   /**
-   * 初期盤面のインスタンスを生成する。
-   * @param nyugyokuScoreBlack 先手番の入玉宣言に必要な点数
-   * @param nyugyokuScoreWhite 後手番の入玉宣言に必要な点数
-   * @param drawSteps 引き分けとなるまでの手数
+   * Create an instance of the initial board.
+   * @param nyugyokuScoreBlack Score required for nyugyoku declaration for black
+   * @param nyugyokuScoreWhite Score required for nyugyoku declaration for white
+   * @param drawSteps Number of moves until draw
    */
   Board(int32_t nyugyokuScoreBlack, int32_t nyugyokuScoreWhite, int32_t drawSteps);
 
   /**
-   * 盤面を指定してインスタンスを生成する。
-   * @param board 盤面情報を保持するオブジェクト
+   * Create an instance by specifying the board.
+   * @param board Object holding board information
    */
   Board(const Board& board);
 
   /**
-   * 盤面のインスタンスを生成する。
+   * Create a board instance.
    */
   Board();
 
   /**
-   * インスタンスを破棄する。
+   * Destroy the instance.
    */
   virtual ~Board() = default;
 
   /**
-   * SFEN形式の文字列で盤面を初期化する。
-   * @param sfen SFEN形式の文字列
+   * Initialize the board with an SFEN string.
+   * @param sfen SFEN string
    */
   void initializeWithSfen(const std::string& sfen);
 
   /**
-   * ハフマン符号化された盤面情報で盤面を初期化する。
-   * @param data ハフマン符号化された盤面情報
+   * Initialize the board with Huffman encoded board information.
+   * @param data Huffman encoded board information
    */
   void initializeWithPackedSfen(char* data);
 
   /**
-   * 駒を動かす。
-   * @param move 着手
-   * @return 合法手ならtrue
+   * Move a piece.
+   * @param move Move
+   * @return True if legal move
    */
   bool play(const Move& move);
 
   /**
-   * 手番を取得する。
-   * @return 手番
+   * Get side to move.
+   * @return Side to move
    */
   int32_t getColor() const;
 
   /**
-   * 現在の手数を取得する。
-   * @return 現在の手数
+   * Get current number of moves.
+   * @return Current number of moves
    */
   int32_t getTurn() const;
 
   /**
-   * 指定された座標の駒を取得する。
-   * @param x x座標
-   * @param y y座標
-   * @return 駒の種類
+   * Get the piece at the specified coordinates.
+   * @param x X coordinate
+   * @param y Y coordinate
+   * @return Type of piece
    */
   int32_t getPiece(int32_t x, int32_t y) const;
 
   /**
-   * 移動した後の駒の種類を取得する。
-   * @param move 着手
-   * @return 駒の種類
+   * Get the type of piece after moving.
+   * @param move Move
+   * @return Type of piece
    */
   int32_t getMovedPiece(const Move& move) const;
 
   /**
-   * 指定された種類の持ち駒の数を取得する。
-   * @param color 手番
-   * @param piece 駒の種類
-   * @return 持ち駒の数
+   * Get the number of specified hand pieces.
+   * @param color Side to move
+   * @param piece Type of piece
+   * @return Number of hand pieces
    */
   int32_t getHandPieceNum(int32_t color, int32_t piece) const;
 
   /**
-   * 指定された座標に利いている駒の座標の一覧を取得する。
-   * @param x x座標
-   * @param y y座標
-   * @return 利いている駒の座標の一覧
+   * Get list of coordinates of pieces attacking the specified coordinates.
+   * @param x X coordinate
+   * @param y Y coordinate
+   * @return List of coordinates of attacking pieces
    */
   std::vector<std::pair<int32_t, int32_t>> getAttackers(int32_t x, int32_t y) const;
 
   /**
-   * 現在の盤面の合法手の一覧を取得する。
-   * 歩、角、飛車の不成の手を削除した合法手の一覧を返す。
-   * @return 合法手の一覧
+   * Get list of legal moves for the current board.
+   * Returns a list of legal moves with non-promoting moves for pawn, bishop, and rook removed.
+   * @return List of legal moves
    */
   std::vector<Move> getLegalMoves() const;
 
   /**
-   * 着手履歴を取得する。
-   * @return 着手履歴
+   * Get move history.
+   * @return Move history
    */
   std::vector<Move> getHistoryMoves() const;
 
   /**
-   * 詰み筋を探索して、最初の着手を返す。
-   * 詰み筋が見つからない場合はパス（MOVE_PASS）を返す。
-   * checkSearchNodeが0の場合は全探索を行う。
-   * checkSearchNodeが1以上の場合はdf-pnアルゴリズムを使用して探索を行う。
-   * @param checkSearchDepth 詰み手筋の探索深さ
-   * @param checkSearchNode 詰み手筋の探索ノード数（0なら全探索）
-   * @return 詰み筋の着手
+   * Search for checkmate sequence and return the first move.
+   * If no checkmate sequence is found, returns pass (MOVE_PASS).
+   * If checkSearchNode is 0, performs exhaustive search.
+   * If checkSearchNode is 1 or more, uses the df-pn algorithm for search.
+   * @param checkSearchDepth Depth for checkmate sequence search
+   * @param checkSearchNode Number of nodes for checkmate sequence search (0 for exhaustive search)
+   * @return Move in checkmate sequence
    */
   Move searchCheckMove(int32_t checkSearchDepth, int32_t checkSearchNode);
 
   /**
-   * 入玉宣言可能な状態であればtrueを返す。
-   * @return 入玉宣言可能な状態であればtrue
+   * Return true if nyugyoku declaration is possible.
+   * @return True if nyugyoku declaration is possible
    */
   bool isNyugyoku() const;
 
   /**
-   * 王手がかかっていればtrueを返す。
-   * @return 王手がかかっていればtrue
+   * Return true if in checkmate.
+   * @return True if in checkmate
    */
   bool isCheckmate() const;
 
   /**
-   * SFEN形式の文字列を取得する。
-   * @return SFEN形式の文字列
+   * Get SFEN string.
+   * @return SFEN string
    */
   std::string getSfen() const;
 
   /**
-   * ハフマン符号化された盤面情報を取得する。
-   * @param data ハフマン符号化された盤面情報を格納するバッファ
+   * Get Huffman encoded board information.
+   * @param data Buffer to store Huffman encoded board information
    */
   void getPackedSfen(char* data) const;
 
   /**
-   * モデルに入力するデータを取得する。
-   * @param inputs モデルに入力するデータ
+   * Get data to input to the model.
+   * @param inputs Data to input to the model
    */
   void getInputs(float* inputs) const;
 
   /**
-   * モデルに入力するデータを取得する。
-   * @param inputs モデルに入力するデータ
-   * @param color 手番
-   * @param steps 手数
+   * Get data to input to the model.
+   * @param inputs Data to input to the model
+   * @param color Side to move
+   * @param steps Number of moves
    */
   void getInputs(float* inputs, int32_t color, int32_t steps) const;
 
   /**
-   * 盤面の状態をコピーする。
-   * @param board コピー元の盤面
+   * Copy the board state.
+   * @param board Source board to copy from
    */
   void copyFrom(const Board* board);
 
   /**
-   * 盤面情報を表示するための文字列を取得する。
-   * @return 盤面情報を表示するための文字列
+   * Get string for displaying board information.
+   * @return String for displaying board information
    */
   std::string dump() const;
 
   /**
-   * 盤面の状態を出力する。
-   * @param os 出力先
+   * Output the board state.
+   * @param os Output destination
    */
   void print(std::ostream& os = std::cout) const;
 
  private:
   /**
-   * 盤面情報を保持するオブジェクト。
-   * cshogiの__Boardクラスを使用する。
+   * Object to hold board information.
+   * Uses cshogi's __Board class.
    */
   cshogi::__Board _board;
 
   /**
-   * 先手番の入玉宣言に必要な点数。
+   * Score required for nyugyoku declaration for black.
    */
   int32_t _nyugyokuScoreBlack;
 
   /**
-   * 後手番の入玉宣言に必要な点数。
+   * Score required for nyugyoku declaration for white.
    */
   int32_t _nyugyokuScoreWhite;
 
   /**
-   * 引き分けとなるまでの手数。
+   * Number of moves until draw.
    */
   int32_t _drawSteps;
 
   /**
-   * モデルに入力する盤面データを取得する。
-   * @param inputs モデルに入力する盤面データ
-   * @param color 手番
+   * Get board data to input to the model.
+   * @param inputs Board data to input to the model
+   * @param color Side to move
    */
   void _getBoardInputs(float* inputs, int32_t color) const;
 
   /**
-   * モデルに入力するゲームデータを取得する。
-   * @param inputs モデルに入力するゲームデータ
-   * @param color 手番
-   * @param steps 手数
+   * Get game data to input to the model.
+   * @param inputs Game data to input to the model
+   * @param color Side to move
+   * @param steps Number of moves
    */
   void _getInfoInputs(float* inputs, int32_t color, int32_t steps) const;
 };

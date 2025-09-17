@@ -9,58 +9,58 @@
 namespace deepshogi {
 
 /**
- * ノードオブジェクトを管理するためのクラス。
+ * Class for managing node objects.
  */
 class NodeManager {
  public:
   /**
-   * ノードオブジェクトの管理クラスを作成する。
-   * @param parameter ノードオブジェクトの設定パラメータ
+   * Create a management class for node objects.
+   * @param parameter Configuration parameters for node objects
    */
   NodeManager(NodeParameter parameter);
 
   /**
-   * ノードオブジェクトを作成する。
-   * 未使用のノードオブジェクトがあればそれを返し、なければ新規作成する。
-   * @return ノードオブジェクト
+   * Create a node object.
+   * If there is an unused node object, return it; otherwise, create a new one.
+   * @return Node object
    */
   Node* createNode();
 
   /**
-   * ノードオブジェクトを未使用状態にする。
-   * @param node ノードオブジェクト
+   * Set the node object to unused state.
+   * @param node Node object
    */
   void releaseNode(Node* node);
 
   /**
-   * このノード管理オブジェクトのの情報を出力する。
-   * @param os 出力先
+   * Output information about this node manager object.
+   * @param os Output destination
    */
   void print(std::ostream& os = std::cout);
 
  private:
   /**
-   * 同期オブジェクト。
+   * Synchronization object.
    */
   std::mutex _mutex;
 
   /**
-   * ノード生成時に使用するパラメータ。
+   * Parameters used when generating nodes.
    */
   NodeParameter _parameter;
 
   /**
-   * ノードオブジェクトの一覧。
+   * List of node objects.
    */
   std::vector<std::unique_ptr<Node>> _nodes;
 
   /**
-   * 未使用のノードオブジェクトの一覧。
+   * List of unused node objects.
    */
   std::vector<Node*> _poolNodes;
 
   /**
-   * 使用中のノードオブジェクトの一覧。
+   * List of node objects in use.
    */
   std::set<Node*> _usedNodes;
 };

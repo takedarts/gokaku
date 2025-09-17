@@ -9,12 +9,12 @@
 #include <execinfo.h>  // backtrace, backtrace_symbols
 
 void printStackTrace(FILE* fp = stderr) {
-  // スタックフレームを最大 128 個まで取得
+  // Get up to 128 stack frames
   const int MAX_FRAMES = 128;
   void* callstack[MAX_FRAMES];
   int frames = ::backtrace(callstack, MAX_FRAMES);
 
-  // 取得したスタックフレームを文字列情報に変換
+  // Convert obtained stack frames to string information
   char** symbols = ::backtrace_symbols(callstack, frames);
   if (!symbols) {
     std::fprintf(fp, "Error: backtrace_symbols() returned nullptr.\n");
@@ -24,14 +24,14 @@ void printStackTrace(FILE* fp = stderr) {
   for (int i = 0; i < frames; i++) {
     Dl_info info;
     if (dladdr(callstack[i], &info) && info.dli_sname) {
-      // C++シンボルのデマングル
+      // Demangle C++ symbols
       int status = 0;
       char* demangled = abi::__cxa_demangle(info.dli_sname, nullptr, nullptr, &status);
 
-      // シンボルがデマングルできた場合はデマングル後の名前を利用
+      // If the symbol was successfully demangled, use the demangled name
       const char* symbolName = (status == 0 && demangled) ? demangled : info.dli_sname;
 
-      // アドレスとシンボル名、ベースアドレスとの差を表示
+      // Display address, symbol name, and offset from base address
       std::fprintf(
           fp,
           "%2d: %p  %s + %zd\n",
@@ -42,7 +42,7 @@ void printStackTrace(FILE* fp = stderr) {
 
       std::free(demangled);
     } else {
-      // dladdr で情報が取れなかった場合は backtrace_symbols の結果をそのまま表示
+      // If dladdr could not retrieve information, display the result from backtrace_symbols as is
       std::fprintf(fp, "%2d: %p  %s\n", i, callstack[i], symbols[i]);
     }
   }

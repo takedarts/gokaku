@@ -5,18 +5,18 @@
 namespace deepshogi {
 
 /**
- * ノードオブジェクトの設定パラメータクラス。
+ * Class for configuration parameters of node objects.
  */
 class NodeParameter {
  public:
   /**
-   * パラメータオブジェクトを作成する。
-   * @param processor 推論を実行するオブジェクト
-   * @param nyugyokuScoreBlack 先手番の入玉宣言に必要となる点数
-   * @param nyugyokuScoreWhite 後手番の入玉宣言に必要となる点数
-   * @param drawSteps 引き分けとなるまでの手数
-   * @param checkSearchDepth 詰み手筋の探索深さ
-   * @param checkSearchNode 詰み手筋の探索ノード数
+   * Create a parameter object.
+   * @param processor Object that performs inference
+   * @param nyugyokuScoreBlack Points required for black's entering king declaration
+   * @param nyugyokuScoreWhite Points required for white's entering king declaration
+   * @param drawSteps Number of moves until a draw
+   * @param checkSearchDepth Depth for mate search
+   * @param checkSearchNode Number of nodes for mate search
    */
   NodeParameter(
       Processor* processor,
@@ -24,74 +24,74 @@ class NodeParameter {
       int32_t checkSearchDepth, int32_t checkSearchNode);
 
   /**
-   * パラメータオブジェクトを破棄する。
+   * Destroy the parameter object.
    */
   virtual ~NodeParameter() = default;
 
   /**
-   * 推論を実行するオブジェクトを返す。
-   * @return 推論を実行するオブジェクト
+   * Return the object that performs inference.
+   * @return Object that performs inference
    */
   Processor* getProcessor() const;
 
   /**
-   * 先手番の入玉宣言に必要となる点数を取得する。
-   * @return 先手番の入玉宣言に必要となる点数
+   * Get the points required for black's entering king declaration.
+   * @return Points required for black's entering king declaration
    */
   int32_t getNyugyokuScoreBlack() const;
 
   /**
-   * 後手番の入玉宣言に必要となる点数を取得する。
-   * @return 後手番の入玉宣言に必要となる点数
+   * Get the points required for white's entering king declaration.
+   * @return Points required for white's entering king declaration
    */
   int32_t getNyugyokuScoreWhite() const;
 
   /**
-   * 引き分けとなるまでの手数を取得する。
-   * @return 引き分けとなるまでの手数
+   * Get the number of moves until a draw.
+   * @return Number of moves until a draw
    */
   int32_t getDrawSteps() const;
 
   /**
-   * 詰み手筋の探索深さを取得する。
-   * @return 詰み手筋の探索深さ
+   * Get the depth for mate search.
+   * @return Depth for mate search
    */
   int32_t getCheckSearchDepth() const;
 
   /**
-   * 詰み手筋の探索ノード数を取得する。
-   * @return 詰み手筋の探索ノード数
+   * Get the number of nodes for mate search.
+   * @return Number of nodes for mate search
    */
   int32_t getCheckSearchNode() const;
 
  private:
   /**
-   * 推論を実行するオブジェクト。
+   * Object that performs inference.
    */
   Processor* _processor;
 
   /**
-   * 先手番の入玉宣言に必要となる点数。
+   * Points required for black's entering king declaration.
    */
   int32_t _nyugyokuScoreBlack;
 
   /**
-   * 後手番の入玉宣言に必要となる点数。
+   * Points required for white's entering king declaration.
    */
   int32_t _nyugyokuScoreWhite;
 
   /**
-   * 引き分けとなるまでの手数。
+   * Number of moves until a draw.
    */
   int32_t _drawSteps;
 
   /**
-   * 詰み手筋の探索深さ。
+   * Depth for mate search.
    */
   int32_t _checkSearchDepth;
 
   /**
-   * 詰み手筋の探索ノード数。
+   * Number of nodes for mate search.
    */
   int32_t _checkSearchNode;
 };

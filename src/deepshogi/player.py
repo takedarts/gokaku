@@ -17,11 +17,11 @@ LOGGER = logging.getLogger(__name__)
 
 
 def parse_cshogi_move16(move: int) -> Tuple[Tuple[int, int], Tuple[int, int], bool]:
-    '''cshogiの着手表現を解析する。
+    '''Parse cshogi move representation.
     Args:
-        move (int): cshogiの着手表現
+        move (int): cshogi move representation
     Returns:
-        Tuple[Tuple[int,int], Tuple[int,int], bool]: 移動元、移動先、成るならTrue
+        Tuple[Tuple[int,int], Tuple[int,int], bool]: Source, destination, True if promote
     '''
     src = (move >> 7) & 0x7f
     dst = (move >> 0) & 0x7f
@@ -46,17 +46,17 @@ class Candidate(object):
         value: float,
         variations: List[int],
     ) -> None:
-        '''候補手オブジェクトを初期化する。
+        '''Initialize candidate move object.
         Args:
-            src (Tuple[int, int]): 移動元の座標
-            dst (Tuple[int, int]): 移動先の座標
-            promote (bool): 成るならTrue
-            color (int): 手番
-            visits (int): 訪問回数
-            playouts (int): プレイアウト回数
-            policy (float): 予想される着手確率
-            value (float): 予測される勝率
-            variations (List[int]): 予想進行(cshogiの着手表現)
+            src (Tuple[int, int]): Source coordinates
+            dst (Tuple[int, int]): Destination coordinates
+            promote (bool): True if promote
+            color (int): Side to move
+            visits (int): Number of visits
+            playouts (int): Number of playouts
+            policy (float): Expected move probability
+            value (float): Predicted win rate
+            variations (List[int]): Expected sequence (cshogi move representation)
         '''
         self.src = src
         self.dst = dst
@@ -98,17 +98,17 @@ class Candidate(object):
 
 
 class Referee(object):
-    '''ゲーム結果を判定するクラス'''
+    '''Class to judge game results.'''
 
     def __init__(
         self,
         allowed_repeats: int = DEFAULT_ALLOWED_REPEATS,
         draw_steps: int = DEFAULT_DRAW_STEPS,
     ) -> None:
-        '''審判オブジェクトを初期化する。
+        '''Initialize referee object.
         Args:
-            allowed_repeats (int): 許容される同一局面の繰り返し回数（既定値は3回）
-            draw_steps (int): 引き分けとする手数（既定値は512手）
+            allowed_repeats (int): Allowed number of repeats of the same position (default is 3)
+            draw_steps (int): Number of moves for a draw (default is 512)
         '''
         self.allowed_repeats = allowed_repeats
         self.draw_steps = draw_steps
@@ -117,18 +117,18 @@ class Referee(object):
         self.check_counts = [0, 0]
 
     def clear(self) -> None:
-        '''状態をクリアする。'''
+        '''Clear the state.'''
         self.board_repeats.clear()
         self.check_counts = [0, 0]
 
     def update(self, board: Board) -> None:
-        '''状態を更新する。'''
-        # 現在の盤面を履歴に登録する
+        '''Update the state.'''
+        # Register the current board position in the history
         repeat_key = tuple(board.get_packed_sfen())
         repeat_values = self.board_repeats.get(repeat_key, (0, board.get_turn()))
         self.board_repeats[repeat_key] = (repeat_values[0] + 1, repeat_values[1])
 
-        # 王手の場合は連続回数をカウントする
+        # If in check, count consecutive checks
         color_index = 0 if board.get_color() == COLOR_WHITE else 1
 
         if board.is_checkmate():
@@ -137,25 +137,25 @@ class Referee(object):
             self.check_counts[color_index] = 0
 
     def judge(self, board: Board) -> Tuple[bool, int, int]:
-        '''勝敗を判定する。
+        '''Judge the game result.
         Args:
-            board (Board): 盤面データ
+            board (Board): Board data
         Returns:
-            Tuple[bool, int, int]: ゲームが終了していればTrue, 勝者の手番, 終局理由
+            Tuple[bool, int, int]: True if the game is over, winner's side, end reason
         '''
-        # 合法手がない場合は詰みと判定する
+        # If there are no legal moves, judge as checkmate
         if len(board.get_legal_moves()) == 0:
             return True, get_opposite_color(board.get_color()), RESULT_TSUMI
 
-        # 入玉宣言できる場合は入玉宣言による勝ちと判定する
+        # If nyugyoku declaration is possible, judge as win by nyugyoku declaration
         if board.is_nyugyoku():
             return True, board.get_color(), RESULT_NYUGYOKU
 
-        # 引き分けとする手数を超えた場合は引き分けと判定する
+        # If the number of moves exceeds the draw threshold, judge as a draw
         if board.get_turn() >= self.draw_steps:
             return True, COLOR_NONE, RESULT_MAX_MOVES
 
-        # 千日手かどうかを判定する
+        # Judge whether it is repetition (sennichite)
         repeat_key = tuple(board.get_packed_sfen())
         repeat_values = self.board_repeats.get(repeat_key, (0, board.get_turn()))
         repeat_count, repeat_turn = repeat_values
@@ -171,15 +171,15 @@ class Referee(object):
             else:
                 return True, COLOR_NONE, RESULT_SENNICHITE
 
-        # それ以外はゲームが続行中と判定する
+        # Otherwise, judge that the game is ongoing
         return False, COLOR_NONE, RESULT_NONE
 
     def get_repeats(self, board: Board) -> int:
-        '''同一局面の繰り返し回数を返す。
+        '''Return the number of repeats of the same position.
         Args:
-            board (Board): 盤面データ
+            board (Board): Board data
         Returns:
-            int: 同一局面の繰り返し回数
+            int: Number of repeats of the same position
         '''
         repeat_key = tuple(board.get_packed_sfen())
         repeat_values = self.board_repeats.get(repeat_key, (0, 0))
@@ -201,43 +201,43 @@ class Player(object):
         allowed_repeats: int = DEFAULT_ALLOWED_REPEATS,
         check_next_repeats: bool = True,
     ) -> None:
-        '''競技者オブジェクトを初期化する。
+        '''Initialize player object.
         Args:
-            processor (Processor): 計算管理オブジェクト
-            threads (int): 使用するスレッド数
-            initial_sfen (str): SFEN形式の初期盤面
-            nyugyoku_scores (Tuple[int, int]): 入玉宣言に必要となる点数
-            draw_steps (int): 引き分けとする手数
-            check_search_depth (int): 詰み探索の深さ
-            check_search_node (int): 詰み探索のノード数
-            eval_leaf_only (bool): 葉ノードのみ評価するならTrue
-            allowed_repeats (int): 許容される同一局面の繰り返し回数（既定値は3回）
-            check_next_repeats (bool): 次の手番の千日手を判定する場合はTrue
+            processor (Processor): Processor management object
+            threads (int): Number of threads to use
+            initial_sfen (str): Initial board in SFEN format
+            nyugyoku_scores (Tuple[int, int]): Points required for nyugyoku declaration
+            draw_steps (int): Number of moves for a draw
+            check_search_depth (int): Depth for checkmate search
+            check_search_node (int): Number of nodes for checkmate search
+            eval_leaf_only (bool): True to evaluate only leaf nodes
+            allowed_repeats (int): Allowed number of repeats of the same position (default is 3)
+            check_next_repeats (bool): True to judge repetition for the next side to move
         '''
-        # プロセッサオブジェクトが破棄されないように参照を保持する
+        # Keep a reference to the processor object so it is not destroyed
         self.processor = processor
 
-        # ネイティブオブジェクトを作成する
+        # Create native object
         self.native = NativePlayer(
             processor.native, threads, nyugyoku_scores, draw_steps,
             check_search_depth, check_search_node, eval_leaf_only)
 
         self.native.initialize(initial_sfen)
 
-        # ゲームの審判オブジェクトを作成する
+        # Create referee object for the game
         self.referee = Referee(
             allowed_repeats=allowed_repeats, draw_steps=draw_steps)
         self.check_next_repeats = check_next_repeats
 
     def initialize(self, sfen: str = DEFAULT_INITIAL_SFEN) -> None:
-        '''状態を初期化する。
+        '''Initialize state.
         Args:
-            sfen (str): SFEN形式の初期盤面
+            sfen (str): Initial board in SFEN format
         '''
-        # ponderingしている場合は停止する
+        # Stop if pondering
         self.native.wait_evaluation(0, 0, 0.0, True)
 
-        # 初期化する
+        # Initialize
         self.native.initialize(sfen)
         self.referee.clear()
 
@@ -248,21 +248,22 @@ class Player(object):
         promote: bool = False,
         piece: int | None = None,
     ) -> None:
-        '''駒を動かす。
+        '''Move a piece.
         Args:
-            src (Tuple[int, int]): 移動元の座標
-            dst (Tuple[int, int]): 移動先の座標
-            promote (bool): 成るならTrue
-            piece (int): 移動後の駒の種類
+            src (Tuple[int, int]): Source coordinates
+            dst (Tuple[int, int]): Destination coordinates
+            promote (bool): True if promote
+            piece (int): Type of piece after moving
         '''
-        # 移動後の駒の種類が指定されている場合は成るかどうかを駒の種類から判定する
+        # If the type of piece after moving is specified,
+        # determine whether to promote based on the piece type
         if piece is not None and not is_hand_position(src):
             promote = (self.get_board().get_piece(src) != piece)
 
-        # 千日手判定オブジェクトを更新する
+        # Update the repetition judgment object
         self.referee.update(self.get_board())
 
-        # 駒を動かす
+        # Move the piece
         self.native.play(src, dst, promote)
 
     def get_random(
@@ -272,32 +273,32 @@ class Player(object):
         delta: float = 0.1,
         timelimit: float = 120.0,
     ) -> Candidate:
-        '''ランダムな着手を返す。
+        '''Return a random move.
         Args:
-            width (int): 候補手の数
-            temperature (float): 温度パラメータ
-            delta (float): 許容できる勝率低下値
-            timelimit (float): 制限時間（秒）
+            width (int): Number of candidate moves
+            temperature (float): Temperature parameter
+            delta (float): Allowable win rate drop
+            timelimit (float): Time limit (seconds)
         Returns:
-            Candidate: 候補手
+            Candidate: Candidate move
         '''
-        # 盤面を評価する
+        # Evaluate the board
         self.native.start_evaluation(True, False, width, 0, 1.0, 0.0)
         self.native.wait_evaluation(width + 1, 0, timelimit, True)
 
-        # 候補手の一覧を作成する
+        # Create a list of candidate moves
         candidates = [Candidate(*c) for c in self.native.get_candidates()]
 
-        # 予想勝率の最大値を取得する
+        # Get the maximum predicted win rate
         max_win_chance = max(c.win_chance for c in candidates)
 
-        # 予想勝率の最大値との差が0.05以上の予想勝率となっている候補手を除外する
+        # Exclude candidate moves whose predicted win rate is more than delta below the maximum
         candidates = [c for c in candidates if c.win_chance >= max_win_chance - delta]
 
-        # policyの値を選択確率に変換する
+        # Convert policy values to selection probabilities
         probs = [c.policy**(1 / max(temperature, 1e-3)) for c in candidates]
 
-        # ランダムに選択した候補手を返す
+        # Return a randomly selected candidate move
         return random.choices(candidates, weights=probs, k=1)[0]
 
     def evaluate(
@@ -315,24 +316,24 @@ class Player(object):
         criterion: str = 'lcb',
         ponder: bool = False,
     ) -> List[Candidate]:
-        '''盤面を評価する。
+        '''Evaluate the board.
         Args:
-            visits (int): 訪問数の目標値
-            playouts (int): プレイアウトの目標値
-            timelimit (float): 制限時間（秒）
-            equally (bool): 探索回数を均等にする場合はTrue、UCB1かPUCBを使う場合はFalse
-            use_ucb1 (bool): 探索先の基準としてUCB1を使う場合はTrue、PUCBを使う場合はFalse
-            candidate_width (int): 候補手の探索幅（0の場合は探索幅を自動的に調整される）
-            check_node_depth (int): 詰み探索を行うノードの最大深さ
-            temperature (float): 探索の温度パラメータ
-            noise (float): 探索のガンベルノイズの強さ
-            sennichite_penalty (float): 千日手の評価値に設定するペナルティ
-            criterion (str): 候補手優先度の基準（'lcb'、'visits'のいずれか）
-            ponder (bool): 探索を継続する場合はTrue
+            visits (int): Target number of visits
+            playouts (int): Target number of playouts
+            timelimit (float): Time limit (seconds)
+            equally (bool): True to make the number of searches equal, False to use UCB1 or PUCB
+            use_ucb1 (bool): True to use UCB1 as the search criterion, False to use PUCB
+            candidate_width (int): Search width for candidate moves (if 0, width is automatically adjusted)
+            check_node_depth (int): Maximum depth of nodes for checkmate search
+            temperature (float): Temperature parameter for search
+            noise (float): Strength of Gumbel noise for search
+            sennichite_penalty (float): Penalty to set for repetition (sennichite) evaluation
+            criterion (str): Criterion for candidate move priority ('lcb' or 'visits')
+            ponder (bool): True to continue searching
         Returns:
-            List[Candidate]: 候補手の一覧
+            List[Candidate]: List of candidate moves
         '''
-        # 盤面を評価する
+        # Evaluate the board
         LOGGER.debug(
             'Evaluation: %d visits, %d playouts, %.1f seconds',
             visits, playouts, timelimit)
@@ -340,20 +341,20 @@ class Player(object):
             equally, use_ucb1, candidate_width, check_node_depth, temperature, noise)
         self.native.wait_evaluation(visits, playouts, timelimit, not ponder)
 
-        # 候補手の一覧を作成する
+        # Create a list of candidate moves
         candidates = [Candidate(*c) for c in self.native.get_candidates()]
 
-        # 勝敗を判定して評価値に反映する
+        # Judge the game result and reflect it in the evaluation value
         for candidate in candidates:
-            # 候補手を進めた盤面を作成する
+            # Create a board after making the candidate move
             board = self.get_board()
             board.play(candidate.src, candidate.dst, candidate.promote)
 
-            # 候補手を進めた盤面で終了判定を行う
+            # Judge the end of the game on the board after making the candidate move
             game_over, winner, result = self.referee.judge(board)
 
-            # ゲームが終了している場合は勝者の手番を評価値に設定する
-            # 引き分け（千日手）の場合は指定されたペナルティを設定する
+            # If the game is over, set the winner's side as the evaluation value
+            # If it is a draw (sennichite), set the specified penalty
             if game_over:
                 if result == RESULT_SENNICHITE and winner == COLOR_NONE:
                     candidate.value = get_opposite_color(candidate.color) * sennichite_penalty
@@ -362,11 +363,11 @@ class Player(object):
 
                 continue
 
-            # 次の相手の手番での引き分け（千日手）を判定しない場合は次の候補手に進む
+            # If not judging repetition for the next side to move, proceed to the next candidate move
             if not self.check_next_repeats:
                 continue
 
-            # 次の相手の手番で引き分け（千日手）の場合も指定されたペナルティを設定する
+            # If it is a draw (sennichite) for the next side to move, also set the specified penalty
             next_board = Board()
 
             for move in board.get_legal_moves():
@@ -384,7 +385,7 @@ class Player(object):
                     candidate.value = max(candidate.value, sennichite_penalty)
                     break
 
-        # 候補手をソートする
+        # Sort candidate moves
         if criterion == 'visits':
             candidates.sort(key=lambda cand: cand.visits, reverse=True)
         elif criterion == 'lcb':
@@ -392,30 +393,30 @@ class Player(object):
         else:
             raise ValueError(f'Unknown criterion: {criterion}')
 
-        # ログを出力する
+        # Output logs
         if LOGGER.isEnabledFor(logging.DEBUG):
             LOGGER.debug('Evaluation: %d visits', sum(c.visits for c in candidates))
             for candidate in candidates:
                 LOGGER.debug(candidate)
 
-        # 候補手の一覧を返す
+        # Return the list of candidate moves
         return candidates
 
     def stop_evaluation(self) -> None:
-        '''ponderingしている場合は停止する。'''
+        '''Stop if pondering.'''
         self.native.wait_evaluation(0, 0, 0.0, True)
 
     def get_color(self) -> int:
-        '''手番を返す。
+        '''Return the side to move.
         Returns:
-            int: 手番
+            int: Side to move
         '''
         return self.native.get_color()
 
     def get_board(self) -> Board:
-        '''盤面データを返す。
+        '''Return board data.
         Returns:
-            Board: 盤面データ
+            Board: Board data
         '''
         board = Board()
 

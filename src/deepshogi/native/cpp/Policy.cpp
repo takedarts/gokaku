@@ -5,10 +5,10 @@
 namespace deepshogi {
 
 /**
- * 予測着手確率のオブジェクトを作成する。
- * @param move 着手
- * @param policy 予測着手確率
- * @param visits 探索回数
+ * Create an object for predicted move probability.
+ * @param move Move
+ * @param policy Predicted move probability
+ * @param visits Number of searches
  */
 Policy::Policy(Move move, float policy, int32_t visits)
     : move(move),

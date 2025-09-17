@@ -7,29 +7,29 @@
 namespace deepshogi {
 
 /**
- * 予測着手確率を計算する構造体。
+ * Struct for calculating predicted move probabilities.
  */
 struct Policy {
   /**
-   * 予測着手確率のオブジェクトを作成する。
-   * @param move 着手
-   * @param policy 予測着手確率
-   * @param visits 探索回数
+   * Create an object for predicted move probability.
+   * @param move Move
+   * @param policy Predicted move probability
+   * @param visits Number of searches
    */
   Policy(Move move, float policy, int32_t visits);
 
   /**
-   * 着手情報。
+   * Move information.
    */
   Move move;
 
   /**
-   * 予測着手確率。
+   * Predicted move probability.
    */
   float policy;
 
   /**
-   * 探索回数。
+   * Number of searches.
    */
   int32_t visits;
 };

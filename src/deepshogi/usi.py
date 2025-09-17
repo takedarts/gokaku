@@ -32,20 +32,20 @@ USI_HAND_PIECE_TO_CHAR = {
 
 
 def usi_string_to_move(sfen: str) -> Tuple[Tuple[int, int], Tuple[int, int], bool]:
-    '''USI形式の着手文字列を解析して着手情報を返す。
+    '''Parse a USI move string and return move information.
     Args:
-        sfen (str): USI形式の着手文字列
+        sfen (str): USI move string
     Returns:
-        Tuple[Tuple[int,int], Tuple[int,int],bool]: (移動元座標, 移動先座標, 成りの場合はTrue)
+        Tuple[Tuple[int,int], Tuple[int,int],bool]: (source coordinates, destination coordinates, True if promote)
     '''
     b = sfen.encode('utf-8')
 
-    # 1文字目が数字なら駒の移動
+    # If the first character is a number, it's a piece move
     if 49 <= b[0] <= 57:
         src = (b[0] - 49, b[1] - 97)
         dst = (b[2] - 49, b[3] - 97)
         promote = (len(b) >= 5 and b[4] == 43)
-    # それ以外なら手駒を打つ
+    # Otherwise, it's a drop from hand
     elif b[0] in USI_HAND_CHAR_TO_PIECE:
         src = (BOARD_SIZE, USI_HAND_CHAR_TO_PIECE[b[0]])
         dst = (b[2] - 49, b[3] - 97)
@@ -57,20 +57,20 @@ def usi_string_to_move(sfen: str) -> Tuple[Tuple[int, int], Tuple[int, int], boo
 
 
 def usi_move_to_string(src: Tuple[int, int], dst: Tuple[int, int], promote: bool) -> str:
-    '''着手情報をUSI形式の着手文字列に変換する。
+    '''Convert move information to a USI move string.
     Args:
-        src (Tuple[int,int]): 移動元座標
-        dst (Tuple[int,int]): 移動先座標
-        promote (bool): 成る場合はTrue
+        src (Tuple[int,int]): Source coordinates
+        dst (Tuple[int,int]): Destination coordinates
+        promote (bool): True if promote
     Returns:
-        str: USI形式の着手文字列
+        str: USI move string
     '''
-    # 駒の移動の場合
+    # If it's a piece move
     if src[0] != BOARD_SIZE:
         src_str = chr(src[0] + 49) + chr(src[1] + 97)
         dst_str = chr(dst[0] + 49) + chr(dst[1] + 97)
         promote_str = '+' if promote else ''
-    # 手駒を打つ場合
+    # If it's a drop from hand
     elif src[0] == BOARD_SIZE and src[1] in USI_HAND_PIECE_TO_CHAR:
         src_str = chr(USI_HAND_PIECE_TO_CHAR[src[1]]) + '*'
         dst_str = chr(dst[0] + 49) + chr(dst[1] + 97)
@@ -82,12 +82,12 @@ def usi_move_to_string(src: Tuple[int, int], dst: Tuple[int, int], promote: bool
 
 
 def usi_candidate_to_string(candidate: Candidate, index: int) -> str:
-    '''候補手情報をUSI形式の解析結果文字列に変換する。
+    '''Convert candidate move information to a USI analysis result string.
     Args:
-        candidate (Candidate): 候補手情報
-        index (int): 優先順位
+        candidate (Candidate): Candidate move information
+        index (int): Priority
     Returns:
-        str: USI形式の解析結果文字列
+        str: USI analysis result string
     '''
     nodes = candidate.visits
     score = get_shogi_score(candidate.win_chance)
@@ -101,7 +101,7 @@ def usi_candidate_to_string(candidate: Candidate, index: int) -> str:
 
 
 class USIEngine(object):
-    '''USIプロトコルの入力にもとづいて思考処理を実行するクラス'''
+    '''Class that executes thinking process based on USI protocol input.'''
 
     def __init__(
         self,
@@ -126,29 +126,29 @@ class USIEngine(object):
         reader: TextIO = sys.stdin,
         writer: TextIO = sys.stdout,
     ):
-        '''GTPエンジンを作成する。
+        '''Create a USI engine.
         Args:
-            processor(Processor): 推論実行オブジェクト
-            threads(int): 使用するスレッドの数
-            visits(int): 探索の訪問回数
-            playouts(int): 探索のプレイアウト回数
-            timelimit(float): 思考時間の制限(秒)
-            use_ucb1(bool): UCB1を使用するならTrue、PUCBを使用するならFalse
-            ponder(bool): 相手の思考中に解析を継続するならTrue
-            resign_threshold(float): 投了するときの勝率
-            resign_turn(int): 投了するまでの最低ターン数
-            initial_turn(int): ランダム着手する初期ターン数
-            initial_width(int): ランダム着手の候補手の数
-            nyugyoku_scores(Tuple[int,int]): 入玉宣言に必要となる点数
-            check_search_depth(int): 詰み探索の深さ
-            check_search_node(int): 詰み探索のノード数
-            check_node_depth(int): 詰み探索を行うノードの深さ
-            max_visits(int): 探索の最大訪問数
-            client_name(str): クライアントの表示名
-            client_version(str): クライアントの表示バージョン
-            client_author(str): 表示する作者名
-            reader(TextIO): 命令を入力するストリーム
-            writer(TextIO): 結果を出力するストリーム
+            processor (Processor): Inference execution object
+            threads (int): Number of threads to use
+            visits (int): Number of search visits
+            playouts (int): Number of search playouts
+            timelimit (float): Thinking time limit (seconds)
+            use_ucb1 (bool): True to use UCB1, False to use PUCB
+            ponder (bool): True to continue analysis during opponent's thinking
+            resign_threshold (float): Win rate for resignation
+            resign_turn (int): Minimum number of turns before resignation
+            initial_turn (int): Number of initial turns for random moves
+            initial_width (int): Number of candidate moves for random moves
+            nyugyoku_scores (Tuple[int,int]): Points required for nyugyoku declaration
+            check_search_depth (int): Depth for checkmate search
+            check_search_node (int): Number of nodes for checkmate search
+            check_node_depth (int): Depth of nodes for checkmate search
+            max_visits (int): Maximum number of search visits
+            client_name (str): Client display name
+            client_version (str): Client display version
+            client_author (str): Displayed author name
+            reader (TextIO): Stream to input commands
+            writer (TextIO): Stream to output results
         '''
         self.player: Player | None = None
         self.processor = processor
@@ -206,37 +206,37 @@ class USIEngine(object):
         }
 
     def run(self) -> None:
-        '''USIエンジンを実行する。'''
+        '''Run the USI engine.'''
         while True:
             try:
-                # コマンドを読み込む
+                # Read command
                 command = self.reader.readline()
 
-                # 読み込むデータが存在しない（改行文字がない）場合は終了する
+                # If there is no data to read (no newline character), exit
                 if len(command) == 0:
                     break
 
-                # 改行文字を削除する
+                # Remove newline character
                 command = command.strip()
 
-                # 何も読み込めなかった場合は読み込みを継続する
+                # If nothing was read, continue reading
                 if len(command) == 0:
                     continue
 
-                # 実行中のスレッドがあれば終了する
+                # If a thread is running, terminate it
                 if self.thread is not None:
                     self.terminated = True
                     self.thread.join()
 
-                # ログを出力する
+                # Output log
                 LOGGER.debug('USI command: %s', command)
 
-                # 終了命令ならループを抜ける
+                # If quit command, break loop
                 if command.lower().startswith('quit'):
                     self.thread = None
                     break
 
-                # 別スレッドでコマンドを実行する
+                # Execute command in a separate thread
                 self.terminated = False
                 self.thread = Thread(target=self._perform, args=(command,))
                 self.thread.start()
@@ -250,13 +250,13 @@ class USIEngine(object):
         byoyomi_time: float = 0.0,
         increment_time: float = 0.0,
     ) -> float:
-        '''思考時間を取得する。
+        '''Get thinking time.
         Args:
-            remain_time(float): 残り時間
-            byoyomi_time(float): 秒読み時間
-            increment_time(float): 加算時間
+            remain_time (float): Remaining time
+            byoyomi_time (float): Byoyomi time
+            increment_time (float): Increment time
         Returns:
-            float: 思考時間
+            float: Thinking time
         '''
         each_time = byoyomi_time + increment_time
         margin_time = 20.0 if each_time < 2.0 else 0.0
@@ -266,13 +266,13 @@ class USIEngine(object):
         return min(self.timelimit, timelimit)
 
     def _evaluate(self, visits: int, playouts: int, timelimit: float) -> List[Candidate]:
-        '''盤面を評価する。
+        '''Evaluate the board.
         Args:
-            visits(int): 探索の訪問回数
-            playouts(int): 探索のプレイアウト回数
-            timelimit(float): 評価時間の目標値
+            visits (int): Number of search visits
+            playouts (int): Number of search playouts
+            timelimit (float): Target evaluation time
         Returns:
-            List[Candidate]: 候補手の一覧
+            List[Candidate]: List of candidate moves
         '''
         if self.player is None:
             raise ShogiException('player is not initialized')
@@ -293,16 +293,16 @@ class USIEngine(object):
                 ponder=self.ponder)
 
     def _perform(self, command: str) -> None:
-        '''命令を実行する。
+        '''Execute command.
         Args:
-            command(str): 命令
+            command (str): Command
         '''
         while True:
             try:
-                # 処理を実行する
+                # Execute process
                 stat, message, cont = self._perform_command(command)
 
-                # 応答を出力する
+                # Output response
                 if stat:
                     LOGGER.debug('USI response: %s', message)
                     self.writer.write(f'{message}\n')
@@ -310,7 +310,7 @@ class USIEngine(object):
                 elif len(message) > 0:
                     LOGGER.error('USI error: %s', message)
 
-                # 実行を継続しない場合はループを抜ける
+                # If not continuing execution, break loop
                 if not cont or self.terminated:
                     break
             except BaseException as e:
@@ -318,11 +318,11 @@ class USIEngine(object):
                 break
 
     def _perform_command(self, command: str) -> Tuple[bool, str, bool]:
-        '''コマンドを実行する。
+        '''Execute command.
         Args:
-            command(str): コマンド文字列(引数を含む)
+            command (str): Command string (including arguments)
         Returns:
-            Tuple[bool, str, bool]: (出力するならTrue, メッセージ, 実行を継続するならTrue)
+            Tuple[bool, str, bool]: (True to output, message, True to continue execution)
         '''
         tokens = [s for s in command.split() if len(s) != 0]
         command = tokens[0].lower().replace('-', '_')
@@ -340,11 +340,11 @@ class USIEngine(object):
             return (False, 'unknown command', False)
 
     def _perform_command_usi(self, args: List[str]) -> Tuple[bool, str, bool]:
-        '''起動時の情報を返す。
+        '''Return startup information.
         Args:
-            args(List[str]): 引数
+            args (List[str]): Arguments
         Returns:
-            Tuple[bool, str, bool]: (出力するならTrue, メッセージ, 実行を継続するならTrue)
+            Tuple[bool, str, bool]: (True to output, message, True to continue execution)
         '''
         options = '\n'.join(
             f'option name {name} type {fmt.format(func(getattr(self, var)))}'
@@ -358,11 +358,11 @@ class USIEngine(object):
         return (True, message, False)
 
     def _perform_command_setoption(self, args: List[str]) -> Tuple[bool, str, bool]:
-        '''オプション設定には対応していないので、このコマンドは無視する。
+        '''Set the value of an option.
         Args:
-            args(List[str]): 引数
+            args (List[str]): Arguments
         Returns:
-            Tuple[bool, str, bool]: (出力するならTrue, メッセージ, 実行を継続するならTrue)
+            Tuple[bool, str, bool]: (True to output, message, True to continue execution)
         '''
         if len(args) < 4:
             return (False, 'syntax error', False)
@@ -378,13 +378,13 @@ class USIEngine(object):
         return (False, '', False)
 
     def _perform_command_isready(self, args: List[str]) -> Tuple[bool, str, bool]:
-        '''準備完了を返す。
+        '''Return ready status.
         Args:
-            args(List[str]): 引数
+            args (List[str]): Arguments
         Returns:
-            Tuple[bool, str, bool]: (出力するならTrue, メッセージ, 実行を継続するならTrue)
+            Tuple[bool, str, bool]: (True to output, message, True to continue execution)
         '''
-        # プレイヤオブジェクトが作成されていない場合は作成する
+        # Create player object if not already created
         if self.player is None:
             self.player = Player(
                 processor=self.processor,
@@ -396,37 +396,37 @@ class USIEngine(object):
         return (True, 'readyok', False)
 
     def _perform_command_usinewgame(self, args: List[str]) -> Tuple[bool, str, bool]:
-        '''新しいゲームを開始する。
+        '''Start a new game.
         Args:
-            args(List[str]): 引数
+            args (List[str]): Arguments
         Returns:
-            Tuple[bool, str, bool]: (出力するならTrue, メッセージ, 実行を継続するならTrue)
+            Tuple[bool, str, bool]: (True to output, message, True to continue execution)
         '''
-        # プレイヤオブジェクトが作成されていることを確認する
+        # Ensure player object is created
         if self.player is None:
             raise ShogiException('player is not initialized')
 
-        # ゲームの状態を初期化する
+        # Initialize game state
         self.startsfen = DEFAULT_INITIAL_SFEN
         self.moves.clear()
 
-        # プレイヤオブジェクトを初期化する
+        # Initialize player object
         self.player.initialize(self.startsfen)
 
         return (False, '', False)
 
     def _perform_command_position(self, args: List[str]) -> Tuple[bool, str, bool]:
-        '''局面を設定する。
+        '''Set the board position.
         Args:
-            args(List[str]): 引数
+            args (List[str]): Arguments
         Returns:
-            Tuple[bool, str, bool]: (出力するならTrue, メッセージ, 実行を継続するならTrue)
+            Tuple[bool, str, bool]: (True to output, message, True to continue execution)
         '''
-        # プレイヤオブジェクトが作成されていることを確認する
+        # Ensure player object is created
         if self.player is None:
             raise ShogiException('player is not initialized')
 
-        # 開始局面を取得する
+        # Get initial position
         index = 0
 
         if index < len(args) and args[index].lower() == 'startpos':
@@ -438,28 +438,28 @@ class USIEngine(object):
         else:
             return (False, 'syntax error', False)
 
-        # 着手一覧を取得する
+        # Get move list
         if index < len(args) and args[index].lower() == 'moves':
             moves = args[index + 1:]
         else:
             moves = []
 
-        # 開始局面と着手履歴が一致する場合は必要となる着手のみ残す
+        # If initial position and move history match, keep only necessary moves
         if sfen == self.startsfen and moves[:len(self.moves)] == self.moves:
             moves = moves[len(self.moves):]
-        # 一致しない場合は局面を初期化する
+        # If not matching, initialize position
         else:
             self.player.initialize(sfen)
             self.startsfen = sfen
             self.moves.clear()
 
-        # 着手を実行する
+        # Execute moves
         for move in moves:
             src, dst, promote = usi_string_to_move(move)
             self.player.play(src, dst, promote)
             self.moves.append(move)
 
-        # ログを出力する
+        # Output log
         if LOGGER.isEnabledFor(logging.DEBUG):
             LOGGER.debug(
                 'Position: sfen=%s, moves=%s\n%s',
@@ -472,18 +472,18 @@ class USIEngine(object):
         args: List[str],
         analyze: bool = True,
     ) -> Tuple[bool, str, bool]:
-        '''思考を開始する。
+        '''Start thinking.
         Args:
-            args(List[str]): 引数リスト
-            analyze(bool): 解析結果も出力するならTrue
+            args (List[str]): Argument list
+            analyze (bool): True to also output analysis results
         Returns:
-            Tuple[bool, str, bool]: (出力するならTrue, メッセージ, 実行を継続するならTrue)
+            Tuple[bool, str, bool]: (True to output, message, True to continue execution)
         '''
-        # プレイヤオブジェクトが作成されていることを確認する
+        # Ensure player object is created
         if self.player is None:
             raise ShogiException('player is not initialized')
 
-        # 引数を解析する
+        # Parse arguments
         index = 0
         ponder = False
         btime = -1.0
@@ -520,9 +520,9 @@ class USIEngine(object):
                     wtime = float(args[index + 1]) / 1000
                 index += 2
 
-        # 制限時間を計算する
-        # 残り時間が設定されいない場合はデフォルトの制限時間を使用する
-        # 引数でponderが指定されている場合は制限時間を0.5秒にする
+        # Calculate time limit
+        # If remaining time is not set, use default time limit
+        # If ponder is specified in arguments, set time limit to 0.5 seconds
         if ponder:
             timelimit = 0.5
         elif self.player.get_color() == COLOR_BLACK and btime >= 0:
@@ -532,7 +532,7 @@ class USIEngine(object):
         else:
             timelimit = self._get_timelimit()
 
-        # ゲームの状態を確認する
+        # Check game state
         board = self.player.get_board()
 
         if len(board.get_legal_moves()) == 0:
@@ -547,43 +547,44 @@ class USIEngine(object):
                 get_color_name(self.player.get_color()))
             return (True, 'bestmove win', False)
 
-        # 着手を計算する
-        # 引数でponderが指定されている場合は訪問回数を100,000,000に設定する
+        # Calculate move
+        # If ponder is specified in arguments, set visits to 100,000,000
         visits = 100_000_000 if ponder else self.visits
         candidates = self._evaluate(visits, self.playouts, timelimit)
 
-        # 候補手がない場合は例外を発生させる（探索設定を間違っている場合のみ発生する）
+        # If there are no candidate moves, raise an exception (only occurs if
+        # search settings are incorrect)
         if candidates[0].src == -1:
             raise ShogiException('no candidates')
 
-        # 出力を作成する
+        # Create output
         results: List[str] = []
 
-        # 解析結果の文字列を作成する
+        # Create analysis result string
         if analyze:
             results.extend(
                 usi_candidate_to_string(candidate, i + 1)
                 for i, candidate in enumerate(candidates))
 
-        # ponderならbestmoveを返さない
+        # If ponder, do not return bestmove
         if ponder:
             return (True, '\n'.join(results), True)
 
-        # 勝率が閾値以下場合は投了と判定する
+        # If win rate is below threshold, judge as resignation
         if (not ponder
                 and len(self.moves) > self.resign_turn
                 and candidates[0].win_chance < self.resign_threshold):
             LOGGER.debug('Resign: win_chance=%.2f', candidates[0].win_chance)
             return (True, 'bestmove resign', False)
 
-        # 着手を追加する
+        # Add move
         move = usi_move_to_string(
             candidates[0].src, candidates[0].dst, candidates[0].promote)
 
-        # 結果にbestmoveを追加する
+        # Add bestmove to results
         results.append(f'bestmove {move}')
 
-        # ログを出力する
+        # Output log
         if LOGGER.isEnabledFor(logging.DEBUG):
             board = Board(self.startsfen)
             board.copy_from(self.player.get_board())
@@ -596,79 +597,79 @@ class USIEngine(object):
         return (True, '\n'.join(results), False)
 
     def _perform_command_stop(self, args: List[str]) -> Tuple[bool, str, bool]:
-        '''思考を中断する。
+        '''Interrupt thinking.
         Args:
-            args(List[str]): 引数リスト
+            args (List[str]): Argument list
         Returns:
-            Tuple[bool, str, bool]: (出力するならTrue, メッセージ, 実行を継続するならTrue)
+            Tuple[bool, str, bool]: (True to output, message, True to continue execution)
         '''
         return self._perform_command_go(['btime', '0', 'wtime', '0'], analyze=False)
 
     def _perform_command_ponderhit(self, args: List[str]) -> Tuple[bool, str, bool]:
-        '''ponderhitコマンドを実行する。
+        '''Execute ponderhit command.
         Args:
-            args(List[str]): 引数リスト
+            args (List[str]): Argument list
         Returns:
-            Tuple[bool, str, bool]: (出力するならTrue, メッセージ, 実行を継続するならTrue)
+            Tuple[bool, str, bool]: (True to output, message, True to continue execution)
         '''
         return self._perform_command_go(['btime', '0', 'wtime', '0'], analyze=False)
 
     def _perform_command_gameover(self, args: List[str]) -> Tuple[bool, str, bool]:
-        '''ゲーム終了を通知する。
+        '''Notify game over.
         Args:
-            args(List[str]): 引数リスト
+            args (List[str]): Argument list
         Returns:
-            Tuple[bool, str, bool]: (出力するならTrue, メッセージ, 実行を継続するならTrue)
+            Tuple[bool, str, bool]: (True to output, message, True to continue execution)
         '''
-        # プレイヤオブジェクトが作成されていることを確認する
+        # Ensure player object is created
         if self.player is None:
             raise ShogiException('player is not initialized')
 
-        # プレイヤオブジェクトを初期化する
+        # Initialize player object
         self.player.initialize()
 
         return (False, '', False)
 
     def _perform_command_showboard(self, args: List[str]) -> Tuple[bool, str, bool]:
-        '''現在の局面を返す。
+        '''Return the current board position.
         Args:
-            args(List[str]): 引数
+            args (List[str]): Arguments
         Returns:
-            Tuple[bool, str, bool]: (出力するならTrue, メッセージ, 実行を継続するならTrue)
+            Tuple[bool, str, bool]: (True to output, message, True to continue execution)
         '''
-        # プレイヤオブジェクトが作成されていることを確認する
+        # Ensure player object is created
         if self.player is None:
             raise ShogiException('player is not initialized')
 
-        # 現在の局面を返す
+        # Return the current board position
         return (True, str(self.player.get_board()), False)
 
     def _perform_command_play(self, args: List[str]) -> Tuple[bool, str, bool]:
-        '''playコマンドを実行する。
+        '''Execute play command.
         Args:
-            args(List[str]): 引数リスト
+            args (List[str]): Argument list
         Returns:
-            Tuple[bool, str, bool]: (出力するならTrue, メッセージ, 実行を継続するならTrue)
+            Tuple[bool, str, bool]: (True to output, message, True to continue execution)
         '''
-        # プレイヤオブジェクトが作成されていることを確認する
+        # Ensure player object is created
         if self.player is None:
             raise ShogiException('player is not initialized')
 
-        # 引数を確認する
+        # Check arguments
         if len(args) < 1:
             return (False, 'syntax error', False)
 
-        # 着手を取得する
+        # Get move
         move = usi_string_to_move(args[0])
 
-        # 着手を実行する
+        # Execute move
         try:
             self.player.play(*move)
             self.moves.append(args[0])
         except ShogiException:
             return (False, 'illegal move', False)
 
-        # ログを出力する
+        # Output log
         if LOGGER.isEnabledFor(logging.DEBUG):
             LOGGER.debug(
                 'Play: src=%s, dst=%s, promote=%s\n%s',
@@ -677,24 +678,24 @@ class USIEngine(object):
         return (False, '', False)
 
     def _perform_command_genmove(self, args: List[str]) -> Tuple[bool, str, bool]:
-        '''genmoveコマンドを実行する。
+        '''Execute genmove command.
         Args:
-            args(List[str]): 引数リスト
+            args (List[str]): Argument list
         Returns:
-            Tuple[bool, str, bool]: (出力するならTrue, メッセージ, 実行を継続するならTrue)
+            Tuple[bool, str, bool]: (True to output, message, True to continue execution)
         '''
-        # プレイヤオブジェクトが作成されていることを確認する
+        # Ensure player object is created
         if self.player is None:
             raise ShogiException('player is not initialized')
 
-        # 着手を計算する
+        # Calculate move
         _, message, _ = self._perform_command_go([], analyze=False)
         move = message.split()[1]
         src, dst, promote = usi_string_to_move(move)
 
-        # 盤面を進める
+        # Advance the board
         self.player.play(src, dst, promote)
         self.moves.append(move)
 
-        # 着手を返す
+        # Return move
         return (True, message, False)

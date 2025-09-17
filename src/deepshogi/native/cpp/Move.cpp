@@ -5,25 +5,25 @@
 namespace deepshogi {
 
 /**
- * 着手オブジェクトを作成する。
+ * Create a move object.
  */
 Move::Move() : Move(-1, -1, -1, -1, false) {}
 
 /**
- * 着手オブジェクトを作成する。
- * @param srcX 移動元のX座標
- * @param srcY 移動元のY座標
- * @param dstX 移動先のX座標
- * @param dstY 移動先のY座標
- * @param promote 成るならtrue
+ * Create a move object.
+ * @param srcX Source X coordinate
+ * @param srcY Source Y coordinate
+ * @param dstX Destination X coordinate
+ * @param dstY Destination Y coordinate
+ * @param promote True if promotion
  */
 Move::Move(int32_t srcX, int32_t srcY, int32_t dstX, int32_t dstY, bool promote)
     : _srcX(srcX), _srcY(srcY), _dstX(dstX), _dstY(dstY), _promote(promote) {
 }
 
 /**
- * cshogiの着手表現から着手オブジェクトを作成する。
- * @param cshogiMove cshogiの着手表現
+ * Create a move object from cshogi's move representation.
+ * @param cshogiMove cshogi move representation
  */
 Move::Move(int32_t cshogiMove)
     : _srcX(((cshogiMove >> 7) & 0x7f) / BOARD_SIZE),
@@ -34,57 +34,57 @@ Move::Move(int32_t cshogiMove)
 }
 
 /**
- * 移動元のX座標を取得する。
- * @return X座標
+ * Get the source X coordinate.
+ * @return X coordinate
  */
 int32_t Move::getSrcX() const {
   return _srcX;
 }
 
 /**
- * 移動元のY座標を取得する。
- * @return Y座標
+ * Get the source Y coordinate.
+ * @return Y coordinate
  */
 int32_t Move::getSrcY() const {
   return _srcY;
 }
 
 /**
- * 移動先のX座標を取得する。
- * @return X座標
+ * Get the destination X coordinate.
+ * @return X coordinate
  */
 int32_t Move::getDstX() const {
   return _dstX;
 }
 
 /**
- * 移動先のY座標を取得する。
- * @return Y座標
+ * Get the destination Y coordinate.
+ * @return Y coordinate
  */
 int32_t Move::getDstY() const {
   return _dstY;
 }
 
 /**
- * 成るならtrueを返す。
- * @return 成るならtrue
+ * Return true if promotion.
+ * @return True if promotion
  */
 bool Move::isPromote() const {
   return _promote;
 }
 
 /**
- * パスの着手であればtrueを返す。
- * @return パスの着手であればtrue
+ * Return true if this is a pass move.
+ * @return True if this is a pass move
  */
 bool Move::isPass() const {
   return _srcX == -1;
 }
 
 /**
- * この着手を表現する数値を返す。
- * この数値はcshogiの着手表現`move16`と同じとなる。
- * @return 着手を表現する数値
+ * Return the value representing this move.
+ * This value is the same as cshogi's move representation `move16`.
+ * @return Value representing the move
  */
 int32_t Move::getValue() const {
   return (
@@ -94,7 +94,7 @@ int32_t Move::getValue() const {
 }
 
 /**
- * 同じ着手であればtrueを返す。
+ * Return true if the moves are the same.
  */
 bool Move::operator==(const Move& move) const {
   return (
@@ -106,7 +106,7 @@ bool Move::operator==(const Move& move) const {
 }
 
 /**
- * 異なる着手であればtrueを返す。
+ * Return true if the moves are different.
  */
 bool Move::operator!=(const Move& move) const {
   return (
@@ -118,7 +118,7 @@ bool Move::operator!=(const Move& move) const {
 }
 
 /**
- * この着手が指定された着手よりも小さいならばtrueを返す。
+ * Return true if this move is less than the specified move.
  */
 bool Move::operator<(const Move& move) const {
   return (
