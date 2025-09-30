@@ -21,7 +21,7 @@ def parse_args() -> argparse.Namespace:
         '--timelimit', type=float, default=120.0, help='Time to think (sec) (default: 120)')
     parser.add_argument(
         '--search-method', type=str, default='pucb', choices=['ucb1', 'pucb'],
-        help='Calculation method of search (default: pucb)')
+        help='Criterion for selecting search nodes (default: pucb)')
     parser.add_argument(
         '--ponder', default=False, action='store_true', help='Use pondering')
     parser.add_argument(
@@ -41,7 +41,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         '--check-node-depth', type=int, default=4, help='Node depth where check search runs (default: 4)')
     parser.add_argument(
-        '--client-name', type=str, default=NAME, help='Client name (default: {NAME})')
+        '--client-name', type=str, default=NAME, help=f'Client name (default: {NAME})')
     parser.add_argument(
         '--client-version', type=str, default=VERSION, help=f'Client version (default: {VERSION})')
     parser.add_argument(
