@@ -265,33 +265,6 @@ class USIEngine(object):
 
         return min(self.timelimit, timelimit)
 
-    def _evaluate(self, visits: int, playouts: int, timelimit: float) -> List[Candidate]:
-        '''Evaluate the board.
-        Args:
-            visits (int): Number of search visits
-            playouts (int): Number of search playouts
-            timelimit (float): Target evaluation time
-        Returns:
-            List[Candidate]: List of candidate moves
-        '''
-        if self.player is None:
-            raise ShogiException('player is not initialized')
-
-        if len(self.moves) < self.initial_turn:
-            LOGGER.debug('RandomMove: turn=%d', len(self.moves))
-            return [self.player.get_random(width=self.initial_width, timelimit=timelimit)]
-        else:
-            LOGGER.debug(
-                'Evaluate: visits=%d, playouts=%d, timelimit=%.1f, ponder=%s',
-                visits, playouts, timelimit, self.ponder)
-            return self.player.evaluate(
-                visits=visits,
-                playouts=playouts,
-                timelimit=timelimit,
-                use_ucb1=self.use_ucb1,
-                check_node_depth=self.check_node_depth,
-                ponder=self.ponder)
-
     def _perform(self, command: str) -> None:
         '''Execute command.
         Args:
@@ -547,10 +520,26 @@ class USIEngine(object):
                 get_color_name(self.player.get_color()))
             return (True, 'bestmove win', False)
 
-        # Calculate move
         # If ponder is specified in arguments, set visits to 100,000,000
         visits = 100_000_000 if ponder else self.visits
-        candidates = self._evaluate(visits, self.playouts, timelimit)
+
+        # Calculate move
+        # If it's the initial turn and ponder is not specified, make a random move
+        # Otherwise, calculate the move using the evaluation function
+        if not ponder and len(self.moves) < self.initial_turn:
+            LOGGER.debug('RandomMove: turn=%d', len(self.moves))
+            candidates = [self.player.get_random(width=self.initial_width, timelimit=timelimit)]
+        else:
+            LOGGER.debug(
+                'Evaluate: visits=%d, playouts=%d, timelimit=%.1f, ponder=%s',
+                visits, self.playouts, timelimit, ponder)
+            candidates = self.player.evaluate(
+                visits=visits,
+                playouts=self.playouts,
+                timelimit=timelimit,
+                use_ucb1=self.use_ucb1,
+                check_node_depth=self.check_node_depth,
+                ponder=self.ponder)
 
         # If there are no candidate moves, raise an exception (only occurs if
         # search settings are incorrect)
