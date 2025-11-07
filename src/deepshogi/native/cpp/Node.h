@@ -1,0 +1,304 @@
+#pragma once
+
+#include <cstdint>
+#include <iostream>
+#include <queue>
+#include <shared_mutex>
+
+#include "Board.h"
+#include "Config.h"
+#include "Evaluator.h"
+#include "Move.h"
+#include "NodeParameter.h"
+#include "NodeResult.h"
+#include "Policy.h"
+
+namespace deepshogi {
+class NodeManager;
+
+/**
+ * Search node class.
+ */
+class Node {
+ public:
+  /**
+   * Create a search node object.
+   * @param manager Node manager object
+   * @param parameter Node creation parameters
+   */
+  Node(NodeManager* manager, const NodeParameter& parameter);
+
+  /**
+   * Set as the initial board node specified in SFEN format.
+   * @param sfen Board in SFEN format
+   */
+  void initialize(const std::string sfen);
+
+  /**
+   * Evaluate the search node.
+   * @param equally If true, equalize the number of searches
+   * @param width Search width (if 0, adjust automatically)
+   * @param useUcb1 If true, use UCB1; if false, use PUCB
+   * @param searchCheckMove If true, search for checkmate moves
+   * @param temperature Temperature parameter for search
+   * @param noise Strength of Gumbel noise for search
+   * @return Evaluation result
+   */
+  NodeResult evaluate(
+      bool equally, int32_t width, bool useUcb1, bool searchCheckMove,
+      float temperature, float noise);
+
+  /**
+   * Update the evaluation value of the search node.
+   * @param value Evaluation value
+   */
+  void updateValue(float value);
+
+  /**
+   * Cancel the evaluation value of the search node.
+   * @param value Evaluation value
+   */
+  void cancelValue(float value);
+
+  /**
+   * Get the candidate move with the highest PolicyNetwork evaluation value.
+   * @return Candidate move
+   */
+  Move getPolicyMove();
+
+  /**
+   * Get the move.
+   * @return Move
+   */
+  Move getMove();
+
+  /**
+   * Get the next side to move.
+   * @return Side to move
+   */
+  int32_t getColor();
+
+  /**
+   * Get the predicted move probability of this node.
+   * @return Predicted move probability
+   */
+  float getPolicy();
+
+  /**
+   * Get the list of child nodes.
+   * @return List of node objects
+   */
+  std::vector<Node*> getChildren();
+
+  /**
+   * Get the node object when the specified move is made.
+   * If the node object does not exist, return a newly created object.
+   * The created node object is not registered as a child node of this node object.
+   * @param move Move
+   * @return Pointer to node object
+   */
+  Node* getChild(const Move& move);
+
+  /**
+   * Get the checkmate move of this node.
+   * If no checkmate move is found, return MOVE_PASS.
+   * @return Checkmate move
+   */
+  Move getCheckMove() const;
+
+  /**
+   * Get the number of searches for this node.
+   * @return Number of searches
+   */
+  int32_t getVisits();
+
+  /**
+   * Get the number of playouts.
+   * @return Number of playouts
+   */
+  int32_t getPlayouts();
+
+  /**
+   * Set the number of playouts.
+   * @param playouts Number of playouts
+   */
+  void setPlayouts(int32_t playouts);
+
+  /**
+   * Get the evaluation value of this node.
+   * @return Evaluation value
+   */
+  float getValue();
+
+  /**
+   * Get the lower bound of the confidence interval for the evaluation value of this node.
+   * @return Lower bound of confidence interval
+   */
+  float getValueLCB();
+
+  /**
+   * Get the priority of this node based on PUCB.
+   * @param totalVisits Total number of searches
+   * @return Priority
+   */
+  float getPriorityByPUCB(int32_t totalVisits);
+
+  /**
+   * Get the priority of this node based on UCB1.
+   * @param totalVisits Total number of searches
+   * @return Priority
+   */
+  float getPriorityByUCB1(int32_t totalVisits);
+
+  /**
+   * Get the predicted sequence of this node.
+   * @return Predicted sequence
+   */
+  std::vector<Move> getVariations();
+
+  /**
+   * Copy the state of the board to the specified board object.
+   * @param board Board object
+   */
+  void copyBoardTo(Board* board);
+
+  /**
+   * Output the information of this node.
+   * @param os Output destination
+   */
+  void print(std::ostream& os = std::cout);
+
+ private:
+  /**
+   * Mutex for evaluation synchronization.
+   */
+  std::shared_mutex _evalMutex;
+
+  /**
+   * Mutex for value synchronization.
+   */
+  std::shared_mutex _valueMutex;
+
+  /**
+   * Node manager object.
+   */
+  NodeManager* _manager;
+
+  /**
+   * Board to be evaluated in this node.
+   */
+  Board _board;
+
+  /**
+   * Move.
+   */
+  Move _move;
+
+  /**
+   * Predicted move probability.
+   */
+  float _policy;
+
+  /**
+   * Object to evaluate the board.
+   */
+  Evaluator _evaluator;
+
+  /**
+   * Search depth for checkmate moves.
+   */
+  int32_t _checkSearchDepth;
+
+  /**
+   * Number of nodes searched for checkmate moves.
+   */
+  int32_t _checkSearchNode;
+
+  /**
+   * List of child nodes.
+   */
+  std::unordered_map<int32_t, Node*> _children;
+
+  /**
+   * List of next move probabilities.
+   */
+  std::vector<Policy> _childPolicies;
+
+  /**
+   * List of candidate moves waiting to be registered as child nodes.
+   */
+  std::queue<Policy> _waitingQueue;
+
+  /**
+   * Set of candidate moves waiting to be registered as child nodes.
+   */
+  std::set<int32_t> _waitingSet;
+
+  /**
+   * Checkmate move.
+   */
+  Move _checkMove;
+
+  /**
+   * True if shallow (3-move) checkmate search has been executed.
+   */
+  bool _checkMoveShallowSearched;
+
+  /**
+   * True if deep (DfPn) checkmate search has been executed.
+   */
+  bool _checkMoveDeepSearched;
+
+  /**
+   * Number of searches.
+   */
+  int32_t _visits;
+
+  /**
+   * Number of playouts.
+   */
+  int32_t _playouts;
+
+  /**
+   * Predicted win rate.
+   */
+  float _value;
+
+  /**
+   * Number of times predicted win rate and predicted points have been added.
+   */
+  int32_t _count;
+
+  /**
+   * Execute board evaluation for this node.
+   * @param searchCheckMove If true, search for checkmate moves
+   */
+  void _evaluateBoard(bool searchCheckMove);
+
+  /**
+   * Evaluate the state of this node and return the evaluation result.
+   * @param equally If true, equalize the number of searches
+   * @param width Search width (if 0, adjust automatically)
+   * @param useUcb1 If true, use UCB1; if false, use PUCB
+   * @param temperature Temperature parameter for search
+   * @param noise Strength of Gumbel noise for search
+   * @return Evaluation result
+   */
+  NodeResult _evaluateNode(
+      bool equally, int32_t width, bool useUcb1, float temperature, float noise);
+
+  /**
+   * Initialize the evaluation information of the node.
+   */
+  void _reset();
+
+  /**
+   * Set the value as a continuation node of the specified node.
+   * @param prevNode Previous node
+   * @param move Move
+   * @param policy Predicted move probability
+   */
+  void _setAsNextNode(Node* prevNode, const Move& move, float policy);
+};
+
+}  // namespace deepshogi

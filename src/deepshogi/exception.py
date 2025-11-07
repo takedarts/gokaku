@@ -1,0 +1,2 @@
+class ShogiException(Exception):
+    pass
