@@ -182,6 +182,8 @@ DEFAULT_ALLOWED_REPEATS = 3
 DEFAULT_NYUGYOKU_SCORES = (28, 27)
 # Default number of moves for a draw
 DEFAULT_DRAW_STEPS = 512
+# Default maximum number of visits for search
+DEFAULT_MAX_VISITS = 1_000_000
 
 ################################################################
 # Logging settings

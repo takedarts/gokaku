@@ -20,11 +20,13 @@ namespace deepshogi {
  * @param checkSearchDepth Depth for mate search
  * @param checkSearchNode Number of nodes for mate search
  * @param evalLeafOnly True if only leaf nodes are evaluated
+ * @param maxVisits Maximum number of visits for search
  */
 Player::Player(
     Processor* processor, int32_t threads,
     int32_t nyugyokuScoreBlack, int32_t nyugyokuScoreWhite, int32_t drawSteps,
-    int32_t checkSearchDepth, int32_t checkSearchNode, bool evalLeafOnly)
+    int32_t checkSearchDepth, int32_t checkSearchNode,
+    bool evalLeafOnly, int32_t maxVisits)
     : _mutex(),
       _condition(),
       _nodeManager(NodeParameter(
@@ -34,6 +36,7 @@ Player::Player(
       _thread(),
       _root(_nodeManager.createNode()),
       _evalLeafOnly(evalLeafOnly),
+      _maxVisits(maxVisits),
       _searchVisits(0),
       _searchPlayouts(0),
       _searchEqually(false),
@@ -249,7 +252,11 @@ void Player::_run() {
       _condition.wait(lock, [this]() {
         if (_terminated) {
           return true;
-        } else if (!_stopped && !_paused && _runnings < _threadPool.getSize()) {
+        } else if (
+            !_stopped &&
+            !_paused &&
+            _runnings < _threadPool.getSize() &&
+            _searchVisits < _maxVisits) {
           return true;
         } else {
           return false;

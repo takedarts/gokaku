@@ -34,11 +34,13 @@ class Player {
    * @param checkSearchDepth Depth for mate search
    * @param checkSearchNode Number of nodes for mate search
    * @param evalLeafOnly True if only leaf nodes are evaluated
+   * @param maxVisits Maximum number of visits for search
    */
   Player(
       Processor* processor, int32_t threads,
       int32_t nyugyokuScoreBlack, int32_t nyugyokuScoreWhite, int32_t drawSteps,
-      int32_t checkSearchDepth, int32_t checkSearchNode, bool evalLeafOnly);
+      int32_t checkSearchDepth, int32_t checkSearchNode,
+      bool evalLeafOnly, int32_t maxVisits);
 
   /**
    * Destroy the player object.
@@ -133,6 +135,11 @@ class Player {
    * True if only leaf nodes are evaluated.
    */
   bool _evalLeafOnly;
+
+  /**
+   * Maximum number of visits for search.
+   */
+  int32_t _maxVisits;
 
   /**
    * Number of search visits.

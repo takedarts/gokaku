@@ -21,7 +21,7 @@ cdef extern from "cpp/Candidate.h" namespace "deepshogi":
 
 cdef extern from "cpp/Player.h" namespace "deepshogi":
     cdef cppclass Player:
-        Player(Processor*, int32_t, int32_t, int32_t, int32_t, int32_t, int32_t, bool) except +
+        Player(Processor*, int32_t, int32_t, int32_t, int32_t, int32_t, int32_t, bool, int32_t) except +
         void initialize(const string)
         int32_t getColor()
         void play(const Move&)
@@ -42,6 +42,7 @@ cdef class NativePlayer:
         check_search_depth: int,
         check_search_node: int,
         eval_leaf_only: bool,
+        max_visits: int,
     )->None:
         '''Initialize player object.
         Args:
@@ -52,11 +53,12 @@ cdef class NativePlayer:
             check_search_depth (int): Depth for checkmate search
             check_search_node (int): Number of nodes for checkmate search
             eval_leaf_only (bool): True to evaluate only leaf nodes
+            max_visits (int): Maximum number of visits for search
         '''
         self.player = new Player(
             processor.processor, threads,
             nyugyoku_scores[0], nyugyoku_scores[1], draw_steps,
-            check_search_depth, check_search_node, eval_leaf_only)
+            check_search_depth, check_search_node, eval_leaf_only, max_visits)
 
     def __dealloc__(self):
         del self.player

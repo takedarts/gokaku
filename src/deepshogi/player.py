@@ -6,10 +6,10 @@ from .board import Board, is_hand_position
 from .config import (BOARD_SIZE, COLOR_BLACK, COLOR_NONE, COLOR_WHITE,
                      DEFAULT_ALLOWED_REPEATS, DEFAULT_CHECK_SEARCH_DEPTH,
                      DEFAULT_CHECK_SEARCH_NODE, DEFAULT_DRAW_STEPS,
-                     DEFAULT_INITIAL_SFEN, DEFAULT_NYUGYOKU_SCORES,
-                     RESULT_MAX_MOVES, RESULT_NONE, RESULT_NYUGYOKU,
-                     RESULT_SENNICHITE, RESULT_TSUMI, get_color_name,
-                     get_opposite_color)
+                     DEFAULT_INITIAL_SFEN, DEFAULT_MAX_VISITS,
+                     DEFAULT_NYUGYOKU_SCORES, RESULT_MAX_MOVES, RESULT_NONE,
+                     RESULT_NYUGYOKU, RESULT_SENNICHITE, RESULT_TSUMI,
+                     get_color_name, get_opposite_color)
 from .native import NativePlayer
 from .processor import Processor
 
@@ -198,6 +198,7 @@ class Player(object):
         check_search_depth: int = DEFAULT_CHECK_SEARCH_DEPTH,
         check_search_node: int = DEFAULT_CHECK_SEARCH_NODE,
         eval_leaf_only: bool = False,
+        max_visits: int = DEFAULT_MAX_VISITS,
         allowed_repeats: int = DEFAULT_ALLOWED_REPEATS,
         check_next_repeats: bool = True,
     ) -> None:
@@ -211,6 +212,7 @@ class Player(object):
             check_search_depth (int): Depth for checkmate search
             check_search_node (int): Number of nodes for checkmate search
             eval_leaf_only (bool): True to evaluate only leaf nodes
+            max_visits (int): Maximum number of visits for search
             allowed_repeats (int): Allowed number of repeats of the same position (default is 3)
             check_next_repeats (bool): True to judge repetition for the next side to move
         '''
@@ -220,7 +222,7 @@ class Player(object):
         # Create native object
         self.native = NativePlayer(
             processor.native, threads, nyugyoku_scores, draw_steps,
-            check_search_depth, check_search_node, eval_leaf_only)
+            check_search_depth, check_search_node, eval_leaf_only, max_visits)
 
         self.native.initialize(initial_sfen)
 
