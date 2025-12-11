@@ -43,6 +43,7 @@ cdef extern from "cpp/Board.h" namespace "deepshogi":
         bool isCheckmate() const
         string getSfen() const
         void getPackedSfen(char *) const
+        void getInputs(float*) const
         void getInputs(float*, int32_t, int32_t) const
         void copyFrom(Board*)
         string dump() const
@@ -50,13 +51,13 @@ cdef extern from "cpp/Board.h" namespace "deepshogi":
 cdef class NativeBoard:
     cdef Board *board
 
-    def __cinit__(self, nyugyoku_scores: Tuple[int, int], draw_steps: int) -> None:
+    def __cinit__(self, nyugyoku_scores: Tuple[int, int], draw_turn: int) -> None:
         '''Create board object.
         Args:
             nyugyoku_scores (Tuple[int, int]): Nyugyoku declaration score
-            draw_steps (int): Number of moves until draw
+            draw_turn (int): Number of moves for a draw
         '''
-        self.board = new Board(nyugyoku_scores[0], nyugyoku_scores[1], draw_steps)
+        self.board = new Board(nyugyoku_scores[0], nyugyoku_scores[1], draw_turn)
 
     def __dealloc__(self) -> None:
         '''Destroy board object.'''
@@ -233,18 +234,21 @@ cdef class NativeBoard:
 
         return data
 
-    def get_inputs(self, color: int, steps: int) -> numpy.ndarray:
+    def get_inputs(self, color: int, turn: int) -> numpy.ndarray:
         '''Get board data to input to inference model.
         Args:
             color (int): Side to move
-            steps (int): Number of moves
+            turn (int): Number of moves (Specify -1 to execute processing for MCTS search)
         Returns:
             numpy.ndarray: Board data
         '''
         cdef numpy.ndarray[numpy.float32_t, ndim=1, mode="c"] inputs = numpy.empty(
             (MODEL_INPUT_SIZE,), dtype=numpy.float32)
 
-        self.board.getInputs(<float*> &inputs[0], color, steps)
+        if turn == -1:
+            self.board.getInputs(<float*> &inputs[0])
+        else:
+            self.board.getInputs(<float*> &inputs[0], color, turn)
 
         return inputs
 

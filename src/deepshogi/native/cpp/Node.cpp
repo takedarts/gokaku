@@ -26,7 +26,7 @@ Node::Node(NodeManager* manager, const NodeParameter& parameter)
       _board(
           parameter.getNyugyokuScoreBlack(),
           parameter.getNyugyokuScoreWhite(),
-          parameter.getDrawSteps()),
+          parameter.getDrawTurn()),
       _move(MOVE_PASS),
       _policy(0.0f),
       _evaluator(parameter.getProcessor()),

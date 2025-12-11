@@ -5,7 +5,7 @@ from typing import Dict, List, Tuple
 from .board import Board, is_hand_position
 from .config import (BOARD_SIZE, COLOR_BLACK, COLOR_NONE, COLOR_WHITE,
                      DEFAULT_ALLOWED_REPEATS, DEFAULT_CHECK_SEARCH_DEPTH,
-                     DEFAULT_CHECK_SEARCH_NODE, DEFAULT_DRAW_STEPS,
+                     DEFAULT_CHECK_SEARCH_NODE, DEFAULT_DRAW_TURN,
                      DEFAULT_INITIAL_SFEN, DEFAULT_MAX_VISITS,
                      DEFAULT_NYUGYOKU_SCORES, RESULT_MAX_MOVES, RESULT_NONE,
                      RESULT_NYUGYOKU, RESULT_SENNICHITE, RESULT_TSUMI,
@@ -123,15 +123,15 @@ class Referee(object):
     def __init__(
         self,
         allowed_repeats: int = DEFAULT_ALLOWED_REPEATS,
-        draw_steps: int = DEFAULT_DRAW_STEPS,
+        draw_turn: int = DEFAULT_DRAW_TURN,
     ) -> None:
         '''Initialize referee object.
         Args:
             allowed_repeats (int): Allowed number of repeats of the same position (default is 3)
-            draw_steps (int): Number of moves for a draw (default is 512)
+            draw_turn (int): Number of moves for a draw (default is 512)
         '''
         self.allowed_repeats = allowed_repeats
-        self.draw_steps = draw_steps
+        self.draw_turn = draw_turn
 
         self.board_repeats: Dict[Tuple, Tuple[int, int]] = {}
         self.check_counts = [0, 0]
@@ -172,7 +172,7 @@ class Referee(object):
             return True, board.get_color(), RESULT_NYUGYOKU
 
         # If the number of moves exceeds the draw threshold, judge as a draw
-        if board.get_turn() >= self.draw_steps:
+        if board.get_turn() >= self.draw_turn:
             return True, COLOR_NONE, RESULT_MAX_MOVES
 
         # Judge whether it is repetition (sennichite)
@@ -214,7 +214,7 @@ class Player(object):
         threads: int = 1,
         initial_sfen: str = DEFAULT_INITIAL_SFEN,
         nyugyoku_scores: Tuple[int, int] = DEFAULT_NYUGYOKU_SCORES,
-        draw_steps: int = DEFAULT_DRAW_STEPS,
+        draw_turn: int = DEFAULT_DRAW_TURN,
         check_search_depth: int = DEFAULT_CHECK_SEARCH_DEPTH,
         check_search_node: int = DEFAULT_CHECK_SEARCH_NODE,
         eval_leaf_only: bool = False,
@@ -228,7 +228,7 @@ class Player(object):
             threads (int): Number of threads to use
             initial_sfen (str): Initial board in SFEN format
             nyugyoku_scores (Tuple[int, int]): Points required for nyugyoku declaration
-            draw_steps (int): Number of moves for a draw
+            draw_turn (int): Number of turns for a draw
             check_search_depth (int): Depth for checkmate search
             check_search_node (int): Number of nodes for checkmate search
             eval_leaf_only (bool): True to evaluate only leaf nodes
@@ -241,14 +241,14 @@ class Player(object):
 
         # Create native object
         self.native = NativePlayer(
-            processor.native, threads, nyugyoku_scores, draw_steps,
+            processor.native, threads, nyugyoku_scores, draw_turn,
             check_search_depth, check_search_node, eval_leaf_only, max_visits)
 
         self.native.initialize(initial_sfen)
 
         # Create referee object for the game
         self.referee = Referee(
-            allowed_repeats=allowed_repeats, draw_steps=draw_steps)
+            allowed_repeats=allowed_repeats, draw_turn=draw_turn)
         self.check_next_repeats = check_next_repeats
 
     def initialize(self, sfen: str = DEFAULT_INITIAL_SFEN) -> None:

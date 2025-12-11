@@ -2,7 +2,7 @@ from typing import List, Tuple
 
 import numpy as np
 
-from .config import BOARD_SIZE, COLOR_NONE, DEFAULT_DRAW_STEPS, DEFAULT_NYUGYOKU_SCORES
+from .config import BOARD_SIZE, COLOR_NONE, DEFAULT_DRAW_TURN, DEFAULT_NYUGYOKU_SCORES
 from .exception import ShogiException
 from .native import NativeBoard
 
@@ -23,7 +23,7 @@ class Board(object):
         initial_sfen: str | None = None,
         initial_packed_sfen: np.ndarray | None = None,
         nyugyoku_scores: Tuple[int, int] | int = DEFAULT_NYUGYOKU_SCORES,
-        draw_steps: int = DEFAULT_DRAW_STEPS,
+        draw_turn: int = DEFAULT_DRAW_TURN,
     ) -> None:
         '''
         Initialize the board object.
@@ -31,12 +31,12 @@ class Board(object):
             initial_sfen (str): SFEN string of the initial board
             initial_packed_sfen (np.ndarray): Huffman encoded SFEN data of the initial board
             nyugyoku_scores (Tuple[int, int]): Points required for nyugyoku declaration
-            draw_steps (int): Number of moves until a draw
+            draw_turn (int): Number of moves for a draw
         '''
         if isinstance(nyugyoku_scores, int):
             nyugyoku_scores = (nyugyoku_scores, nyugyoku_scores)
 
-        self.native = NativeBoard(nyugyoku_scores, draw_steps)
+        self.native = NativeBoard(nyugyoku_scores, draw_turn)
 
         if initial_sfen is not None:
             self.native.initialize_with_sfen(initial_sfen)
@@ -186,22 +186,22 @@ class Board(object):
     def get_inputs(
         self,
         color: int = COLOR_NONE,
-        steps: int | None = None,
+        turn: int | None = None,
     ) -> np.ndarray:
         '''Get the data to input to the inference model.
         Args:
             color (int): Side to move (if COLOR_NONE, use current side)
-            steps (int | None): Number of moves (if None, use current number of moves)
+            turn (int | None): Number of moves (if None, use current number of moves)
         Returns:
             np.ndarray: Input data
         '''
         if color == COLOR_NONE:
             color = self.get_color()
 
-        if steps is None:
-            steps = self.get_turn()
+        if turn is None:
+            turn = self.get_turn()
 
-        return self.native.get_inputs(color, steps)
+        return self.native.get_inputs(color, turn)
 
     def copy_from(self, board: 'Board') -> None:
         '''Copy the board.

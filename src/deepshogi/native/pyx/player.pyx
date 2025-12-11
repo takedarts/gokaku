@@ -40,7 +40,7 @@ cdef class NativePlayer:
         processor: NativeProcessor,
         threads: int,
         nyugyoku_scores: Tuple[int, int],
-        draw_steps: int,
+        draw_turn: int,
         check_search_depth: int,
         check_search_node: int,
         eval_leaf_only: bool,
@@ -51,7 +51,7 @@ cdef class NativePlayer:
             processor (NativeProcessor): Processor object
             threads (int): Number of threads
             nyugyoku_scores (Tuple[int, int]): Score required for nyugyoku declaration
-            draw_steps (int): Number of moves until draw
+            draw_turn (int): Number of moves for a draw
             check_search_depth (int): Depth for checkmate search
             check_search_node (int): Number of nodes for checkmate search
             eval_leaf_only (bool): True to evaluate only leaf nodes
@@ -59,7 +59,7 @@ cdef class NativePlayer:
         '''
         self.player = new Player(
             processor.processor, threads,
-            nyugyoku_scores[0], nyugyoku_scores[1], draw_steps,
+            nyugyoku_scores[0], nyugyoku_scores[1], draw_turn,
             check_search_depth, check_search_node, eval_leaf_only, max_visits)
 
     def __dealloc__(self):

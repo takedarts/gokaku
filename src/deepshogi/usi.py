@@ -6,11 +6,12 @@ from typing import Any, Callable, Dict, List, TextIO, Tuple
 from deepshogi.board import Board
 
 from .config import (AUTHOR, BOARD_SIZE, COLOR_BLACK, COLOR_WHITE,
-                     DEFAULT_INITIAL_SFEN, DEFAULT_NYUGYOKU_SCORES, NAME,
-                     PIECE_HAND_BISHOP, PIECE_HAND_GOLD, PIECE_HAND_KNIGHT,
-                     PIECE_HAND_LANCE, PIECE_HAND_PAWN, PIECE_HAND_ROOK,
-                     PIECE_HAND_SILVER, VERSION, get_color_name,
-                     get_opposite_color, get_shogi_score)
+                     DEFAULT_DRAW_TURN, DEFAULT_INITIAL_SFEN,
+                     DEFAULT_NYUGYOKU_SCORES, NAME, PIECE_HAND_BISHOP,
+                     PIECE_HAND_GOLD, PIECE_HAND_KNIGHT, PIECE_HAND_LANCE,
+                     PIECE_HAND_PAWN, PIECE_HAND_ROOK, PIECE_HAND_SILVER,
+                     VERSION, get_color_name, get_opposite_color,
+                     get_shogi_score)
 from .exception import ShogiException
 from .player import Candidate, Player
 from .processor import Processor
@@ -119,6 +120,7 @@ class USIEngine(object):
         initial_turn: int = 4,
         initial_width: int = 16,
         nyugyoku_scores: Tuple[int, int] = DEFAULT_NYUGYOKU_SCORES,
+        draw_turn: int = DEFAULT_DRAW_TURN,
         check_search_depth: int = 31,
         check_search_node: int = 10_000,
         check_node_depth: int = 2,
@@ -143,6 +145,7 @@ class USIEngine(object):
             initial_turn (int): Number of initial turns for random moves
             initial_width (int): Number of candidate moves for random moves
             nyugyoku_scores (Tuple[int,int]): Points required for nyugyoku declaration
+            draw_turn (int): Number of turns for a draw
             check_search_depth (int): Depth for checkmate search
             check_search_node (int): Number of nodes for checkmate search
             check_node_depth (int): Depth of nodes for checkmate search
@@ -157,6 +160,7 @@ class USIEngine(object):
         self.processor = processor
         self.threads = threads
         self.nyugyoku_scores = nyugyoku_scores
+        self.draw_turn = draw_turn
         self.check_search_depth = check_search_depth
         self.check_search_node = check_search_node
         self.check_node_depth = check_node_depth
@@ -195,6 +199,7 @@ class USIEngine(object):
             'NyugyokuRule': ('combo default {} var 27 var 24', 'nyugyoku_scores',
                              lambda v: '24' if v == (31, 31) else '27',
                              lambda s: (31, 31) if s == '24' else DEFAULT_NYUGYOKU_SCORES),
+            'DrawTurn': ('spin default {} min 1', 'draw_turn', str, int),
             'Visits': ('spin default {} min 1', 'visits', str, int),
             'Playouts': ('spin default {} min 0', 'playouts', str, int),
             'Timelimit': ('spin default {} min 0', 'timelimit',
@@ -368,6 +373,7 @@ class USIEngine(object):
                 processor=self.processor,
                 threads=self.threads,
                 nyugyoku_scores=self.nyugyoku_scores,
+                draw_turn=self.draw_turn,
                 check_search_depth=self.check_search_depth,
                 check_search_node=self.check_search_node)
 

@@ -11,9 +11,9 @@ class Board {
    * Create an instance of the initial board.
    * @param nyugyokuScoreBlack Score required for nyugyoku declaration for black
    * @param nyugyokuScoreWhite Score required for nyugyoku declaration for white
-   * @param drawSteps Number of moves until draw
+   * @param drawTurn Number of moves until draw
    */
-  Board(int32_t nyugyokuScoreBlack, int32_t nyugyokuScoreWhite, int32_t drawSteps);
+  Board(int32_t nyugyokuScoreBlack, int32_t nyugyokuScoreWhite, int32_t drawTurn);
 
   /**
    * Create an instance by specifying the board.
@@ -151,9 +151,9 @@ class Board {
    * Get data to input to the model.
    * @param inputs Data to input to the model
    * @param color Side to move
-   * @param steps Number of moves
+   * @param turn Number of moves
    */
-  void getInputs(float* inputs, int32_t color, int32_t steps) const;
+  void getInputs(float* inputs, int32_t color, int32_t turn) const;
 
   /**
    * Copy the board state.
@@ -193,7 +193,7 @@ class Board {
   /**
    * Number of moves until draw.
    */
-  int32_t _drawSteps;
+  int32_t _drawTurn;
 
   /**
    * Get board data to input to the model.
@@ -206,9 +206,9 @@ class Board {
    * Get game data to input to the model.
    * @param inputs Game data to input to the model
    * @param color Side to move
-   * @param steps Number of moves
+   * @param turn Number of moves
    */
-  void _getInfoInputs(float* inputs, int32_t color, int32_t steps) const;
+  void _getInfoInputs(float* inputs, int32_t color, int32_t turn) const;
 };
 
 }  // namespace deepshogi

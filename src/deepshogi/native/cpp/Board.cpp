@@ -10,13 +10,13 @@ namespace deepshogi {
  * Create an instance of the initial board.
  * @param nyugyokuScoreBlack Score required for nyugyoku declaration for black
  * @param nyugyokuScoreWhite Score required for nyugyoku declaration for white
- * @param drawSteps Number of moves until draw
+ * @param drawTurn Number of moves until draw
  */
-Board::Board(int32_t nyugyokuScoreBlack, int32_t nyugyokuScoreWhite, int32_t drawSteps)
+Board::Board(int32_t nyugyokuScoreBlack, int32_t nyugyokuScoreWhite, int32_t drawTurn)
     : _board(),
       _nyugyokuScoreBlack(nyugyokuScoreBlack),
       _nyugyokuScoreWhite(nyugyokuScoreWhite),
-      _drawSteps(drawSteps) {
+      _drawTurn(drawTurn) {
 }
 
 /**
@@ -27,7 +27,7 @@ Board::Board(const Board& board)
     : _board(board._board),
       _nyugyokuScoreBlack(board._nyugyokuScoreBlack),
       _nyugyokuScoreWhite(board._nyugyokuScoreWhite),
-      _drawSteps(board._drawSteps) {
+      _drawTurn(board._drawTurn) {
 }
 
 /**
@@ -37,7 +37,7 @@ Board::Board()
     : _board(),
       _nyugyokuScoreBlack(28),
       _nyugyokuScoreWhite(27),
-      _drawSteps(0x7fffffff) {
+      _drawTurn(0x7fffffff) {
 }
 
 /**
@@ -363,16 +363,16 @@ void Board::getPackedSfen(char* data) const {
  * @param inputs Data to input to the model
  */
 void Board::getInputs(float* inputs) const {
-  getInputs(inputs, getColor(), _drawSteps - getTurn());
+  getInputs(inputs, getColor(), getTurn());
 }
 
 /**
  * Get data to input to the model.
  * @param inputs Data to input to the model
  * @param color Side to move
- * @param steps Number of moves
+ * @param turn Number of moves
  */
-void Board::getInputs(float* inputs, int32_t color, int32_t steps) const {
+void Board::getInputs(float* inputs, int32_t color, int32_t turn) const {
   // Initialize with 0
   std::fill_n(inputs, MODEL_INPUT_SIZE, 0);
 
@@ -381,7 +381,7 @@ void Board::getInputs(float* inputs, int32_t color, int32_t steps) const {
   float* info_inputs = inputs + MODEL_FEATURES * BOARD_SIZE * BOARD_SIZE;
 
   _getBoardInputs(board_inputs, color);
-  _getInfoInputs(info_inputs, color, steps);
+  _getInfoInputs(info_inputs, color, turn);
 }
 
 /**
@@ -392,7 +392,7 @@ void Board::copyFrom(const Board* board) {
   _board = board->_board;
   _nyugyokuScoreBlack = board->_nyugyokuScoreBlack;
   _nyugyokuScoreWhite = board->_nyugyokuScoreWhite;
-  _drawSteps = board->_drawSteps;
+  _drawTurn = board->_drawTurn;
 }
 
 /**
@@ -525,9 +525,9 @@ void Board::_getBoardInputs(float* inputs, int32_t color) const {
  * Get game data to input to the model.
  * @param inputs Game data to input to the model
  * @param color Side to move
- * @param steps Number of moves
+ * @param turn Number of moves
  */
-void Board::_getInfoInputs(float* inputs, int32_t color, int32_t steps) const {
+void Board::_getInfoInputs(float* inputs, int32_t color, int32_t turn) const {
   const static size_t hand_offsets[] = {0, 18, 22, 26, 30, 32, 34};
   const static size_t color_offset = 38;
 
@@ -565,10 +565,10 @@ void Board::_getInfoInputs(float* inputs, int32_t color, int32_t steps) const {
   }
 
   // Set the remaining number of moves until a draw
-  float remaining_steps = 1.0 - (_drawSteps - steps) / 50.0;
+  float remaining_turn = 1.0 - (_drawTurn - turn) / 50.0;
 
-  remaining_steps = std::min(std::max(remaining_steps, 0.0f), 1.0f);
-  inputs[color_offset * 2 + 3] = remaining_steps;
+  remaining_turn = std::min(std::max(remaining_turn, 0.0f), 1.0f);
+  inputs[color_offset * 2 + 3] = remaining_turn;
 }
 
 }  // namespace deepshogi

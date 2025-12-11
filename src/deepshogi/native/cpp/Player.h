@@ -30,7 +30,7 @@ class Player {
    * @param threads Number of threads
    * @param nyugyokuScoreBlack Points required for black's entering king declaration
    * @param nyugyokuScoreWhite Points required for white's entering king declaration
-   * @param drawSteps Number of moves until a draw
+   * @param drawTurn Number of moves until a draw
    * @param checkSearchDepth Depth for mate search
    * @param checkSearchNode Number of nodes for mate search
    * @param evalLeafOnly True if only leaf nodes are evaluated
@@ -38,7 +38,7 @@ class Player {
    */
   Player(
       Processor* processor, int32_t threads,
-      int32_t nyugyokuScoreBlack, int32_t nyugyokuScoreWhite, int32_t drawSteps,
+      int32_t nyugyokuScoreBlack, int32_t nyugyokuScoreWhite, int32_t drawTurn,
       int32_t checkSearchDepth, int32_t checkSearchNode,
       bool evalLeafOnly, int32_t maxVisits);
 

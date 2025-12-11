@@ -38,6 +38,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         '--nyugyoku-rule', type=str, default='27', choices=['27', '24'], help='Nyugyoku rule (default: 27)')
     parser.add_argument(
+        '--draw-turn', type=int, default=512, help='Number of turns to declare a draw (default: 512)')
+    parser.add_argument(
         '--check-search-depth', type=int, default=31, help='Check search depth (default: 31)')
     parser.add_argument(
         '--check-search-node', type=int, default=10_000, help='Check search node (default: 10,000)')
@@ -97,6 +99,7 @@ def main() -> None:
         initial_turn=args.initial_turn,
         initial_width=args.initial_width,
         nyugyoku_scores=(31, 31) if args.nyugyoku_rule == '24' else (28, 27),
+        draw_turn=args.draw_turn,
         check_search_depth=args.check_search_depth,
         check_search_node=args.check_search_node,
         check_node_depth=args.check_node_depth,
