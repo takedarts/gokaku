@@ -40,7 +40,7 @@ Player::Player(
       _searchVisits(0),
       _searchPlayouts(0),
       _searchEqually(false),
-      _searchUseUcb1(false),
+      _searchAlgorithm(SEARCH_PUCB),
       _searchCandidateWidth(0),
       _searchCheckNodeDepth(0),
       _searchTemperature(1.0f),
@@ -128,15 +128,15 @@ void Player::play(const Move& move) {
 /**
  * Start board evaluation.
  * The search process is executed in a separate thread.
- * @param equally True to make the number of searches equal, false to use UCB1 or PUCB
- * @param useUcb1 True to use UCB1 as the search criterion, false to use PUCB
+ * @param equally True to make the number of searches equal, false to use UCB or PUCB
+ * @param algorithm Search algorithm
  * @param candidateWidth Search width for candidate moves (if 0, the width is automatically adjusted)
  * @param checkNodeDepth Maximum depth of nodes for mate search
  * @param temperature Temperature parameter for search
  * @param noise Strength of Gumbel noise for search
  */
 void Player::startEvaluation(
-    bool equally, bool useUcb1, int32_t candidateWidth, int32_t checkNodeDepth,
+    bool equally, int32_t algorithm, int32_t candidateWidth, int32_t checkNodeDepth,
     float temperature, float noise) {
   std::unique_lock<std::mutex> lock(_mutex);
 
@@ -148,7 +148,7 @@ void Player::startEvaluation(
   _searchVisits = _root->getVisits();
   _searchPlayouts = _root->getPlayouts();
   _searchEqually = equally;
-  _searchUseUcb1 = useUcb1;
+  _searchAlgorithm = algorithm;
   _searchCandidateWidth = candidateWidth;
   _searchCheckNodeDepth = checkNodeDepth;
   _searchTemperature = temperature;
@@ -201,7 +201,7 @@ std::vector<Candidate> Player::getCandidates() {
     candidates.emplace_back(
         _root->getCheckMove(), _root->getColor(),
         _root->getVisits() - 1, _root->getPlayouts(),
-        1.0f, _root->getColor());
+        1.0f, _root->getColor(), _root->getColor());
   }
   // If there is no mate move, the list of child nodes is considered as candidates
   // If a child node has a mate move, set the evaluation value to opponent's win
@@ -211,11 +211,11 @@ std::vector<Candidate> Player::getCandidates() {
       if (node->getCheckMove() != MOVE_PASS) {
         candidates.emplace_back(
             node->getMove(), _root->getColor(), node->getVisits(), node->getPlayouts(),
-            node->getPolicy(), node->getColor(), node->getVariations());
+            node->getPolicy(), node->getColor(), node->getColor(), node->getVariations());
       } else {
         candidates.emplace_back(
             node->getMove(), _root->getColor(), node->getVisits(), node->getPlayouts(),
-            node->getPolicy(), node->getValue(), node->getVariations());
+            node->getPolicy(), node->getValue(), node->getMinimax(), node->getVariations());
       }
     }
   }
@@ -223,7 +223,8 @@ std::vector<Candidate> Player::getCandidates() {
   // If there are no candidate moves, add a move from the PolicyNetwork
   if (candidates.empty()) {
     candidates.emplace_back(
-        _root->getPolicyMove(), _root->getColor(), 0, 0, 1.0f, _root->getValue());
+        _root->getPolicyMove(), _root->getColor(), 0, 0,
+        1.0f, _root->getValue(), _root->getMinimax());
   }
 
   // Resume the thread
@@ -240,6 +241,51 @@ std::vector<Candidate> Player::getCandidates() {
 void Player::copyBoardTo(Board* board) {
   std::unique_lock<std::mutex> lock(_mutex);
   _root->copyBoardTo(board);
+}
+
+/**
+ * 探索木のデバッグ情報を出力する。
+ */
+std::string Player::getDebugInfo() {
+  std::unique_lock<std::mutex> lock(_mutex);
+
+  // スレッドを一時停止する
+  _paused = true;
+  _condition.wait(lock, [this]() { return _runnings == 0; });
+
+  // 探索木を深さ優先で辿りながらデバッグ情報を作成する
+  std::vector<std::pair<Node*, std::string>> stack = {{_root, ""}};
+  std::ostringstream output;
+
+  while (!stack.empty()) {
+    Node* current = stack.back().first;
+    std::string prefix = stack.back().second;
+    stack.pop_back();
+
+    Move move = current->getMove();
+    output << prefix
+           << "Move: " << move.getSrcX() << "," << move.getSrcY()
+           << "->" << move.getDstX() << "," << move.getDstY()
+           << "Promote: " << (move.isPromote() ? "Y" : "N") << " "
+           << "Color: " << current->getColor() << " "
+           << "Visits: " << current->getVisits() << " "
+           << "Playouts: " << current->getPlayouts() << " "
+           << "Policy: " << current->getPolicy() << " "
+           << "Value: " << current->getValue() << " "
+           << "Minimax: " << current->getMinimax()
+           << std::endl;
+
+    std::vector<Node*> children = current->getChildren();
+    for (auto it = children.rbegin(); it != children.rend(); ++it) {
+      stack.emplace_back(*it, prefix + "  ");
+    }
+  }
+
+  // スレッドを再開する
+  _paused = false;
+  _condition.notify_all();
+
+  return output.str();
 }
 
 /**
@@ -290,7 +336,7 @@ int32_t Player::_evaluate() {
   std::vector<Node*> nodes = {_root};
   bool search_equally = _searchEqually;
   int32_t search_width = _searchCandidateWidth;
-  bool search_use_ucb1 = _searchUseUcb1;
+  int32_t search_algorithm = _searchAlgorithm;
   int32_t search_check_depth = _searchCheckNodeDepth;
   float search_temperature = _searchTemperature;
   float search_noise = _searchNoise;
@@ -298,15 +344,47 @@ int32_t Player::_evaluate() {
 
   while (true) {
     NodeResult result = nodes.back()->evaluate(
-        search_equally, search_width, search_use_ucb1, search_check_depth > 0,
+        search_equally, search_width, search_algorithm, search_check_depth > 0,
         search_temperature, search_noise);
 
-    // Update the node's evaluation value
+    // Update the evaluation value of the node
+    // If the leaf node is reached (playout count is 1), update the evaluation value
+    // Start updating from the leaf node and update the minimax evaluation value if necessary
     if (result.getPlayouts() == 1) {
-      for (Node* node : nodes) {
-        node->updateValue(result.getValue());
+      bool minimax_update = true;
+
+      for (int32_t i = nodes.size() - 1; i >= 0; i--) {
+        std::vector<Node*> children = nodes[i]->getChildren();
+        int32_t color = nodes[i]->getColor();
+        float minimax_value = result.getValue();
+
+        if (!minimax_update) {
+          minimax_value = nodes[i]->getMinimax();
+        } else if (children.size() > 1) {
+          float value = -2.0f;
+
+          for (Node* child : children) {
+            float child_minimax = child->getMinimax() * color;
+
+            if (value < child_minimax) {
+              value = child_minimax;
+            }
+          }
+
+          minimax_value = value * color;
+
+          if (std::fabs(minimax_value - nodes[i]->getMinimax()) < 1e-6) {
+            minimax_update = false;
+          }
+        }
+
+        nodes[i]->updateValue(result.getValue(), minimax_value);
       }
-    } else if (result.getPlayouts() == -1 && _evalLeafOnly) {
+    }
+
+    // If only leaf nodes are evaluated and child nodes are created for a leaf node,
+    // cancel the evaluation value registered in the parent node
+    if (_evalLeafOnly && result.getPlayouts() == -1) {
       for (Node* node : nodes) {
         node->cancelValue(result.getValue());
       }
@@ -330,7 +408,7 @@ int32_t Player::_evaluate() {
     // Reset settings that apply only to the root node
     search_equally = 0;
     search_width = 0;
-    search_use_ucb1 = false;
+    search_algorithm = SEARCH_PUCB;
     search_check_depth -= 1;
     search_temperature = 1.0f;
     search_noise = 0.0f;

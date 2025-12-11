@@ -38,21 +38,22 @@ class Node {
    * Evaluate the search node.
    * @param equally If true, equalize the number of searches
    * @param width Search width (if 0, adjust automatically)
-   * @param useUcb1 If true, use UCB1; if false, use PUCB
+   * @param algorithm Search algorithm
    * @param searchCheckMove If true, search for checkmate moves
    * @param temperature Temperature parameter for search
    * @param noise Strength of Gumbel noise for search
    * @return Evaluation result
    */
   NodeResult evaluate(
-      bool equally, int32_t width, bool useUcb1, bool searchCheckMove,
+      bool equally, int32_t width, int32_t algorithm, bool searchCheckMove,
       float temperature, float noise);
 
   /**
    * Update the evaluation value of the search node.
    * @param value Evaluation value
+   * @param minimax Minimax value
    */
-  void updateValue(float value);
+  void updateValue(float value, float minimax);
 
   /**
    * Cancel the evaluation value of the search node.
@@ -131,10 +132,23 @@ class Node {
   float getValue();
 
   /**
+   * Get the minimax evaluation value of this node.
+   * @return Minimax evaluation value
+   */
+  float getMinimax();
+
+  /**
    * Get the lower bound of the confidence interval for the evaluation value of this node.
    * @return Lower bound of confidence interval
    */
   float getValueLCB();
+
+  /**
+   * Get the priority of this node based on UCB.
+   * @param totalVisits Total number of searches
+   * @return Priority
+   */
+  float getPriorityByUCB(int32_t totalVisits);
 
   /**
    * Get the priority of this node based on PUCB.
@@ -142,13 +156,6 @@ class Node {
    * @return Priority
    */
   float getPriorityByPUCB(int32_t totalVisits);
-
-  /**
-   * Get the priority of this node based on UCB1.
-   * @param totalVisits Total number of searches
-   * @return Priority
-   */
-  float getPriorityByUCB1(int32_t totalVisits);
 
   /**
    * Get the predicted sequence of this node.
@@ -161,12 +168,6 @@ class Node {
    * @param board Board object
    */
   void copyBoardTo(Board* board);
-
-  /**
-   * Output the information of this node.
-   * @param os Output destination
-   */
-  void print(std::ostream& os = std::cout);
 
  private:
   /**
@@ -270,6 +271,11 @@ class Node {
   int32_t _count;
 
   /**
+   * Minimax evaluation value.
+   */
+  float _minimax;
+
+  /**
    * Execute board evaluation for this node.
    * @param searchCheckMove If true, search for checkmate moves
    */
@@ -279,13 +285,13 @@ class Node {
    * Evaluate the state of this node and return the evaluation result.
    * @param equally If true, equalize the number of searches
    * @param width Search width (if 0, adjust automatically)
-   * @param useUcb1 If true, use UCB1; if false, use PUCB
+   * @param algorithm Search algorithm
    * @param temperature Temperature parameter for search
    * @param noise Strength of Gumbel noise for search
    * @return Evaluation result
    */
   NodeResult _evaluateNode(
-      bool equally, int32_t width, bool useUcb1, float temperature, float noise);
+      bool equally, int32_t width, int32_t algorithm, float temperature, float noise);
 
   /**
    * Initialize the evaluation information of the node.

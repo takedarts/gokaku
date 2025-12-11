@@ -68,15 +68,15 @@ class Player {
   /**
    * Start board evaluation.
    * The search process is executed in a separate thread.
-   * @param equally True to make the number of searches equal, false to use UCB1 or PUCB
-   * @param useUcb1 True to use UCB1 as the search criterion, false to use PUCB
+   * @param equally True to make the number of searches equal, false to use UCB or PUCB
+   * @param algorithm Search algorithm
    * @param candidateWidth Search width for candidate moves (if 0, the width is automatically adjusted)
    * @param checkNodeDepth Maximum depth of nodes for mate search
    * @param temperature Temperature parameter for search
    * @param noise Strength of Gumbel noise for search
    */
   void startEvaluation(
-      bool equally, bool useUcb1, int32_t candidateWidth, int32_t checkNodeDepth,
+      bool equally, int32_t algorithm, int32_t candidateWidth, int32_t checkNodeDepth,
       float temperature, float noise);
 
   /**
@@ -99,6 +99,12 @@ class Player {
    * @param board Board object
    */
   void copyBoardTo(Board* board);
+
+  /**
+   * Get the debug information string of the search tree.
+   * @return Debug information string
+   */
+  std::string getDebugInfo();
 
  private:
   /**
@@ -157,9 +163,9 @@ class Player {
   bool _searchEqually;
 
   /**
-   * True if UCB1 is used as the search criterion.
+   * Search algorithm.
    */
-  bool _searchUseUcb1;
+  int32_t _searchAlgorithm;
 
   /**
    * Search width for candidate moves.

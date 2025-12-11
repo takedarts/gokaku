@@ -168,6 +168,14 @@ MODEL_INPUT_SIZE = MODEL_FEATURES * BOARD_SIZE * BOARD_SIZE + MODEL_INFOS
 MODEL_OUTPUT_SIZE = MODEL_PREDICTIONS * BOARD_SIZE * BOARD_SIZE + MODEL_VALUES
 
 ################################################################
+# Search algorithm settings
+################################################################
+# Search algorithm: UCB
+SEARCH_UCB = 0
+# Search algorithm: PUCB
+SEARCH_PUCB = 1
+
+################################################################
 # Default values
 ################################################################
 # Default initial board

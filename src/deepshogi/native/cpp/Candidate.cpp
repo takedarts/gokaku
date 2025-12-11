@@ -9,17 +9,19 @@ namespace deepshogi {
  * @param playouts Number of playouts
  * @param policy Predicted move probability
  * @param value Predicted win rate
+ * @param minimax Minimax value
  * @param variations Predicted sequence
  */
 Candidate::Candidate(
     Move move, int32_t color, int32_t visits, int32_t playouts,
-    float policy, float value, std::vector<Move> variations)
+    float policy, float value, float minimax, std::vector<Move> variations)
     : _move(move),
       _color(color),
       _visits(visits),
       _playouts(playouts),
       _policy(policy),
       _value(value),
+      _minimax(minimax),
       _variations(variations) {
 }
 
@@ -31,11 +33,14 @@ Candidate::Candidate(
  * @param playouts Number of playouts
  * @param policy Predicted move probability
  * @param value Predicted win rate
+ * @param minimax Minimax value
  */
 Candidate::Candidate(
     Move move, int32_t color, int32_t visits, int32_t playouts,
-    float policy, float value)
-    : Candidate(move, color, visits, playouts, policy, value, std::vector<Move>()) {
+    float policy, float value, float minimax)
+    : Candidate(
+          move, color, visits, playouts,
+          policy, value, minimax, std::vector<Move>()) {
   _variations.push_back(move);
 }
 
@@ -85,6 +90,14 @@ float Candidate::getPolicy() const {
  */
 float Candidate::getValue() const {
   return _value;
+}
+
+/**
+ * Get the minimax value.
+ * @return Minimax value
+ */
+float Candidate::getMinimax() const {
+  return _minimax;
 }
 
 /**

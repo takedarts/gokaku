@@ -9,7 +9,8 @@ from .config import (BOARD_SIZE, COLOR_BLACK, COLOR_NONE, COLOR_WHITE,
                      DEFAULT_INITIAL_SFEN, DEFAULT_MAX_VISITS,
                      DEFAULT_NYUGYOKU_SCORES, RESULT_MAX_MOVES, RESULT_NONE,
                      RESULT_NYUGYOKU, RESULT_SENNICHITE, RESULT_TSUMI,
-                     get_color_name, get_opposite_color)
+                     SEARCH_PUCB, SEARCH_UCB, get_color_name,
+                     get_opposite_color)
 from .native import NativePlayer
 from .processor import Processor
 
@@ -44,6 +45,7 @@ class Candidate(object):
         playouts: int,
         policy: float,
         value: float,
+        minimax: float,
         variations: List[int],
     ) -> None:
         '''Initialize candidate move object.
@@ -56,6 +58,7 @@ class Candidate(object):
             playouts (int): Number of playouts
             policy (float): Expected move probability
             value (float): Predicted win rate
+            minimax (float): Minimax value
             variations (List[int]): Expected sequence (cshogi move representation)
         '''
         self.src = src
@@ -66,32 +69,49 @@ class Candidate(object):
         self.playouts = playouts
         self.policy = policy
         self.value = value
+        self.minimax = minimax
         self.variations = [parse_cshogi_move16(v) for v in variations]
 
-    @property
-    def win_chance(self) -> float:
-        return self.value * self.color * 0.5 + 0.5
+        self.value_lcb = value - color * 1.96 * 0.5 / (visits + 1)**0.5
+        self.minimax_lcb = minimax - color * 1.96 * 0.5 / (visits + 1)**0.5
 
-    @property
-    def win_chance_lcb(self) -> float:
-        win_chance = self.win_chance
-
-        if win_chance == 1.0:
-            return 1.0
-        elif win_chance > 0.0:
-            return win_chance - 1.96 * 0.25 / (self.visits + 1)**0.5
+    def get_win_chance(self, criterion: str) -> float:
+        '''勝率を取得する。
+        Args:
+            criterion (str): 基準（'value', 'minimax', 'visits'のいずれか）
+        Returns:
+            float: 勝率
+        '''
+        if criterion == 'value' or criterion == 'visits':
+            return self.value * self.color * 0.5 + 0.5
+        elif criterion == 'minimax':
+            return self.minimax * self.color * 0.5 + 0.5
         else:
-            return -1.0
+            raise ValueError(f'Unknown criterion: {criterion}')
+
+    def get_win_chance_lcb(self, criterion: str) -> float:
+        '''勝率の下限値を取得する。
+        Args:
+            criterion (str): 基準（'value', 'minimax', 'visits'のいずれか）
+        Returns:
+            float: 勝率の下限値
+        '''
+        if criterion == 'value' or criterion == 'visits':
+            return self.value_lcb * self.color * 0.5 + 0.5
+        elif criterion == 'minimax':
+            return self.minimax_lcb * self.color * 0.5 + 0.5
+        else:
+            raise ValueError(f'Unknown criterion: {criterion}')
 
     def __str__(self) -> str:
         return (
             f'Candidate('
             f'src={self.src}, dst={self.dst}, promote={self.promote},'
             f' color={get_color_name(self.color)},'
-            f' visits={self.visits}, playouts={self.playouts},'
-            f' policy={self.policy:.2f}, value={self.value:.2f},'
-            f' win_chance={self.win_chance:.2f},'
-            f' win_chance_lcb={self.win_chance_lcb:.2f}')
+            f' visits={self.visits}, playouts={self.playouts}, policy={self.policy:.2f},'
+            f' value={self.value:.3f}, minimax={self.minimax:.3f},'
+            f' value_lcb={self.value_lcb:.3f}, minimax_lcb={self.minimax_lcb:.3f},'
+            f' variations={self.variations})')
 
     def __repr__(self) -> str:
         return str(self)
@@ -271,6 +291,7 @@ class Player(object):
     def get_random(
         self,
         width: int = 16,
+        criterion: str = 'value',
         temperature: float = 1.0,
         delta: float = 0.1,
         timelimit: float = 120.0,
@@ -278,6 +299,7 @@ class Player(object):
         '''Return a random move.
         Args:
             width (int): Number of candidate moves
+            criterion (str): Criterion for candidate prioritization ('value', 'minimax', or 'visits')
             temperature (float): Temperature parameter
             delta (float): Allowable win rate drop
             timelimit (float): Time limit (seconds)
@@ -285,17 +307,18 @@ class Player(object):
             Candidate: Candidate move
         '''
         # Evaluate the board
-        self.native.start_evaluation(True, False, width, 0, 1.0, 0.0)
+        self.native.start_evaluation(True, SEARCH_PUCB, width, 0, 1.0, 0.0)
         self.native.wait_evaluation(width + 1, 0, timelimit, True)
 
         # Create a list of candidate moves
         candidates = [Candidate(*c) for c in self.native.get_candidates()]
 
         # Get the maximum predicted win rate
-        max_win_chance = max(c.win_chance for c in candidates)
+        max_win_chance = max(c.get_win_chance(criterion) for c in candidates)
 
         # Exclude candidate moves whose predicted win rate is more than delta below the maximum
-        candidates = [c for c in candidates if c.win_chance >= max_win_chance - delta]
+        candidates = [
+            c for c in candidates if c.get_win_chance(criterion) >= max_win_chance - delta]
 
         # Convert policy values to selection probabilities
         probs = [c.policy**(1 / max(temperature, 1e-3)) for c in candidates]
@@ -309,13 +332,13 @@ class Player(object):
         playouts: int = 0,
         timelimit: float = 120.0,
         equally: bool = False,
-        use_ucb1: bool = False,
+        algorithm: str = 'pucb',
+        criterion: str = 'value',
         candidate_width: int = 0,
         check_node_depth: int = 2,
         temperature: float = 1.0,
         noise: float = 0.0,
         sennichite_penalty: float = 0.0,
-        criterion: str = 'lcb',
         ponder: bool = False,
     ) -> List[Candidate]:
         '''Evaluate the board.
@@ -323,24 +346,32 @@ class Player(object):
             visits (int): Target number of visits
             playouts (int): Target number of playouts
             timelimit (float): Time limit (seconds)
-            equally (bool): True to make the number of searches equal, False to use UCB1 or PUCB
-            use_ucb1 (bool): True to use UCB1 as the search criterion, False to use PUCB
+            equally (bool): True to make the number of searches equal, False to use UCB or PUCB
+            algorithm (str): Search algorithm ('ucb' or 'pucb')
+            criterion (str): Criterion for prioritizing candidate moves ('value', 'minimax', or 'visits')
             candidate_width (int): Search width for candidate moves (if 0, width is automatically adjusted)
             check_node_depth (int): Maximum depth of nodes for checkmate search
             temperature (float): Temperature parameter for search
             noise (float): Strength of Gumbel noise for search
             sennichite_penalty (float): Penalty to set for repetition (sennichite) evaluation
-            criterion (str): Criterion for candidate move priority ('lcb' or 'visits')
             ponder (bool): True to continue searching
         Returns:
             List[Candidate]: List of candidate moves
         '''
+        # Get the configuration value for the search algorithm
+        if algorithm == 'ucb':
+            algorithm_num = SEARCH_UCB
+        elif algorithm == 'pucb':
+            algorithm_num = SEARCH_PUCB
+        else:
+            raise ValueError(f'Unknown search algorithm: {algorithm}')
+
         # Evaluate the board
         LOGGER.debug(
             'Evaluation: %d visits, %d playouts, %.1f seconds',
             visits, playouts, timelimit)
         self.native.start_evaluation(
-            equally, use_ucb1, candidate_width, check_node_depth, temperature, noise)
+            equally, algorithm_num, candidate_width, check_node_depth, temperature, noise)
         self.native.wait_evaluation(visits, playouts, timelimit, not ponder)
 
         # Create a list of candidate moves
@@ -365,7 +396,8 @@ class Player(object):
 
                 continue
 
-            # If not judging repetition for the next side to move, proceed to the next candidate move
+            # If not judging repetition for the next side to move, proceed to the next
+            # candidate move
             if not self.check_next_repeats:
                 continue
 
@@ -390,10 +422,8 @@ class Player(object):
         # Sort candidate moves
         if criterion == 'visits':
             candidates.sort(key=lambda cand: cand.visits, reverse=True)
-        elif criterion == 'lcb':
-            candidates.sort(key=lambda cand: cand.win_chance_lcb, reverse=True)
         else:
-            raise ValueError(f'Unknown criterion: {criterion}')
+            candidates.sort(key=lambda cand: cand.get_win_chance_lcb(criterion), reverse=True)
 
         # Output logs
         if LOGGER.isEnabledFor(logging.DEBUG):

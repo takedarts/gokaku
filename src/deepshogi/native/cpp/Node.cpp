@@ -42,7 +42,8 @@ Node::Node(NodeManager* manager, const NodeParameter& parameter)
       _visits(0),
       _playouts(0),
       _value(0.0f),
-      _count(0) {
+      _count(0),
+      _minimax(0.0f) {
 }
 
 /**
@@ -62,14 +63,14 @@ void Node::initialize(const std::string sfen) {
  * If the next node object does not exist, return nullptr.
  * @param equally If true, equalize the number of searches
  * @param width Search width (if 0, adjust automatically)
- * @param useUcb1 If true, use UCB1; if false, use PUCB
+ * @param algorithm Search algorithm
  * @param searchCheckMove If true, search for checkmate moves
  * @param temperature Temperature parameter for search
  * @param noise Strength of Gumbel noise for search
  * @return Next node object to evaluate
  */
 NodeResult Node::evaluate(
-    bool equally, int32_t width, bool useUcb1, bool searchCheckMove,
+    bool equally, int32_t width, int32_t algorithm, bool searchCheckMove,
     float temperature, float noise) {
   NodeResult result;
   Board search_board;
@@ -84,7 +85,7 @@ NodeResult Node::evaluate(
     _visits += 1;
 
     // Evaluate the state of this node
-    result = _evaluateNode(equally, width, useUcb1, temperature, noise);
+    result = _evaluateNode(equally, width, algorithm, temperature, noise);
 
     // If not searching for long checkmate sequences, return the evaluation result
     if (!searchCheckMove || _checkMoveDeepSearched || _checkMove != CHECK_MOVE_NOT_FOUND) {
@@ -119,11 +120,13 @@ NodeResult Node::evaluate(
 /**
  * Update the evaluation value of the search node.
  * @param value Evaluation value
+ * @param minimax Minimax value
  */
-void Node::updateValue(float value) {
+void Node::updateValue(float value, float minimax) {
   std::unique_lock<std::shared_mutex> lock(_valueMutex);
   _count += 1;
   _value += value;
+  _minimax = minimax;
 }
 
 /**
@@ -300,6 +303,21 @@ float Node::getValue() {
 }
 
 /**
+ * Get the minimax evaluation value of this node.
+ * @return Minimax evaluation value
+ */
+float Node::getMinimax() {
+  std::shared_lock<std::shared_mutex> lock(_valueMutex);
+  if (_checkMove != CHECK_MOVE_NOT_FOUND) {
+    return _board.getColor();
+  } else if (_count == 0) {
+    return 0.0f;
+  } else {
+    return _minimax;
+  }
+}
+
+/**
  * Get the lower bound of the confidence interval for the evaluation value of this node.
  * @return Lower bound of confidence interval
  */
@@ -311,6 +329,22 @@ float Node::getValueLCB() {
     float value = _value / _count;
     float lower = 1.96 * 0.5 / std::sqrt(_visits + 1);
     return value - (lower * OPPOSITE_COLOR(_board.getColor()));
+  }
+}
+
+/**
+ * Get the priority of this node based on UCB.
+ * @param totalVisits Total number of searches
+ * @return Priority
+ */
+float Node::getPriorityByUCB(int32_t totalVisits) {
+  std::shared_lock<std::shared_mutex> lock(_valueMutex);
+  if (_count == 0) {
+    return -99.0f;
+  } else {
+    float value = (_value / _count) * OPPOSITE_COLOR(_board.getColor());
+    float upper = 0.5 * std::sqrt(std::log(totalVisits) / (_visits + 1));
+    return value + upper;
   }
 }
 
@@ -328,22 +362,6 @@ float Node::getPriorityByPUCB(int32_t totalVisits) {
     float value = (_value / _count) * OPPOSITE_COLOR(_board.getColor());
     float upper = c_puct * _policy * std::sqrt(totalVisits) / (1 + _visits);
     return value + 2 * upper;
-  }
-}
-
-/**
- * Get the priority of this node based on UCB1.
- * @param totalVisits Total number of searches
- * @return Priority
- */
-float Node::getPriorityByUCB1(int32_t totalVisits) {
-  std::shared_lock<std::shared_mutex> lock(_valueMutex);
-  if (_count == 0) {
-    return -99.0f;
-  } else {
-    float value = (_value / _count) * OPPOSITE_COLOR(_board.getColor());
-    float upper = 0.5 * std::sqrt(std::log(totalVisits) / (_visits + 1));
-    return value + upper;
   }
 }
 
@@ -382,16 +400,6 @@ std::vector<Move> Node::getVariations() {
 void Node::copyBoardTo(Board* board) {
   std::shared_lock<std::shared_mutex> lock(_valueMutex);
   board->copyFrom(&_board);
-}
-
-/**
- * Output the information of this node.
- * @param os Output destination
- */
-void Node::print(std::ostream& os) {
-  _board.print(os);
-  os << "visits:" << _visits << std::endl;
-  os << "value:" << getValue() << std::endl;
 }
 
 /**
@@ -436,13 +444,13 @@ void Node::_evaluateBoard(bool searchCheckMove) {
  * Evaluate the state of this node and return the evaluation result.
  * @param equally If true, equalize the number of searches
  * @param width Search width (if 0, adjust automatically)
- * @param useUcb1 If true, use UCB1; if false, use PUCB
+ * @param algorithm Search algorithm
  * @param temperature Temperature parameter for search
  * @param noise Strength of Gumbel noise for search
  * @return Evaluation result
  */
 NodeResult Node::_evaluateNode(
-    bool equally, int32_t width, bool useUcb1, float temperature, float noise) {
+    bool equally, int32_t width, int32_t algorithm, float temperature, float noise) {
   // If entering king declaration is possible,
   // return the evaluation result as a win for the side to move
   if (_board.isNyugyoku()) {
@@ -590,8 +598,8 @@ NodeResult Node::_evaluateNode(
       float visits = child.first->getVisits();
       float value = child.first->getValue() * getColor();
       priority = 1.0 / (visits + 1 - value * 0.5);
-    } else if (useUcb1) {
-      priority = child.first->getPriorityByUCB1(_visits);
+    } else if (algorithm == SEARCH_UCB) {
+      priority = child.first->getPriorityByUCB(_visits);
     } else {
       priority = child.first->getPriorityByPUCB(_visits);
     }
@@ -628,6 +636,7 @@ void Node::_reset() {
   _playouts = 0;
   _value = 0.0f;
   _count = 0;
+  _minimax = 0.0f;
 }
 
 /**

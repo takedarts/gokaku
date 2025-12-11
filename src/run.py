@@ -20,8 +20,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         '--timelimit', type=float, default=120.0, help='Time to think (sec) (default: 120)')
     parser.add_argument(
-        '--search-method', type=str, default='pucb', choices=['ucb1', 'pucb'],
-        help='Criterion for selecting search nodes (default: pucb)')
+        '--search', type=str, default='pucb', choices=['ucb', 'pucb'],
+        help='Calculation method of search (default: pucb)')
+    parser.add_argument(
+        '--criterion', type=str, default='value', choices=['value', 'minimax', 'visits'],
+        help='Criterion for candidate prioritization (default: value)')
     parser.add_argument(
         '--ponder', default=False, action='store_true', help='Use pondering')
     parser.add_argument(
@@ -47,7 +50,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         '--client-author', type=str, default=AUTHOR, help=f'Author name (default: {AUTHOR})')
     parser.add_argument(
-        '--threads', type=int, default=16, help='Number of threads')
+        '--threads', type=int, default=16, help='Number of threads (default: 16)')
     parser.add_argument(
         '--batch-size', type=int, default=2048, help='Batch size (default: 2048)')
     parser.add_argument(
@@ -86,7 +89,8 @@ def main() -> None:
         visits=args.visits,
         playouts=args.playouts,
         timelimit=args.timelimit,
-        use_ucb1=(args.search_method == 'ucb1'),
+        algorithm=args.search,
+        criterion=args.criterion,
         ponder=args.ponder,
         resign_threshold=args.resign,
         resign_turn=args.min_turn,

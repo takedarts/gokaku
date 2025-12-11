@@ -81,16 +81,17 @@ def usi_move_to_string(src: Tuple[int, int], dst: Tuple[int, int], promote: bool
     return f'{src_str}{dst_str}{promote_str}'
 
 
-def usi_candidate_to_string(candidate: Candidate, index: int) -> str:
+def usi_candidate_to_string(candidate: Candidate, criterion: str, index: int) -> str:
     '''Convert candidate move information to a USI analysis result string.
     Args:
         candidate (Candidate): Candidate move information
+        criterion (str): Criterion ('value', 'minimax', or 'visits')
         index (int): Priority
     Returns:
         str: USI analysis result string
     '''
     nodes = candidate.visits
-    score = get_shogi_score(candidate.win_chance)
+    score = get_shogi_score(candidate.get_win_chance(criterion))
     text = f'info multipv {index} nodes {nodes} score cp {score}'
 
     if len(candidate.variations) > 0:
@@ -110,7 +111,8 @@ class USIEngine(object):
         visits: int,
         playouts: int = 0,
         timelimit: float = 0,
-        use_ucb1: bool = False,
+        algorithm: str = 'pucb',
+        criterion: str = 'value',
         ponder: bool = False,
         resign_threshold: float = 0.0,
         resign_turn: int = 0,
@@ -133,9 +135,10 @@ class USIEngine(object):
             visits (int): Number of search visits
             playouts (int): Number of search playouts
             timelimit (float): Thinking time limit (seconds)
-            use_ucb1 (bool): True to use UCB1, False to use PUCB
+            algorithm (str): Search algorithm ('ucb' or 'pucb')
+            criterion (str): Criterion for prioritizing candidate moves ('value', 'minimax', or 'visits')
             ponder (bool): True to continue analysis during opponent's thinking
-            resign_threshold (float): Win rate for resignation
+            resign_threshold (float): Win rate threshold for resignation
             resign_turn (int): Minimum number of turns before resignation
             initial_turn (int): Number of initial turns for random moves
             initial_width (int): Number of candidate moves for random moves
@@ -161,7 +164,8 @@ class USIEngine(object):
         self.visits = visits
         self.playouts = playouts
         self.timelimit = timelimit
-        self.use_ucb1 = use_ucb1
+        self.algorithm = algorithm
+        self.criterion = criterion
         self.ponder = ponder
 
         self.resign_threshold = resign_threshold
@@ -195,10 +199,11 @@ class USIEngine(object):
             'Playouts': ('spin default {} min 0', 'playouts', str, int),
             'Timelimit': ('spin default {} min 0', 'timelimit',
                           lambda v: str(int(v * 1000)), lambda s: float(s) / 1000),
-            'UseUCB1': ('check default {}', 'use_ucb1',
-                        lambda v: str(v).lower(), lambda s: s.lower() == 'true'),
             'Ponder': ('check default {}', 'ponder',
                        lambda v: str(v).lower(), lambda s: s.lower() == 'true'),
+            'Algorithm': ('combo default {} var ucb var pucb', 'algorithm', str, str),
+            'Criterion': ('combo default {} var value var minimax var visits',
+                          'criterion', str, str),
             'ResignThreshold': ('spin default {} min 0 max 100', 'resign_threshold',
                                 lambda v: str(int(v * 100)), lambda s: float(s) / 100),
             'ResignTurn': ('spin default {} min 0', 'resign_turn', str, int),
@@ -537,7 +542,8 @@ class USIEngine(object):
                 visits=visits,
                 playouts=self.playouts,
                 timelimit=timelimit,
-                use_ucb1=self.use_ucb1,
+                algorithm=self.algorithm,
+                criterion=self.criterion,
                 check_node_depth=self.check_node_depth,
                 ponder=self.ponder)
 
@@ -552,7 +558,7 @@ class USIEngine(object):
         # Create analysis result string
         if analyze:
             results.extend(
-                usi_candidate_to_string(candidate, i + 1)
+                usi_candidate_to_string(candidate, self.criterion, i + 1)
                 for i, candidate in enumerate(candidates))
 
         # If ponder, do not return bestmove
@@ -560,10 +566,12 @@ class USIEngine(object):
             return (True, '\n'.join(results), True)
 
         # If win rate is below threshold, judge as resignation
+        win_chance = candidates[0].get_win_chance(self.criterion)
+
         if (not ponder
                 and len(self.moves) > self.resign_turn
-                and candidates[0].win_chance < self.resign_threshold):
-            LOGGER.debug('Resign: win_chance=%.2f', candidates[0].win_chance)
+                and win_chance < self.resign_threshold):
+            LOGGER.debug('Resign: win_chance=%.2f', win_chance)
             return (True, 'bestmove resign', False)
 
         # Add move

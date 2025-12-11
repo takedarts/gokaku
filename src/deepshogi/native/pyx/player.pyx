@@ -16,6 +16,7 @@ cdef extern from "cpp/Candidate.h" namespace "deepshogi":
         int32_t getPlayouts() const
         float getPolicy() const
         float getValue() const
+        float getMinimax() const
         vector[Move] getVariations() const
 
 
@@ -25,10 +26,11 @@ cdef extern from "cpp/Player.h" namespace "deepshogi":
         void initialize(const string)
         int32_t getColor()
         void play(const Move&)
-        void startEvaluation(bool, bool, int32_t, int32_t, float, float)
+        void startEvaluation(bool, int32_t, int32_t, int32_t, float, float)
         void waitEvaluation(int32_t, int32_t, float, bool) nogil
         vector[Candidate] getCandidates()
         void copyBoardTo(Board*)
+        string getDebugInfo()
 
 
 cdef class NativePlayer:
@@ -89,7 +91,7 @@ cdef class NativePlayer:
     def start_evaluation(
         self,
         equally: bool,
-        use_ucb1: bool,
+        algorithm: int,
         candidate_width: int,
         check_node_depth: int,
         temperature: float,
@@ -97,15 +99,15 @@ cdef class NativePlayer:
     ) -> None:
         '''Start evaluation.
         Args:
-            equally (bool): True to make search count equal, False to use UCB1 or PUCB
-            use_ucb1 (bool): True to use UCB1 as search criterion, False to use PUCB
+            equally (bool): True to make search count equal, False to use UCB or PUCB
+            algorithm (int): Search algorithm
             candidate_width (int): Search width for candidate moves (0 for automatic setting)
             check_node_depth (int): Maximum depth for checkmate search nodes
             temperature (float): Temperature parameter for search
             noise (float): Strength of Gumbel noise for search
         '''
         self.player.startEvaluation(
-            equally, use_ucb1, candidate_width, check_node_depth, temperature, noise)
+            equally, algorithm, candidate_width, check_node_depth, temperature, noise)
 
     def wait_evaluation(self, visits: int, playouts: int, timelimit: float, stop: bool) -> None:
         '''Wait until the specified number of visits and playouts is reached.
@@ -125,14 +127,14 @@ cdef class NativePlayer:
 
     def get_candidates(
         self,
-    ) -> List[Tuple[Tuple[int, int], Tuple[int, int], int, int, int, float, float, List[int]]]:
+    ) -> List[Tuple[Tuple[int, int], Tuple[int, int], int, int, int, float, float, float, List[int]]]:
         '''Get list of candidate moves.
         Returns:
-            List[Tuple[Tuple[int, int], Tuple[int, int], int, int, int, float, float, List[int]]]: List of candidate moves
+            List[Tuple[Tuple[int, int], Tuple[int, int], int, int, int, float, float, float, List[int]]]: List of candidate moves
         '''
         cdef vector[Candidate] candidates = self.player.getCandidates()
 
-        results: List[Tuple[Tuple[int, int], Tuple[int, int], int, int, float, float, List[int]]] = []
+        results: List[Tuple[Tuple[int, int], Tuple[int, int], int, int, float, float, float, List[int]]] = []
 
         for i in range(candidates.size()):
             src = (candidates[i].getMove().getSrcX(), candidates[i].getMove().getSrcY())
@@ -143,10 +145,11 @@ cdef class NativePlayer:
             playouts = candidates[i].getPlayouts()
             policy = candidates[i].getPolicy()
             value = candidates[i].getValue()
+            minimax = candidates[i].getMinimax()
             variations = candidates[i].getVariations()
 
             results.append((
-                src, dst, promote, color, visits, playouts, policy, value,
+                src, dst, promote, color, visits, playouts, policy, value, minimax,
                 [variations[j].getValue() for j in range(variations.size())],
             ))
 
@@ -158,3 +161,10 @@ cdef class NativePlayer:
             board (NativeBoard): Board object
         '''
         self.player.copyBoardTo(board.board)
+
+    def get_debug_info(self) -> str:
+        '''Output debug information of the search tree.
+        Returns:
+            str: Debug information
+        '''
+        return self.player.getDebugInfo().decode('utf-8')
