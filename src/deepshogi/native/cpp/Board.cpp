@@ -7,6 +7,15 @@
 namespace deepshogi {
 
 /**
+ * Set the specified bit.
+ * @param inputs Bit sequence
+ * @param index Position of the bit to set
+ */
+inline void setInputBit(int32_t* inputs, int32_t index, int32_t value = 1) {
+  inputs[index / 32] |= (value << (index % 32));
+}
+
+/**
  * Create an instance of the initial board.
  * @param nyugyokuScoreBlack Score required for nyugyoku declaration for black
  * @param nyugyokuScoreWhite Score required for nyugyoku declaration for white
@@ -362,7 +371,7 @@ void Board::getPackedSfen(char* data) const {
  * Get data to input to the model.
  * @param inputs Data to input to the model
  */
-void Board::getInputs(float* inputs) const {
+void Board::getInputs(int32_t* inputs) const {
   getInputs(inputs, getColor(), getTurn());
 }
 
@@ -372,16 +381,13 @@ void Board::getInputs(float* inputs) const {
  * @param color Side to move
  * @param turn Number of moves
  */
-void Board::getInputs(float* inputs, int32_t color, int32_t turn) const {
+void Board::getInputs(int32_t* inputs, int32_t color, int32_t turn) const {
   // Initialize with 0
-  std::fill_n(inputs, MODEL_INPUT_SIZE, 0);
+  std::fill_n(inputs, MODEL_INPUT_PACK_SIZE, 0);
 
   // Get input data for the model
-  float* board_inputs = inputs;
-  float* info_inputs = inputs + MODEL_FEATURES * BOARD_SIZE * BOARD_SIZE;
-
-  _getBoardInputs(board_inputs, color);
-  _getInfoInputs(info_inputs, color, turn);
+  _getBoardInputs(inputs, color);
+  _getInfoInputs(inputs, color, turn);
 }
 
 /**
@@ -416,10 +422,7 @@ void Board::print(std::ostream& os) const {
  * @param inputs Board data to input to the model
  * @param color Side to move
  */
-void Board::_getBoardInputs(float* inputs, int32_t color) const {
-  typedef float board_feats_t[MODEL_FEATURES][BOARD_SIZE * BOARD_SIZE];
-  board_feats_t* const feats = reinterpret_cast<board_feats_t* const>(inputs);
-
+void Board::_getBoardInputs(int32_t* inputs, int32_t color) const {
   // Set the color
   cshogi::Color black_color = (color == COLOR_WHITE) ? cshogi::White : cshogi::Black;
   cshogi::Color white_color = (color == COLOR_WHITE) ? cshogi::Black : cshogi::White;
@@ -459,6 +462,7 @@ void Board::_getBoardInputs(float* inputs, int32_t color) const {
   const size_t white_offset = black_offset + 2 * cshogi::PIECETYPE_NUM + 6;
   const size_t other_offset = white_offset + 2 * cshogi::PIECETYPE_NUM + 6;
   const int last_move = _board.get_last_move();
+  const int board_size = BOARD_SIZE * BOARD_SIZE;
 
   for (cshogi::Square sq_dst = cshogi::SQ11; sq_dst < cshogi::SquareNum; ++sq_dst) {
     // For the second player, rotate the board 180 degrees
@@ -470,7 +474,7 @@ void Board::_getBoardInputs(float* inputs, int32_t color) const {
 
     // Set the value for empty squares
     if (empty_bb.isSet(sq_src)) {
-      (*feats)[0][sq_dst] = 1;
+      setInputBit(inputs, 0 * board_size + sq_dst);
     }
 
     // Set piece placement and attacks
@@ -479,20 +483,20 @@ void Board::_getBoardInputs(float* inputs, int32_t color) const {
 
       // Set the value for piece placement
       if (black_bb[pt].isSet(sq_src)) {
-        (*feats)[black_offset + pt_idx][sq_dst] = 1;
+        setInputBit(inputs, (black_offset + pt_idx) * board_size + sq_dst);
       }
 
       if (white_bb[pt].isSet(sq_src)) {
-        (*feats)[white_offset + pt_idx][sq_dst] = 1;
+        setInputBit(inputs, (white_offset + pt_idx) * board_size + sq_dst);
       }
 
       // Set the value for piece attacks
       if (attacks[black_color][pt].isSet(sq_src)) {
-        (*feats)[black_offset + cshogi::PIECETYPE_NUM + pt_idx][sq_dst] = 1;
+        setInputBit(inputs, (black_offset + cshogi::PIECETYPE_NUM + pt_idx) * board_size + sq_dst);
       }
 
       if (attacks[white_color][pt].isSet(sq_src)) {
-        (*feats)[white_offset + cshogi::PIECETYPE_NUM + pt_idx][sq_dst] = 1;
+        setInputBit(inputs, (white_offset + cshogi::PIECETYPE_NUM + pt_idx) * board_size + sq_dst);
       }
     }
 
@@ -502,12 +506,12 @@ void Board::_getBoardInputs(float* inputs, int32_t color) const {
     const int white_att_count = std::min(
         _board.pos.attackersTo(white_color, sq_src, occupied_bb).popCount(), 5);
 
-    (*feats)[black_offset + cshogi::PIECETYPE_NUM * 2 + black_att_count][sq_dst] = 1;
-    (*feats)[white_offset + cshogi::PIECETYPE_NUM * 2 + white_att_count][sq_dst] = 1;
+    setInputBit(inputs, (black_offset + cshogi::PIECETYPE_NUM * 2 + black_att_count) * board_size + sq_dst);
+    setInputBit(inputs, (white_offset + cshogi::PIECETYPE_NUM * 2 + white_att_count) * board_size + sq_dst);
 
     // Set the attack of the last moved piece
     if (last_move != 0 && (last_move & 0x7f) == sq_src) {
-      (*feats)[other_offset][sq_dst] = 1;
+      setInputBit(inputs, other_offset * board_size + sq_dst);
     }
 
     // Set the row and column numbers
@@ -516,8 +520,8 @@ void Board::_getBoardInputs(float* inputs, int32_t color) const {
     const size_t col_offset = row_offset + BOARD_SIZE;
     const size_t col_index = sq_dst / BOARD_SIZE;
 
-    (*feats)[row_offset + row_index][sq_dst] = 1;
-    (*feats)[col_offset + std::min(col_index, BOARD_SIZE - 1 - col_index)][sq_dst] = 1;
+    setInputBit(inputs, (row_offset + row_index) * board_size + sq_dst);
+    setInputBit(inputs, (col_offset + std::min(col_index, BOARD_SIZE - 1 - col_index)) * board_size + sq_dst);
   }
 }
 
@@ -527,7 +531,8 @@ void Board::_getBoardInputs(float* inputs, int32_t color) const {
  * @param color Side to move
  * @param turn Number of moves
  */
-void Board::_getInfoInputs(float* inputs, int32_t color, int32_t turn) const {
+void Board::_getInfoInputs(int32_t* inputs, int32_t color, int32_t turn) const {
+  const static size_t info_offset = MODEL_FEATURES * BOARD_SIZE * BOARD_SIZE;
   const static size_t hand_offsets[] = {0, 18, 22, 26, 30, 32, 34};
   const static size_t color_offset = 38;
 
@@ -542,33 +547,33 @@ void Board::_getInfoInputs(float* inputs, int32_t color, int32_t turn) const {
     u32 white_num = white_hand.numOf(hp);
 
     for (int32_t i = 0; i < black_num; i++) {
-      inputs[hand_offsets[hp] + i] = 1;
+      setInputBit(inputs, info_offset + hand_offsets[hp] + i);
     }
 
     for (int32_t i = 0; i < white_num; i++) {
-      inputs[color_offset + hand_offsets[hp] + i] = 1;
+      setInputBit(inputs, info_offset + color_offset + hand_offsets[hp] + i);
     }
   }
 
   // Set information about check
   if (_board.pos.inCheck()) {
-    inputs[color_offset * 2 + 0] = 1;
+    setInputBit(inputs, info_offset + color_offset * 2);
   }
 
   // Set the points required for entering king declaration
   if (color == COLOR_BLACK) {
-    inputs[color_offset * 2 + 1] = (_nyugyokuScoreBlack - 27.5) / 5.0;
-    inputs[color_offset * 2 + 2] = (_nyugyokuScoreWhite - 27.5) / 5.0;
+    inputs[MODEL_INPUT_PACK_SIZE - 3] = (int)((_nyugyokuScoreBlack - 27.5) / 5.0 * 0xfffff);
+    inputs[MODEL_INPUT_PACK_SIZE - 2] = (int)((_nyugyokuScoreWhite - 27.5) / 5.0 * 0xfffff);
   } else {
-    inputs[color_offset * 2 + 1] = (_nyugyokuScoreWhite - 27.5) / 5.0;
-    inputs[color_offset * 2 + 2] = (_nyugyokuScoreBlack - 27.5) / 5.0;
+    inputs[MODEL_INPUT_PACK_SIZE - 3] = (int)((_nyugyokuScoreWhite - 27.5) / 5.0 * 0xfffff);
+    inputs[MODEL_INPUT_PACK_SIZE - 2] = (int)((_nyugyokuScoreBlack - 27.5) / 5.0 * 0xfffff);
   }
 
   // Set the remaining number of moves until a draw
   float remaining_turn = 1.0 - (_drawTurn - turn) / 50.0;
 
   remaining_turn = std::min(std::max(remaining_turn, 0.0f), 1.0f);
-  inputs[color_offset * 2 + 3] = remaining_turn;
+  inputs[MODEL_INPUT_PACK_SIZE - 1] = (int)(remaining_turn * 0xfffff);
 }
 
 }  // namespace deepshogi

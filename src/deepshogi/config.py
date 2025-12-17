@@ -164,6 +164,8 @@ MODEL_VALUES = 8
 
 # Size of data input to the model
 MODEL_INPUT_SIZE = MODEL_FEATURES * BOARD_SIZE * BOARD_SIZE + MODEL_INFOS
+# Size of data input to the model when embedded as int32
+MODEL_INPUT_PACK_SIZE = (MODEL_INPUT_SIZE + 31) // 32 + 3
 # Size of data output by the model
 MODEL_OUTPUT_SIZE = MODEL_PREDICTIONS * BOARD_SIZE * BOARD_SIZE + MODEL_VALUES
 

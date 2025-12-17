@@ -145,7 +145,7 @@ class Board {
    * Get data to input to the model.
    * @param inputs Data to input to the model
    */
-  void getInputs(float* inputs) const;
+  void getInputs(int32_t* inputs) const;
 
   /**
    * Get data to input to the model.
@@ -153,7 +153,7 @@ class Board {
    * @param color Side to move
    * @param turn Number of moves
    */
-  void getInputs(float* inputs, int32_t color, int32_t turn) const;
+  void getInputs(int32_t* inputs, int32_t color, int32_t turn) const;
 
   /**
    * Copy the board state.
@@ -200,7 +200,7 @@ class Board {
    * @param inputs Board data to input to the model
    * @param color Side to move
    */
-  void _getBoardInputs(float* inputs, int32_t color) const;
+  void _getBoardInputs(int32_t* inputs, int32_t color) const;
 
   /**
    * Get game data to input to the model.
@@ -208,7 +208,7 @@ class Board {
    * @param color Side to move
    * @param turn Number of moves
    */
-  void _getInfoInputs(float* inputs, int32_t color, int32_t turn) const;
+  void _getInfoInputs(int32_t* inputs, int32_t color, int32_t turn) const;
 };
 
 }  // namespace deepshogi

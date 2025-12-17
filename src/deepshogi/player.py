@@ -1,6 +1,9 @@
 import logging
+import math
 import random
 from typing import Dict, List, Tuple
+
+from deepshogi.exception import ShogiException
 
 from .board import Board, is_hand_position
 from .config import (BOARD_SIZE, COLOR_BLACK, COLOR_NONE, COLOR_WHITE,
@@ -71,6 +74,15 @@ class Candidate(object):
         self.value = value
         self.minimax = minimax
         self.variations = [parse_cshogi_move16(v) for v in variations]
+
+        if math.isnan(self.policy):
+            raise ShogiException('policy is NaN')
+
+        if math.isnan(self.value):
+            raise ShogiException('value is NaN')
+
+        if math.isnan(self.minimax):
+            raise ShogiException('minimax is NaN')
 
         self.value_lcb = value - color * 1.96 * 0.5 / (visits + 1)**0.5
         self.minimax_lcb = minimax - color * 1.96 * 0.5 / (visits + 1)**0.5

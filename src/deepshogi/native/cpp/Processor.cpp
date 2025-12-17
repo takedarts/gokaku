@@ -33,7 +33,7 @@ Processor::Processor(
  * @param outputs Output data
  * @param size Number of input/output data
  */
-void Processor::execute(float* inputs, float* outputs, int32_t size) {
+void Processor::execute(int32_t* inputs, float* outputs, int32_t size) {
   // Select the next computation execution object to run
   int32_t min_index = 0;
 

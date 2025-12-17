@@ -258,7 +258,7 @@ void Evaluator::evaluate(Board* board) {
   }
 
   // Execute evaluation for the current board.
-  float inputs[MODEL_INPUT_SIZE];
+  int32_t inputs[MODEL_INPUT_PACK_SIZE];
   float outputs[MODEL_OUTPUT_SIZE];
 
   board->getInputs(inputs);

@@ -9,7 +9,7 @@ from libcpp.vector cimport vector
 import numpy
 cimport numpy
 
-from deepshogi.config import MODEL_INPUT_SIZE
+from deepshogi.config import MODEL_INPUT_PACK_SIZE
 
 
 cdef extern from "cpp/Move.h" namespace "deepshogi":
@@ -43,8 +43,8 @@ cdef extern from "cpp/Board.h" namespace "deepshogi":
         bool isCheckmate() const
         string getSfen() const
         void getPackedSfen(char *) const
-        void getInputs(float*) const
-        void getInputs(float*, int32_t, int32_t) const
+        void getInputs(int32_t*) const
+        void getInputs(int32_t*, int32_t, int32_t) const
         void copyFrom(Board*)
         string dump() const
 
@@ -242,13 +242,13 @@ cdef class NativeBoard:
         Returns:
             numpy.ndarray: Board data
         '''
-        cdef numpy.ndarray[numpy.float32_t, ndim=1, mode="c"] inputs = numpy.empty(
-            (MODEL_INPUT_SIZE,), dtype=numpy.float32)
+        cdef numpy.ndarray[numpy.int32_t, ndim=1, mode="c"] inputs = numpy.empty(
+            (MODEL_INPUT_PACK_SIZE,), dtype=numpy.int32)
 
         if turn == -1:
-            self.board.getInputs(<float*> &inputs[0])
+            self.board.getInputs(<int32_t*> &inputs[0])
         else:
-            self.board.getInputs(<float*> &inputs[0], color, turn)
+            self.board.getInputs(<int32_t*> &inputs[0], color, turn)
 
         return inputs
 
