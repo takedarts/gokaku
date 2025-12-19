@@ -17,11 +17,15 @@ class NodeParameter {
    * @param drawTurn Number of moves until a draw
    * @param checkSearchDepth Depth for mate search
    * @param checkSearchNode Number of nodes for mate search
+   * @param ucbConstant Constant multiplied to UCB upper confidence bound
+   * @param pucbConstantInit Initial value applied to PUCB upper confidence bound
+   * @param pucbConstantBase Base value applied to PUCB upper confidence bound
    */
   NodeParameter(
       Processor* processor,
       int32_t nyugyokuScoreBlack, int32_t nyugyokuScoreWhite, int32_t drawTurn,
-      int32_t checkSearchDepth, int32_t checkSearchNode);
+      int32_t checkSearchDepth, int32_t checkSearchNode,
+      float ucbConstant, float pucbConstantInit, float pucbConstantBase);
 
   /**
    * Destroy the parameter object.
@@ -64,6 +68,24 @@ class NodeParameter {
    */
   int32_t getCheckSearchNode() const;
 
+  /**
+   * Get the constant multiplied to UCB upper confidence bound.
+   * @return Constant multiplied to UCB upper confidence bound
+   */
+  float getUcbConstant() const;
+
+  /**
+   * Get the initial value applied to PUCB upper confidence bound.
+   * @return Initial value applied to PUCB upper confidence bound
+   */
+  float getPucbConstantInit() const;
+
+  /**
+   * Get the base value applied to PUCB upper confidence bound.
+   * @return Base value applied to PUCB upper confidence bound
+   */
+  float getPucbConstantBase() const;
+
  private:
   /**
    * Object that performs inference.
@@ -94,6 +116,21 @@ class NodeParameter {
    * Number of nodes for mate search.
    */
   int32_t _checkSearchNode;
+
+  /**
+   * Constant multiplied to UCB upper confidence bound.
+   */
+  float _ucbConstant;
+
+  /**
+   * Initial value applied to PUCB upper confidence bound.
+   */
+  float _pucbConstantInit;
+
+  /**
+   * Base value applied to PUCB upper confidence bound.
+   */
+  float _pucbConstantBase;
 };
 
 }  // namespace deepshogi

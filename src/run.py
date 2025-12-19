@@ -2,7 +2,12 @@ import argparse
 import sys
 
 import torch
-from deepshogi.config import AUTHOR, NAME, VERSION
+from deepshogi.config import (DEFAULT_CHECK_NODE_DEPTH,
+                              DEFAULT_CHECK_SEARCH_DEPTH,
+                              DEFAULT_CHECK_SEARCH_NODE, DEFAULT_DRAW_TURN,
+                              DEFAULT_PUCB_CONSTANT_BASE,
+                              DEFAULT_PUCB_CONSTANT_INIT, DEFAULT_UCB_CONSTANT,
+                              NAME, VERSION)
 from deepshogi.gpu import get_default_gpus
 from deepshogi.log import start_logging
 from deepshogi.processor import Processor
@@ -38,19 +43,30 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         '--nyugyoku-rule', type=str, default='27', choices=['27', '24'], help='Nyugyoku rule (default: 27)')
     parser.add_argument(
-        '--draw-turn', type=int, default=512, help='Number of turns to declare a draw (default: 512)')
+        '--draw-turn', type=int, default=DEFAULT_DRAW_TURN,
+        help=f'Number of turns to declare a draw (default: {DEFAULT_DRAW_TURN})')
     parser.add_argument(
-        '--check-search-depth', type=int, default=31, help='Check search depth (default: 31)')
+        '--check-search-depth', type=int, default=DEFAULT_CHECK_SEARCH_DEPTH,
+        help=f'Check search depth (default: {DEFAULT_CHECK_SEARCH_DEPTH})')
     parser.add_argument(
-        '--check-search-node', type=int, default=10_000, help='Check search node (default: 10,000)')
+        '--check-search-node', type=int, default=DEFAULT_CHECK_SEARCH_NODE,
+        help=f'Check search node (default: {DEFAULT_CHECK_SEARCH_NODE})')
     parser.add_argument(
-        '--check-node-depth', type=int, default=4, help='Node depth where check search runs (default: 4)')
+        '--check-node-depth', type=int, default=DEFAULT_CHECK_NODE_DEPTH,
+        help=f'Node depth where check search runs (default: {DEFAULT_CHECK_NODE_DEPTH})')
+    parser.add_argument(
+        '--ucb-constant', type=float, default=DEFAULT_UCB_CONSTANT,
+        help=f'Constant value in UCB (default: {DEFAULT_UCB_CONSTANT})')
+    parser.add_argument(
+        '--pucb-constant-init', type=float, default=DEFAULT_PUCB_CONSTANT_INIT,
+        help=f'Initial value of the constant in PUCB (default: {DEFAULT_PUCB_CONSTANT_INIT})')
+    parser.add_argument(
+        '--pucb-constant-base', type=float, default=DEFAULT_PUCB_CONSTANT_BASE,
+        help=f'Change value of the constant in PUCB (default: {DEFAULT_PUCB_CONSTANT_BASE})')
     parser.add_argument(
         '--client-name', type=str, default=NAME, help=f'Client name (default: {NAME})')
     parser.add_argument(
         '--client-version', type=str, default=VERSION, help=f'Client version (default: {VERSION})')
-    parser.add_argument(
-        '--client-author', type=str, default=AUTHOR, help=f'Author name (default: {AUTHOR})')
     parser.add_argument(
         '--threads', type=int, default=16, help='Number of threads (default: 16)')
     parser.add_argument(
@@ -103,9 +119,11 @@ def main() -> None:
         check_search_depth=args.check_search_depth,
         check_search_node=args.check_search_node,
         check_node_depth=args.check_node_depth,
+        ucb_constant=args.ucb_constant,
+        pucb_constant_init=args.pucb_constant_init,
+        pucb_constant_base=args.pucb_constant_base,
         client_name=args.client_name,
         client_version=args.client_version,
-        client_author=args.client_author,
     )
 
     # Run the game

@@ -216,6 +216,21 @@ class Node {
   int32_t _checkSearchNode;
 
   /**
+   * Constant multiplied to UCB upper confidence bound.
+   */
+  float _ucbConstant;
+
+  /**
+   * Initial value applied to PUCB upper confidence bound.
+   */
+  float _pucbConstantInit;
+
+  /**
+   * Base value applied to PUCB upper confidence bound.
+   */
+  float _pucbConstantBase;
+
+  /**
    * List of child nodes.
    */
   std::unordered_map<int32_t, Node*> _children;

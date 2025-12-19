@@ -6,8 +6,11 @@ from typing import Any, Callable, Dict, List, TextIO, Tuple
 from deepshogi.board import Board
 
 from .config import (AUTHOR, BOARD_SIZE, COLOR_BLACK, COLOR_WHITE,
-                     DEFAULT_DRAW_TURN, DEFAULT_INITIAL_SFEN,
-                     DEFAULT_NYUGYOKU_SCORES, NAME, PIECE_HAND_BISHOP,
+                     DEFAULT_CHECK_NODE_DEPTH, DEFAULT_CHECK_SEARCH_DEPTH,
+                     DEFAULT_CHECK_SEARCH_NODE, DEFAULT_DRAW_TURN,
+                     DEFAULT_INITIAL_SFEN, DEFAULT_NYUGYOKU_SCORES,
+                     DEFAULT_PUCB_CONSTANT_BASE, DEFAULT_PUCB_CONSTANT_INIT,
+                     DEFAULT_UCB_CONSTANT, NAME, PIECE_HAND_BISHOP,
                      PIECE_HAND_GOLD, PIECE_HAND_KNIGHT, PIECE_HAND_LANCE,
                      PIECE_HAND_PAWN, PIECE_HAND_ROOK, PIECE_HAND_SILVER,
                      VERSION, get_color_name, get_opposite_color,
@@ -121,9 +124,12 @@ class USIEngine(object):
         initial_width: int = 16,
         nyugyoku_scores: Tuple[int, int] = DEFAULT_NYUGYOKU_SCORES,
         draw_turn: int = DEFAULT_DRAW_TURN,
-        check_search_depth: int = 31,
-        check_search_node: int = 10_000,
-        check_node_depth: int = 2,
+        check_search_depth: int = DEFAULT_CHECK_SEARCH_DEPTH,
+        check_search_node: int = DEFAULT_CHECK_SEARCH_NODE,
+        check_node_depth: int = DEFAULT_CHECK_NODE_DEPTH,
+        ucb_constant: float = DEFAULT_UCB_CONSTANT,
+        pucb_constant_init: float = DEFAULT_PUCB_CONSTANT_INIT,
+        pucb_constant_base: float = DEFAULT_PUCB_CONSTANT_BASE,
         client_name: str = NAME,
         client_version: str = VERSION,
         client_author: str = AUTHOR,
@@ -149,6 +155,9 @@ class USIEngine(object):
             check_search_depth (int): Depth for checkmate search
             check_search_node (int): Number of nodes for checkmate search
             check_node_depth (int): Depth of nodes for checkmate search
+            ucb_constant (float): Constant multiplied to UCB upper confidence bound
+            pucb_constant_init (float): Initial value applied to PUCB upper confidence bound
+            pucb_constant_base (float): Base value applied to PUCB upper confidence bound
             max_visits (int): Maximum number of search visits
             client_name (str): Client display name
             client_version (str): Client display version
@@ -164,6 +173,9 @@ class USIEngine(object):
         self.check_search_depth = check_search_depth
         self.check_search_node = check_search_node
         self.check_node_depth = check_node_depth
+        self.ucb_constant = ucb_constant
+        self.pucb_constant_init = pucb_constant_init
+        self.pucb_constant_base = pucb_constant_base
 
         self.visits = visits
         self.playouts = playouts
@@ -196,6 +208,9 @@ class USIEngine(object):
             'CheckSearchDepth': ('spin default {} min 1', 'check_search_depth', str, int),
             'CheckSearchNode': ('spin default {} min 1', 'check_search_node', str, int),
             'CheckNodeDepth': ('spin default {} min 1', 'check_node_depth', str, int),
+            'UCBConstant': ('float default {} min 0.0', 'ucb_constant', str, float),
+            'PUCBConstantInit': ('float default {} min 0.0', 'pucb_constant_init', str, float),
+            'PUCBConstantBase': ('float default {} min 0.0', 'pucb_constant_base', str, float),
             'NyugyokuRule': ('combo default {} var 27 var 24', 'nyugyoku_scores',
                              lambda v: '24' if v == (31, 31) else '27',
                              lambda s: (31, 31) if s == '24' else DEFAULT_NYUGYOKU_SCORES),
@@ -375,7 +390,10 @@ class USIEngine(object):
                 nyugyoku_scores=self.nyugyoku_scores,
                 draw_turn=self.draw_turn,
                 check_search_depth=self.check_search_depth,
-                check_search_node=self.check_search_node)
+                check_search_node=self.check_search_node,
+                ucb_constant=self.ucb_constant,
+                pucb_constant_init=self.pucb_constant_init,
+                pucb_constant_base=self.pucb_constant_base)
 
         return (True, 'readyok', False)
 

@@ -7,10 +7,12 @@ from deepshogi.exception import ShogiException
 
 from .board import Board, is_hand_position
 from .config import (BOARD_SIZE, COLOR_BLACK, COLOR_NONE, COLOR_WHITE,
-                     DEFAULT_ALLOWED_REPEATS, DEFAULT_CHECK_SEARCH_DEPTH,
-                     DEFAULT_CHECK_SEARCH_NODE, DEFAULT_DRAW_TURN,
-                     DEFAULT_INITIAL_SFEN, DEFAULT_MAX_VISITS,
-                     DEFAULT_NYUGYOKU_SCORES, RESULT_MAX_MOVES, RESULT_NONE,
+                     DEFAULT_ALLOWED_REPEATS, DEFAULT_CHECK_NODE_DEPTH,
+                     DEFAULT_CHECK_SEARCH_DEPTH, DEFAULT_CHECK_SEARCH_NODE,
+                     DEFAULT_DRAW_TURN, DEFAULT_INITIAL_SFEN,
+                     DEFAULT_MAX_VISITS, DEFAULT_NYUGYOKU_SCORES,
+                     DEFAULT_PUCB_CONSTANT_BASE, DEFAULT_PUCB_CONSTANT_INIT,
+                     DEFAULT_UCB_CONSTANT, RESULT_MAX_MOVES, RESULT_NONE,
                      RESULT_NYUGYOKU, RESULT_SENNICHITE, RESULT_TSUMI,
                      SEARCH_PUCB, SEARCH_UCB, get_color_name,
                      get_opposite_color)
@@ -229,6 +231,9 @@ class Player(object):
         draw_turn: int = DEFAULT_DRAW_TURN,
         check_search_depth: int = DEFAULT_CHECK_SEARCH_DEPTH,
         check_search_node: int = DEFAULT_CHECK_SEARCH_NODE,
+        ucb_constant: float = DEFAULT_UCB_CONSTANT,
+        pucb_constant_init: float = DEFAULT_PUCB_CONSTANT_INIT,
+        pucb_constant_base: float = DEFAULT_PUCB_CONSTANT_BASE,
         eval_leaf_only: bool = False,
         max_visits: int = DEFAULT_MAX_VISITS,
         allowed_repeats: int = DEFAULT_ALLOWED_REPEATS,
@@ -243,6 +248,9 @@ class Player(object):
             draw_turn (int): Number of turns for a draw
             check_search_depth (int): Depth for checkmate search
             check_search_node (int): Number of nodes for checkmate search
+            ucb_constant (float): Constant multiplied to UCB upper confidence bound
+            pucb_constant_init (float): Initial value applied to PUCB upper confidence bound
+            pucb_constant_base (float): Base value applied to PUCB upper confidence bound
             eval_leaf_only (bool): True to evaluate only leaf nodes
             max_visits (int): Maximum number of visits for search
             allowed_repeats (int): Allowed number of repeats of the same position (default is 3)
@@ -254,7 +262,9 @@ class Player(object):
         # Create native object
         self.native = NativePlayer(
             processor.native, threads, nyugyoku_scores, draw_turn,
-            check_search_depth, check_search_node, eval_leaf_only, max_visits)
+            check_search_depth, check_search_node,
+            ucb_constant, pucb_constant_init, pucb_constant_base,
+            eval_leaf_only, max_visits)
 
         self.native.initialize(initial_sfen)
 
@@ -303,18 +313,18 @@ class Player(object):
     def get_random(
         self,
         width: int = 16,
+        timelimit: float = 120.0,
         criterion: str = 'value',
         temperature: float = 1.0,
         delta: float = 0.1,
-        timelimit: float = 120.0,
     ) -> Candidate:
         '''Return a random move.
         Args:
             width (int): Number of candidate moves
+            timelimit (float): Time limit (seconds)
             criterion (str): Criterion for candidate prioritization ('value', 'minimax', or 'visits')
             temperature (float): Temperature parameter
             delta (float): Allowable win rate drop
-            timelimit (float): Time limit (seconds)
         Returns:
             Candidate: Candidate move
         '''
@@ -347,7 +357,7 @@ class Player(object):
         algorithm: str = 'pucb',
         criterion: str = 'value',
         candidate_width: int = 0,
-        check_node_depth: int = 2,
+        check_node_depth: int = DEFAULT_CHECK_NODE_DEPTH,
         temperature: float = 1.0,
         noise: float = 0.0,
         sennichite_penalty: float = 0.0,

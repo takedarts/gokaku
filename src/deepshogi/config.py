@@ -186,6 +186,8 @@ DEFAULT_INITIAL_SFEN = 'lnsgkgsnl/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSN
 DEFAULT_CHECK_SEARCH_DEPTH = 31
 # Default number of nodes for checkmate search
 DEFAULT_CHECK_SEARCH_NODE = 10_000
+# Default node depth for checkmate search
+DEFAULT_CHECK_NODE_DEPTH = 4
 # Default number of allowed repeats of the same position
 DEFAULT_ALLOWED_REPEATS = 3
 # Default points required for nyugyoku declaration
@@ -194,6 +196,12 @@ DEFAULT_NYUGYOKU_SCORES = (28, 27)
 DEFAULT_DRAW_TURN = 512
 # Default maximum number of visits for search
 DEFAULT_MAX_VISITS = 1_000_000
+# Constant multiplied to UCB upper confidence bound
+DEFAULT_UCB_CONSTANT = 1.4
+# Initial value applied to PUCB upper confidence bound
+DEFAULT_PUCB_CONSTANT_INIT = 1.25
+# Base value applied to PUCB upper confidence bound
+DEFAULT_PUCB_CONSTANT_BASE = 19652.0
 
 ################################################################
 # Logging settings

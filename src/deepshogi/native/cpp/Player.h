@@ -33,6 +33,9 @@ class Player {
    * @param drawTurn Number of moves until a draw
    * @param checkSearchDepth Depth for mate search
    * @param checkSearchNode Number of nodes for mate search
+   * @param ucbConstant Constant multiplied to UCB upper confidence bound
+   * @param pucbConstantInit Initial value applied to PUCB upper confidence bound
+   * @param pucbConstantBase Base value applied to PUCB upper confidence bound
    * @param evalLeafOnly True if only leaf nodes are evaluated
    * @param maxVisits Maximum number of visits for search
    */
@@ -40,6 +43,7 @@ class Player {
       Processor* processor, int32_t threads,
       int32_t nyugyokuScoreBlack, int32_t nyugyokuScoreWhite, int32_t drawTurn,
       int32_t checkSearchDepth, int32_t checkSearchNode,
+      float ucbConstant, float pucbConstantInit, float pucbConstantBase,
       bool evalLeafOnly, int32_t maxVisits);
 
   /**

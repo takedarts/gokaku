@@ -32,6 +32,9 @@ Node::Node(NodeManager* manager, const NodeParameter& parameter)
       _evaluator(parameter.getProcessor()),
       _checkSearchDepth(parameter.getCheckSearchDepth()),
       _checkSearchNode(parameter.getCheckSearchNode()),
+      _ucbConstant(parameter.getUcbConstant()),
+      _pucbConstantInit(parameter.getPucbConstantInit()),
+      _pucbConstantBase(parameter.getPucbConstantBase()),
       _children(),
       _childPolicies(),
       _waitingQueue(),
@@ -343,8 +346,8 @@ float Node::getPriorityByUCB(int32_t totalVisits) {
     return -99.0f;
   } else {
     float value = (_value / _count) * OPPOSITE_COLOR(_board.getColor());
-    float upper = 0.5 * std::sqrt(std::log(totalVisits) / (_visits + 1));
-    return value + upper;
+    float ucb = std::sqrt(std::log(totalVisits) / (_visits + 1));
+    return value + _ucbConstant * ucb;
   }
 }
 
@@ -358,10 +361,11 @@ float Node::getPriorityByPUCB(int32_t totalVisits) {
   if (_count == 0) {
     return -99.0f;
   } else {
-    float c_puct = std::log((1 + totalVisits + 19652.0) / 19652.0) + 1.25;
+    float c_pucb_inc = std::log((1 + totalVisits + _pucbConstantBase) / _pucbConstantBase);
+    float c_pucb = c_pucb_inc + _pucbConstantInit;
     float value = (_value / _count) * OPPOSITE_COLOR(_board.getColor());
-    float upper = c_puct * _policy * std::sqrt(totalVisits) / (1 + _visits);
-    return value + 2 * upper;
+    float ucb = _policy * std::sqrt(totalVisits) / (1 + _visits);
+    return value + c_pucb * ucb;
   }
 }
 

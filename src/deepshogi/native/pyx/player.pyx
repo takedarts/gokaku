@@ -22,7 +22,9 @@ cdef extern from "cpp/Candidate.h" namespace "deepshogi":
 
 cdef extern from "cpp/Player.h" namespace "deepshogi":
     cdef cppclass Player:
-        Player(Processor*, int32_t, int32_t, int32_t, int32_t, int32_t, int32_t, bool, int32_t) except +
+        Player(
+            Processor*, int32_t, int32_t, int32_t, int32_t, int32_t, int32_t,
+            float, float, float, bool, int32_t) except +
         void initialize(const string)
         int32_t getColor()
         void play(const Move&)
@@ -43,6 +45,9 @@ cdef class NativePlayer:
         draw_turn: int,
         check_search_depth: int,
         check_search_node: int,
+        ucb_constant: float,
+        pucb_constant_init: float,
+        pucb_constant_base: float,
         eval_leaf_only: bool,
         max_visits: int,
     )->None:
@@ -54,13 +59,18 @@ cdef class NativePlayer:
             draw_turn (int): Number of moves for a draw
             check_search_depth (int): Depth for checkmate search
             check_search_node (int): Number of nodes for checkmate search
+            ucb_constant (float): Constant multiplied to UCB upper confidence bound
+            pucb_constant_init (float): Initial value applied to PUCB upper confidence bound
+            pucb_constant_base (float): Base value applied to PUCB upper confidence bound
             eval_leaf_only (bool): True to evaluate only leaf nodes
             max_visits (int): Maximum number of visits for search
         '''
         self.player = new Player(
             processor.processor, threads,
             nyugyoku_scores[0], nyugyoku_scores[1], draw_turn,
-            check_search_depth, check_search_node, eval_leaf_only, max_visits)
+            check_search_depth, check_search_node,
+            ucb_constant, pucb_constant_init, pucb_constant_base,
+            eval_leaf_only, max_visits)
 
     def __dealloc__(self):
         del self.player
