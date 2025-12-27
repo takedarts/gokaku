@@ -199,9 +199,9 @@ DEFAULT_MAX_VISITS = 1_000_000
 # Constant multiplied to UCB upper confidence bound
 DEFAULT_UCB_CONSTANT = 1.4
 # Initial value applied to PUCB upper confidence bound
-DEFAULT_PUCB_CONSTANT_INIT = 1.25
+DEFAULT_PUCB_CONSTANT_INIT = 1.2
 # Base value applied to PUCB upper confidence bound
-DEFAULT_PUCB_CONSTANT_BASE = 19652.0
+DEFAULT_PUCB_CONSTANT_BASE = 18200.0
 
 ################################################################
 # Logging settings
