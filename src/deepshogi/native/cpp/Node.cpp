@@ -82,7 +82,7 @@ NodeResult Node::evaluate(
     std::unique_lock<std::shared_mutex> lock(_evalMutex);
 
     // Execute board evaluation for the node
-    _evaluateBoard(searchCheckMove);
+    _evaluateBoard();
 
     // Increase the number of visits
     _visits += 1;
@@ -150,7 +150,7 @@ Move Node::getPolicyMove() {
   {
     // Execute board evaluation for this node
     std::unique_lock<std::shared_mutex> lock(_evalMutex);
-    _evaluateBoard(false);
+    _evaluateBoard();
   }
 
   // If a checkmate move has been found, return that move
@@ -408,9 +408,8 @@ void Node::copyBoardTo(Board* board) {
 
 /**
  * Execute board evaluation for this node.
- * @param searchCheckMove If true, search for checkmate moves
  */
-void Node::_evaluateBoard(bool searchCheckMove) {
+void Node::_evaluateBoard() {
   // If a checkmate move has not been found and not yet searched, execute 5-move checkmate search
   // Use a duplicated board object because the board object is changed during search
   if (!_checkMoveShallowSearched && _checkMove == CHECK_MOVE_NOT_FOUND) {

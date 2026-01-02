@@ -292,9 +292,8 @@ class Node {
 
   /**
    * Execute board evaluation for this node.
-   * @param searchCheckMove If true, search for checkmate moves
    */
-  void _evaluateBoard(bool searchCheckMove);
+  void _evaluateBoard();
 
   /**
    * Evaluate the state of this node and return the evaluation result.
