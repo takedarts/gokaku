@@ -4,7 +4,7 @@
 # Program name
 NAME = 'Gokaku'
 # Version number
-VERSION = '2.1'
+VERSION = '2.1a'
 # Author name
 AUTHOR = 'Atsushi Takeda'
 
