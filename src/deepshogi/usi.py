@@ -207,7 +207,7 @@ class USIEngine(object):
             'Threads': ('spin default {} min 1', 'threads', str, int),
             'CheckSearchDepth': ('spin default {} min 1', 'check_search_depth', str, int),
             'CheckSearchNode': ('spin default {} min 1', 'check_search_node', str, int),
-            'CheckNodeDepth': ('spin default {} min 1', 'check_node_depth', str, int),
+            'CheckNodeDepth': ('spin default {} min 0', 'check_node_depth', str, int),
             'UcbConstant': ('spin default {} min 0', 'ucb_constant',
                             lambda v: str(round(v * 100)), lambda s: float(s) / 100),
             'PucbConstantInit': ('spin default {} min 0', 'pucb_constant_init',
