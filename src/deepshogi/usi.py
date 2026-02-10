@@ -3,8 +3,7 @@ import sys
 from threading import Thread
 from typing import Any, Callable, Dict, List, TextIO, Tuple
 
-from deepshogi.board import Board
-
+from .board import Board
 from .config import (AUTHOR, BOARD_SIZE, COLOR_BLACK, COLOR_WHITE,
                      DEFAULT_CHECK_NODE_DEPTH, DEFAULT_CHECK_SEARCH_DEPTH,
                      DEFAULT_CHECK_SEARCH_NODE, DEFAULT_DRAW_TURN,

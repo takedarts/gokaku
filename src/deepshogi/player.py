@@ -3,8 +3,6 @@ import math
 import random
 from typing import Dict, List, Tuple
 
-from deepshogi.exception import ShogiException
-
 from .board import Board, is_hand_position
 from .config import (BOARD_SIZE, COLOR_BLACK, COLOR_NONE, COLOR_WHITE,
                      DEFAULT_ALLOWED_REPEATS, DEFAULT_CHECK_NODE_DEPTH,
@@ -16,8 +14,10 @@ from .config import (BOARD_SIZE, COLOR_BLACK, COLOR_NONE, COLOR_WHITE,
                      RESULT_NYUGYOKU, RESULT_SENNICHITE, RESULT_TSUMI,
                      SEARCH_PUCB, SEARCH_UCB, get_color_name,
                      get_opposite_color)
+from .exception import ShogiException
 from .native import NativePlayer
 from .processor import Processor
+from .psfen import convert_sfen_to_psfen
 
 LOGGER = logging.getLogger(__name__)
 
@@ -147,7 +147,7 @@ class Referee(object):
         self.allowed_repeats = allowed_repeats
         self.draw_turn = draw_turn
 
-        self.board_repeats: Dict[Tuple, Tuple[int, int]] = {}
+        self.board_repeats: Dict[bytes, Tuple[int, int]] = {}
         self.check_counts = [0, 0]
 
     def clear(self) -> None:
@@ -158,7 +158,7 @@ class Referee(object):
     def update(self, board: Board) -> None:
         '''Update the state.'''
         # Register the current board position in the history
-        repeat_key = tuple(board.get_packed_sfen())
+        repeat_key = convert_sfen_to_psfen(board.get_sfen())
         repeat_values = self.board_repeats.get(repeat_key, (0, board.get_turn()))
         self.board_repeats[repeat_key] = (repeat_values[0] + 1, repeat_values[1])
 
@@ -190,7 +190,7 @@ class Referee(object):
             return True, COLOR_NONE, RESULT_MAX_MOVES
 
         # Judge whether it is repetition (sennichite)
-        repeat_key = tuple(board.get_packed_sfen())
+        repeat_key = convert_sfen_to_psfen(board.get_sfen())
         repeat_values = self.board_repeats.get(repeat_key, (0, board.get_turn()))
         repeat_count, repeat_turn = repeat_values
         sennichite = (repeat_count >= self.allowed_repeats)
@@ -215,7 +215,7 @@ class Referee(object):
         Returns:
             int: Number of repeats of the same position
         '''
-        repeat_key = tuple(board.get_packed_sfen())
+        repeat_key = convert_sfen_to_psfen(board.get_sfen())
         repeat_values = self.board_repeats.get(repeat_key, (0, 0))
 
         return repeat_values[0]
