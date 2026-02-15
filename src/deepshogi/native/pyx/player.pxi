@@ -2,46 +2,17 @@ from typing import List, Tuple
 
 from libc.stdint cimport int32_t
 from libcpp cimport bool
-from libcpp.string cimport string
 from libcpp.vector cimport vector
-
-include "board.pyx"
-include "processor.pyx"
-include 'dfpn.pyx'
-
-
-cdef extern from "cpp/Candidate.h" namespace "deepshogi":
-    cdef cppclass Candidate:
-        Move getMove() const
-        int32_t getColor() const
-        int32_t getVisits() const
-        int32_t getPlayouts() const
-        float getPolicy() const
-        float getValue() const
-        float getMinimax() const
-        vector[Move] getVariations() const
-
-
-cdef extern from "cpp/Player.h" namespace "deepshogi":
-    cdef cppclass Player:
-        Player(
-            Processor*, int32_t, int32_t, int32_t, int32_t, int32_t, int32_t,
-            float, float, float, bool, int32_t) except +
-        void initialize(const string)
-        int32_t getColor()
-        void play(const Move&)
-        void startEvaluation(bool, int32_t, int32_t, int32_t, float, float)
-        void waitEvaluation(int32_t, int32_t, float, bool) nogil
-        vector[Candidate] getCandidates()
-        void copyBoardTo(Board*)
-        string getDebugInfo()
+from pyx.candidate cimport Candidate
+from pyx.move cimport Move
+from pyx.player cimport Player
 
 
 cdef class NativePlayer:
     cdef Player* player
     def __cinit__(
         self,
-        processor: NativeProcessor,
+        processor: NativeProcessor,  # type: ignore
         threads: int,
         nyugyoku_scores: Tuple[int, int],
         draw_turn: int,
@@ -167,7 +138,7 @@ cdef class NativePlayer:
 
         return results
 
-    def copy_board_to(self, board: NativeBoard) -> None:
+    def copy_board_to(self, board: NativeBoard) -> None:  # type: ignore
         '''Copy the board state to the specified board object.
         Args:
             board (NativeBoard): Board object

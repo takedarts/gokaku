@@ -1,7 +1,7 @@
-cdef extern from "cpp/DfpnEngine.h" namespace "deepshogi":
-    cdef cppclass DfpnEngine:
-        DfpnEngine(int32_t) except +
-        vector[Move] getCheckmateMoves(const Board*, int32_t) nogil
+from typing import List, Tuple
+from libcpp.vector cimport vector
+from pyx.dfpn cimport DfpnEngine
+from pyx.move cimport Move
 
 
 cdef class NativeDfpn:
@@ -20,7 +20,7 @@ cdef class NativeDfpn:
 
     def get_checkmate_moves(
         self,
-        board: NativeBoard,
+        board: NativeBoard,  # type: ignore
         depth: int,
     ) -> List[Tuple[Tuple[int, int], Tuple[int, int], bool]]:
         '''Search for checkmate sequences and return the move sequence.
@@ -39,5 +39,3 @@ cdef class NativeDfpn:
              moves[i].isPromote())
             for i in range(moves.size())
         ]
-
-

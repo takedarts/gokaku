@@ -1,2 +1,5 @@
-include 'pyx/player.pyx'
-include 'pyx/model.pyx'
+include 'pyx/board.pxi'
+include 'pyx/dfpn.pxi'
+include 'pyx/model.pxi'
+include 'pyx/player.pxi'
+include 'pyx/processor.pxi'

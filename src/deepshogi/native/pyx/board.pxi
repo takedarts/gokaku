@@ -3,48 +3,14 @@ from typing import List, Tuple
 from libc.stdint cimport int32_t
 from libcpp cimport bool
 from libcpp.pair cimport pair
-from libcpp.string cimport string
 from libcpp.vector cimport vector
 
 import numpy
 cimport numpy
 
 from deepshogi.config import MODEL_INPUT_PACK_SIZE
-
-
-cdef extern from "cpp/Move.h" namespace "deepshogi":
-    cdef cppclass Move:
-        Move() except +
-        Move(int32_t, int32_t, int32_t, int32_t, bool) except +
-        int32_t getSrcX() const
-        int32_t getSrcY() const
-        int32_t getDstX() const
-        int32_t getDstY() const
-        bool isPromote() const
-        int32_t getValue() const
-
-
-cdef extern from "cpp/Board.h" namespace "deepshogi":
-    cdef cppclass Board:
-        Board(int32_t, int32_t, int32_t) except +
-        bool play(const Move&)
-        void initialize(const string)
-        int32_t getColor() const
-        int32_t getTurn() const
-        int32_t getPiece(int32_t, int32_t) const
-        int32_t getMovedPiece(const Move&) const
-        int32_t getHandPieceNum(int32_t, int32_t) const
-        Move getLastMove() const
-        vector[pair[int32_t, int32_t]] getAttackers(int32_t, int32_t) const
-        vector[Move] getLegalMoves(bool, bool) const
-        vector[Move] getCheckmateMoves(int32_t) const
-        bool isNyugyoku(int32_t) const
-        bool isCheckmate(int32_t) const
-        string getSfen() const
-        void getInputs(int32_t*) const
-        void getInputs(int32_t*, int32_t, int32_t) const
-        void copyFrom(Board*)
-        string toString() const
+from pyx.board cimport Board
+from pyx.move cimport Move
 
 
 cdef class NativeBoard:
