@@ -11,13 +11,6 @@ DfpnNodeKey::DfpnNodeKey(DfpnNode* node)
 }
 
 /**
- * Return true if this node is equal to the specified node.
- */
-bool DfpnNodeKey::operator==(const DfpnNodeKey& other) const {
-  return *_node == *(other._node);
-}
-
-/**
  * Return true if this node is less than the specified node.
  */
 bool DfpnNodeKey::operator<(const DfpnNodeKey& other) const {

@@ -12,12 +12,14 @@ namespace deepshogi {
  */
 DfpnNode::DfpnNode()
     : _board(),
-      _hash(0),
-      _depth(0),
+      _hashBoard(0),
+      _hashHand(0),
+      _depth(0xffff),
       _children(),
-      _pn(0),
+      _pn(0xffff),
       _dn(0),
-      _step(0xffff) {
+      _step(0xffff),
+      _size(1) {
 }
 
 /**
@@ -29,15 +31,17 @@ void DfpnNode::initialize(const Board* board, int32_t depth) {
   _board.copyFrom(board);
   _children.clear();
   _depth = depth;
+  _size = 1;
 
   // Calculate the hash value of the board
-  _hash = 0;
+  _hashBoard = 0;
+  _hashHand = 0;
 
   for (int32_t y = 0; y < BOARD_SIZE; ++y) {
     for (int32_t x = 0; x < BOARD_SIZE; ++x) {
       int32_t piece = _board.getPiece(x, y);
 
-      _hash ^= (static_cast<uint32_t>(piece) << ((x + y * BOARD_SIZE) % 24));
+      _hashBoard ^= (static_cast<uint32_t>(piece) << ((x + y * BOARD_SIZE) % 24));
     }
   }
 
@@ -46,12 +50,8 @@ void DfpnNode::initialize(const Board* board, int32_t depth) {
 
     for (int32_t p = PIECE_HAND_BEGIN; p < PIECE_HAND_END; ++p) {
       int32_t num = _board.getHandPieceNum(c, p);
-      _hash ^= (static_cast<uint32_t>(num) << ((off + (p - PIECE_HAND_BEGIN)) % 24));
+      _hashHand ^= (static_cast<uint32_t>(num) << ((off + (p - PIECE_HAND_BEGIN)) % 24));
     }
-  }
-
-  if (_board.getColor() == COLOR_WHITE) {
-    _hash ^= 0xffffffff;
   }
 
   // Set PN/DN values
@@ -129,6 +129,7 @@ void DfpnNode::update(int32_t depth_limit) {
     _pn = 0xffff;
     _dn = 0;
     _step = 0xffff;
+    _size = 1;
     return;
   }
 
@@ -137,6 +138,7 @@ void DfpnNode::update(int32_t depth_limit) {
     _pn = 0xffff;
     _dn = 0;
     _step = 0xffff;
+    _size = 1;
 
     for (auto& child_pair : _children) {
       DfpnNode* child = child_pair.second;
@@ -150,6 +152,8 @@ void DfpnNode::update(int32_t depth_limit) {
       if (_step > child->getStep() + 1) {
         _step = child->getStep() + 1;
       }
+
+      _size += child->getSize();
     }
   }
   // If it's the turn to escape from check
@@ -157,6 +161,7 @@ void DfpnNode::update(int32_t depth_limit) {
     _pn = 0;
     _dn = 0xffff;
     _step = 1;
+    _size = 1;
 
     for (auto& child_pair : _children) {
       DfpnNode* child = child_pair.second;
@@ -170,6 +175,8 @@ void DfpnNode::update(int32_t depth_limit) {
       if (_step < child->getStep() + 1) {
         _step = child->getStep() + 1;
       }
+
+      _size += child->getSize();
     }
   }
 }
@@ -194,7 +201,7 @@ DfpnNode* DfpnNode::getNextNode() {
         continue;
       }
 
-      float priority = child->getPn();
+      float priority = child->getPn() + std::log(child->getSize());
 
       if (priority < min_priority) {
         min_priority = priority;
@@ -213,7 +220,7 @@ DfpnNode* DfpnNode::getNextNode() {
         continue;
       }
 
-      float priority = child->getDn();
+      float priority = child->getDn() + std::log(child->getSize());
 
       if (priority < min_priority) {
         min_priority = priority;
@@ -226,11 +233,12 @@ DfpnNode* DfpnNode::getNextNode() {
 }
 
 /**
- * Return a checkmate move.
- * Returns a move with negative coordinates if no checkmate move exists.
- * @return the checkmate move
+ * Get the checkmate move and child node.
+ * Returns nullptr if no checkmate move exists.
+ * @return pair of checkmate move and child node
  */
-Move DfpnNode::getCheckmateMove() {
+std::pair<Move, DfpnNode*> DfpnNode::getCheckmateNode() {
+  DfpnNode* checkmate_node = nullptr;
   Move checkmate_move(-1, -1, -1, -1, false);
 
   if (_depth % 2 == 0) {
@@ -242,6 +250,7 @@ Move DfpnNode::getCheckmateMove() {
       DfpnNode* child = child_pair.second;
 
       if (child->getPn() == 0 && child->getStep() < min_step) {
+        checkmate_node = child;
         checkmate_move = child_pair.first;
         min_step = child->getStep();
       }
@@ -255,13 +264,28 @@ Move DfpnNode::getCheckmateMove() {
       DfpnNode* child = child_pair.second;
 
       if (child->getPn() == 0 && child->getStep() > max_step) {
+        checkmate_node = child;
         checkmate_move = child_pair.first;
         max_step = child->getStep();
       }
     }
   }
 
-  return checkmate_move;
+  return std::make_pair(checkmate_move, checkmate_node);
+}
+
+/**
+ * Replace a child node.
+ * @param targetNode child node to replace
+ * @param newNode new child node
+ */
+void DfpnNode::replaceChildNode(DfpnNode* targetNode, DfpnNode* newNode) {
+  for (auto& child_pair : _children) {
+    if (child_pair.second == targetNode) {
+      child_pair.second = newNode;
+      return;
+    }
+  }
 }
 
 /**
@@ -271,31 +295,13 @@ Move DfpnNode::getCheckmateMove() {
  * @return pointer to the child node
  */
 DfpnNode* DfpnNode::getChildNode(const Move& move) const {
-  DfpnNode* child_node = nullptr;
-
-  for (auto& child_pair : _children) {
+  for (const auto& child_pair : _children) {
     if (child_pair.first == move) {
-      child_node = child_pair.second;
-      break;
+      return child_pair.second;
     }
   }
 
-  return child_node;
-}
-
-/**
- * Remove the specified node from the child node list.
- * @param child pointer to the child node to remove
- */
-void DfpnNode::removeChildNode(const DfpnNode* child) {
-  _children.erase(
-      std::remove_if(
-          _children.begin(),
-          _children.end(),
-          [child](const std::pair<Move, DfpnNode*>& pair) {
-            return pair.second == child;
-          }),
-      _children.end());
+  return nullptr;
 }
 
 /**
@@ -331,6 +337,14 @@ int32_t DfpnNode::getStep() const {
 }
 
 /**
+ * Get the node size.
+ * @return node size
+ */
+int32_t DfpnNode::getSize() const {
+  return _size;
+}
+
+/**
  * Get the node information as a string.
  * @return string with node information
  */
@@ -338,7 +352,7 @@ std::string DfpnNode::toString() const {
   std::stringstream ss;
 
   ss << "DFPN Node: depth=" << _depth << " pn=" << _pn << " dn=" << _dn
-     << " step=" << _step << "\n";
+     << " step=" << _step << " size=" << _size << "\n";
   ss << _board.toString() << "\n";
 
   for (auto& child_pair : _children) {
@@ -351,6 +365,7 @@ std::string DfpnNode::toString() const {
        << " pn=" << child->getPn()
        << " dn=" << child->getDn()
        << " step=" << child->getStep()
+       << " size=" << child->getSize()
        << "\n";
   }
 
@@ -358,42 +373,15 @@ std::string DfpnNode::toString() const {
 }
 
 /**
- * Return true if this node is equal to the specified node.
- */
-bool DfpnNode::operator==(const DfpnNode& other) const {
-  if (_hash != other._hash) {
-    return false;
-  }
-
-  for (int32_t y = 0; y < BOARD_SIZE; ++y) {
-    for (int32_t x = 0; x < BOARD_SIZE; ++x) {
-      if (_board.getPiece(x, y) != other._board.getPiece(x, y)) {
-        return false;
-      }
-    }
-  }
-
-  for (int32_t c : {COLOR_BLACK, COLOR_WHITE}) {
-    for (int32_t p = PIECE_HAND_BEGIN; p < PIECE_HAND_END; ++p) {
-      if (_board.getHandPieceNum(c, p) != other._board.getHandPieceNum(c, p)) {
-        return false;
-      }
-    }
-  }
-
-  if (_board.getColor() != other._board.getColor()) {
-    return false;
-  }
-
-  return true;
-}
-
-/**
  * Return true if this node is less than the specified node.
  */
 bool DfpnNode::operator<(const DfpnNode& other) const {
-  if (_hash != other._hash) {
-    return _hash < other._hash;
+  if (_hashBoard != other._hashBoard) {
+    return _hashBoard < other._hashBoard;
+  } else if (_hashHand != other._hashHand) {
+    return _hashHand < other._hashHand;
+  } else if (_board.getColor() != other._board.getColor()) {
+    return _board.getColor() < other._board.getColor();
   }
 
   for (int32_t y = 0; y < BOARD_SIZE; ++y) {
@@ -416,10 +404,6 @@ bool DfpnNode::operator<(const DfpnNode& other) const {
         return num1 < num2;
       }
     }
-  }
-
-  if (_board.getColor() != other._board.getColor()) {
-    return _board.getColor() < other._board.getColor();
   }
 
   return false;

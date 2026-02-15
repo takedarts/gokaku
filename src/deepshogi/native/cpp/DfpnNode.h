@@ -51,11 +51,18 @@ class DfpnNode {
   DfpnNode* getNextNode();
 
   /**
-   * Return a checkmate move.
-   * Returns a move with negative coordinates if no checkmate move exists.
-   * @return the checkmate move
+   * Get the checkmate move and child node.
+   * Returns nullptr if no checkmate move exists.
+   * @return pair of checkmate move and child node
    */
-  Move getCheckmateMove();
+  std::pair<Move, DfpnNode*> getCheckmateNode();
+
+  /**
+   * Replace a child node.
+   * @param targetNode child node to replace
+   * @param newNode new child node
+   */
+  void replaceChildNode(DfpnNode* targetNode, DfpnNode* newNode);
 
   /**
    * Get the child node for the specified move.
@@ -64,12 +71,6 @@ class DfpnNode {
    * @return pointer to the child node
    */
   DfpnNode* getChildNode(const Move& move) const;
-
-  /**
-   * Remove the specified node from the child node list.
-   * @param child pointer to the child node to remove
-   */
-  void removeChildNode(const DfpnNode* child);
 
   /**
    * Get the node depth.
@@ -96,15 +97,16 @@ class DfpnNode {
   int32_t getStep() const;
 
   /**
+   * Get the node size.
+   * @return node size
+   */
+  int32_t getSize() const;
+
+  /**
    * Get the node information as a string.
    * @return string with node information
    */
   std::string toString() const;
-
-  /**
-   * Return true if this node is equal to the specified node.
-   */
-  bool operator==(const DfpnNode& other) const;
 
   /**
    * Return true if this node is less than the specified node.
@@ -120,7 +122,12 @@ class DfpnNode {
   /**
    * Hash value of the board.
    */
-  uint32_t _hash;
+  uint32_t _hashBoard;
+
+  /**
+   * Hash value of the hand.
+   */
+  uint32_t _hashHand;
 
   /**
    * Node depth.
@@ -146,6 +153,11 @@ class DfpnNode {
    * Number of moves until mate.
    */
   int32_t _step;
+
+  /**
+   * Node size.
+   */
+  int32_t _size;
 };
 
 }  // namespace deepshogi

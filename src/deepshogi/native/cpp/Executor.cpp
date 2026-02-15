@@ -1,7 +1,5 @@
 #include "Executor.h"
 
-#include <iostream>
-
 #include "Config.h"
 
 namespace deepshogi {

@@ -16,11 +16,6 @@ class DfpnNodeKey {
   DfpnNodeKey(DfpnNode* node);
 
   /**
-   * Return true if this node is equal to the specified node.
-   */
-  bool operator==(const DfpnNodeKey& other) const;
-
-  /**
    * Return true if this node is less than the specified node.
    */
   bool operator<(const DfpnNodeKey& other) const;

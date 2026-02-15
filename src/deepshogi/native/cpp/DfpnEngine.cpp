@@ -71,35 +71,43 @@ std::vector<Move> DfpnEngine::getCheckmateMoves(const Board* board, int32_t dept
 
   // Create the root node
   DfpnNode* root = getNode(board, 0);
+  int32_t color = board->getColor();
 
   // Execute the search
   std::vector<DfpnNode*> parents;
-  std::set<DfpnNode*> visited;
+  DfpnNode end_node;
 
-  while (true) {
+  while (root->getPn() != 0 && root->getDn() != 0) {
     parents.clear();
-    visited.clear();
 
     // Get the next node to explore
     DfpnNode* node = root;
     DfpnNode* next_node = node->getNextNode();
+    bool loop_found = false;
 
     while (next_node != nullptr) {
       parents.push_back(node);
-      visited.insert(node);
 
       node = next_node;
       next_node = node->getNextNode();
 
-      if (visited.find(node) != visited.end()) {
+      // Check if a loop is detected
+      for (DfpnNode* parent : parents) {
+        if (parent == node) {
+          loop_found = true;
+          break;
+        }
+      }
+
+      // If a loop is detected, end the search
+      if (loop_found) {
         break;
       }
     }
 
-    // If a loop is detected, remove the child node from its parent
-    if (visited.find(node) != visited.end()) {
-      DfpnNode* parent_node = parents.back();
-      parent_node->removeChildNode(node);
+    // If a loop is detected, replace the child node with an end node
+    if (loop_found) {
+      parents.back()->replaceChildNode(node, &end_node);
 
       for (auto it = parents.rbegin(); it != parents.rend(); it++) {
         (*it)->update(depth);
@@ -131,14 +139,14 @@ std::vector<Move> DfpnEngine::getCheckmateMoves(const Board* board, int32_t dept
   std::vector<Move> checkmate_moves;
 
   while (true) {
-    Move checkmate_move = node->getCheckmateMove();
+    std::pair<Move, DfpnNode*> checkmate_node_pair = node->getCheckmateNode();
 
-    if (checkmate_move.getSrcX() < 0) {
+    if (checkmate_node_pair.second == nullptr) {
       break;
     }
 
-    checkmate_moves.push_back(checkmate_move);
-    node = node->getChildNode(checkmate_move);
+    checkmate_moves.push_back(checkmate_node_pair.first);
+    node = checkmate_node_pair.second;
   }
 
   return checkmate_moves;
