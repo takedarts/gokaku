@@ -5,8 +5,6 @@
 #include <cstring>
 #include <iostream>
 #include <map>
-#include <queue>
-#include <unordered_map>
 
 namespace deepshogi {
 
@@ -35,13 +33,14 @@ Player::Player(
       _condition(),
       _nodeManager(NodeParameter(
           processor, nyugyokuScoreBlack, nyugyokuScoreWhite, drawTurn,
-          checkSearchDepth, checkSearchNode,
           ucbConstant, pucbConstantInit, pucbConstantBase)),
       _threadPool(threads),
       _thread(),
+      _dfpnEnginePool(checkSearchNode, threads),
       _root(_nodeManager.createNode()),
       _evalLeafOnly(evalLeafOnly),
       _maxVisits(maxVisits),
+      _checkSearchDepth(checkSearchDepth),
       _searchVisits(0),
       _searchPlayouts(0),
       _searchEqually(false),
@@ -55,7 +54,7 @@ Player::Player(
       _stopped(true),
       _terminated(false) {
   _thread.reset(new std::thread([this]() { this->_run(); }));
-  _root->initialize(cshogi::DefaultStartPositionSFEN);
+  _root->initialize("lnsgkgsnl/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL b - 1");
 }
 
 /**
@@ -202,18 +201,20 @@ std::vector<Candidate> Player::getCandidates() {
   std::vector<Candidate> candidates;
 
   // If there is a mate move, only the mate move is considered as a candidate
-  if (_root->getCheckMove() != MOVE_PASS) {
+  std::vector<Move> checkmate_moves = _root->getCheckmateMoves();
+
+  if (!checkmate_moves.empty()) {
     candidates.emplace_back(
-        _root->getCheckMove(), _root->getColor(),
+        checkmate_moves[0], _root->getColor(),
         _root->getVisits() - 1, _root->getPlayouts(),
-        1.0f, _root->getColor(), _root->getColor());
+        1.0f, _root->getColor(), _root->getColor(), checkmate_moves);
   }
   // If there is no mate move, the list of child nodes is considered as candidates
   // If a child node has a mate move, set the evaluation value to opponent's win
   // If there is no mate move, set the evaluation value to node's value * 0.999
   else {
     for (Node* node : _root->getChildren()) {
-      if (node->getCheckMove() != MOVE_PASS) {
+      if (!node->getCheckmateMoves().empty()) {
         candidates.emplace_back(
             node->getMove(), _root->getColor(), node->getVisits(), node->getPlayouts(),
             node->getPolicy(), node->getColor(), node->getColor(), node->getVariations());
@@ -342,14 +343,18 @@ int32_t Player::_evaluate() {
   bool search_equally = _searchEqually;
   int32_t search_width = _searchCandidateWidth;
   int32_t search_algorithm = _searchAlgorithm;
-  int32_t search_check_depth = _searchCheckNodeDepth;
+  int32_t search_check_node_depth = _searchCheckNodeDepth;
   float search_temperature = _searchTemperature;
   float search_noise = _searchNoise;
   int32_t playouts = 0;
 
+  // Acquire the mate search engine object
+  DfpnEngine* dfpn_engine = _dfpnEnginePool.acquire();
+
   while (true) {
     NodeResult result = nodes.back()->evaluate(
-        search_equally, search_width, search_algorithm, search_check_depth > 0,
+        search_equally, search_width, search_algorithm,
+        dfpn_engine, search_check_node_depth > 0 ? _checkSearchDepth : 0,
         search_temperature, search_noise);
 
     // Update the evaluation value of the node
@@ -410,14 +415,17 @@ int32_t Player::_evaluate() {
       break;
     }
 
-    // Reset settings that apply only to the root node
+    // Update the configuration items
     search_equally = 0;
     search_width = 0;
     search_algorithm = SEARCH_PUCB;
-    search_check_depth -= 1;
+    search_check_node_depth -= 1;
     search_temperature = 1.0f;
     search_noise = 0.0f;
   }
+
+  // Return the mate search engine object
+  _dfpnEnginePool.release(dfpn_engine);
 
   // Return the number of playouts
   return playouts;

@@ -7,6 +7,8 @@ from libcpp.vector cimport vector
 
 include "board.pyx"
 include "processor.pyx"
+include 'dfpn.pyx'
+
 
 cdef extern from "cpp/Candidate.h" namespace "deepshogi":
     cdef cppclass Candidate:

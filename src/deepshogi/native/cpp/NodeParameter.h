@@ -15,8 +15,6 @@ class NodeParameter {
    * @param nyugyokuScoreBlack Points required for black's entering king declaration
    * @param nyugyokuScoreWhite Points required for white's entering king declaration
    * @param drawTurn Number of moves until a draw
-   * @param checkSearchDepth Depth for mate search
-   * @param checkSearchNode Number of nodes for mate search
    * @param ucbConstant Constant multiplied to UCB upper confidence bound
    * @param pucbConstantInit Initial value applied to PUCB upper confidence bound
    * @param pucbConstantBase Base value applied to PUCB upper confidence bound
@@ -24,7 +22,6 @@ class NodeParameter {
   NodeParameter(
       Processor* processor,
       int32_t nyugyokuScoreBlack, int32_t nyugyokuScoreWhite, int32_t drawTurn,
-      int32_t checkSearchDepth, int32_t checkSearchNode,
       float ucbConstant, float pucbConstantInit, float pucbConstantBase);
 
   /**
@@ -55,18 +52,6 @@ class NodeParameter {
    * @return Number of moves until a draw
    */
   int32_t getDrawTurn() const;
-
-  /**
-   * Get the depth for mate search.
-   * @return Depth for mate search
-   */
-  int32_t getCheckSearchDepth() const;
-
-  /**
-   * Get the number of nodes for mate search.
-   * @return Number of nodes for mate search
-   */
-  int32_t getCheckSearchNode() const;
 
   /**
    * Get the constant multiplied to UCB upper confidence bound.
@@ -106,16 +91,6 @@ class NodeParameter {
    * Number of moves until a draw.
    */
   int32_t _drawTurn;
-
-  /**
-   * Depth for mate search.
-   */
-  int32_t _checkSearchDepth;
-
-  /**
-   * Number of nodes for mate search.
-   */
-  int32_t _checkSearchNode;
 
   /**
    * Constant multiplied to UCB upper confidence bound.

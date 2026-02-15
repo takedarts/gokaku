@@ -22,18 +22,6 @@ Move::Move(int32_t srcX, int32_t srcY, int32_t dstX, int32_t dstY, bool promote)
 }
 
 /**
- * Create a move object from cshogi's move representation.
- * @param cshogiMove cshogi move representation
- */
-Move::Move(int32_t cshogiMove)
-    : _srcX(((cshogiMove >> 7) & 0x7f) / BOARD_SIZE),
-      _srcY(((cshogiMove >> 7) & 0x7f) % BOARD_SIZE),
-      _dstX((cshogiMove & 0x7f) / BOARD_SIZE),
-      _dstY((cshogiMove & 0x7f) % BOARD_SIZE),
-      _promote(((cshogiMove >> 14) & 0x01) != 0) {
-}
-
-/**
  * Get the source X coordinate.
  * @return X coordinate
  */

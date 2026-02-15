@@ -7,6 +7,7 @@
 
 #include "Board.h"
 #include "Config.h"
+#include "DfpnEngine.h"
 #include "Evaluator.h"
 #include "Move.h"
 #include "NodeParameter.h"
@@ -35,17 +36,20 @@ class Node {
   void initialize(const std::string sfen);
 
   /**
-   * Evaluate the search node.
+   * Evaluate the search node and get the next node object to evaluate.
+   * If the next node object to evaluate does not exist, return nullptr.
    * @param equally If true, equalize the number of searches
    * @param width Search width (if 0, adjust automatically)
    * @param algorithm Search algorithm
-   * @param searchCheckMove If true, search for checkmate moves
+   * @param dfpnEngine Mate search engine object (nullptr if not searching for mate)
+   * @param checkSearchDepth Search depth for checkmate moves
    * @param temperature Temperature parameter for search
    * @param noise Strength of Gumbel noise for search
    * @return Evaluation result
    */
   NodeResult evaluate(
-      bool equally, int32_t width, int32_t algorithm, bool searchCheckMove,
+      bool equally, int32_t width, int32_t algorithm,
+      DfpnEngine* dfpnEngine, int32_t checkSearchDepth,
       float temperature, float noise);
 
   /**
@@ -101,11 +105,11 @@ class Node {
   Node* getChild(const Move& move);
 
   /**
-   * Get the checkmate move of this node.
-   * If no checkmate move is found, return MOVE_PASS.
-   * @return Checkmate move
+   * Get the checkmate moves of this node.
+   * If no checkmate moves are found, return an empty array.
+   * @return Checkmate moves
    */
-  Move getCheckMove() const;
+  std::vector<Move> getCheckmateMoves();
 
   /**
    * Get the number of searches for this node.
@@ -206,16 +210,6 @@ class Node {
   Evaluator _evaluator;
 
   /**
-   * Search depth for checkmate moves.
-   */
-  int32_t _checkSearchDepth;
-
-  /**
-   * Number of nodes searched for checkmate moves.
-   */
-  int32_t _checkSearchNode;
-
-  /**
    * Constant multiplied to UCB upper confidence bound.
    */
   float _ucbConstant;
@@ -251,19 +245,19 @@ class Node {
   std::set<int32_t> _waitingSet;
 
   /**
-   * Checkmate move.
+   * Checkmate moves found in this node.
    */
-  Move _checkMove;
+  std::vector<Move> _checkmateMoves;
 
   /**
-   * True if shallow (3-move) checkmate search has been executed.
+   * True if shallow (5-move) checkmate search has been executed.
    */
-  bool _checkMoveShallowSearched;
+  bool _checkmateMoveShallowSearched;
 
   /**
    * True if deep (DfPn) checkmate search has been executed.
    */
-  bool _checkMoveDeepSearched;
+  bool _checkmateMoveDeepSearched;
 
   /**
    * Number of searches.

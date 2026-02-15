@@ -291,13 +291,16 @@ class Player(object):
         dst: Tuple[int, int],
         promote: bool = False,
         piece: int | None = None,
-    ) -> None:
+    ) -> Tuple[Tuple[int, int], Tuple[int, int], bool]:
         '''Move a piece.
+        Return the move information (source, destination, True if promote).
         Args:
             src (Tuple[int, int]): Source coordinates
             dst (Tuple[int, int]): Destination coordinates
             promote (bool): True if promote
             piece (int): Type of piece after moving
+        Returns:
+            Tuple[Tuple[int, int], Tuple[int, int], bool]: Move information
         '''
         # If the type of piece after moving is specified,
         # determine whether to promote based on the piece type
@@ -309,6 +312,8 @@ class Player(object):
 
         # Move the piece
         self.native.play(src, dst, promote)
+
+        return src, dst, promote
 
     def get_random(
         self,

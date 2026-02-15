@@ -24,8 +24,7 @@ class Executor {
    * @param fp16 True to compute with 16-bit precision
    * @param deterministic True to make computation results reproducible
    */
-  Executor(
-      std::string model, int32_t gpu, int32_t batchSize, bool fp16, bool deterministic);
+  Executor(std::string model, int32_t gpu, int32_t batchSize, bool fp16, bool deterministic);
 
   /**
    * Destructor.

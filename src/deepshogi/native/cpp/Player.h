@@ -4,7 +4,6 @@
 #include <cstdint>
 #include <functional>
 #include <mutex>
-#include <queue>
 #include <thread>
 #include <tuple>
 #include <vector>
@@ -12,6 +11,7 @@
 #include "Board.h"
 #include "Candidate.h"
 #include "Config.h"
+#include "DfpnEnginePool.h"
 #include "Node.h"
 #include "NodeManager.h"
 #include "Processor.h"
@@ -137,6 +137,11 @@ class Player {
   std::unique_ptr<std::thread> _thread;
 
   /**
+   * Pool of mate search engines.
+   */
+  DfpnEnginePool _dfpnEnginePool;
+
+  /**
    * Root node.
    */
   Node* _root;
@@ -150,6 +155,11 @@ class Player {
    * Maximum number of visits for search.
    */
   int32_t _maxVisits;
+
+  /**
+   * Depth of long mate sequences.
+   */
+  int32_t _checkSearchDepth;
 
   /**
    * Number of search visits.

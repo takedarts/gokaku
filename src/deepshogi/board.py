@@ -2,7 +2,8 @@ from typing import List, Tuple
 
 import numpy as np
 
-from .config import BOARD_SIZE, COLOR_NONE, DEFAULT_DRAW_TURN, DEFAULT_NYUGYOKU_SCORES
+from .config import (BOARD_SIZE, COLOR_NONE, DEFAULT_DRAW_TURN,
+                     DEFAULT_INITIAL_SFEN, DEFAULT_NYUGYOKU_SCORES)
 from .exception import ShogiException
 from .native import NativeBoard
 
@@ -20,8 +21,7 @@ def is_hand_position(pos: Tuple[int, int]) -> bool:
 class Board(object):
     def __init__(
         self,
-        initial_sfen: str | None = None,
-        initial_packed_sfen: np.ndarray | None = None,
+        initial_sfen: str = DEFAULT_INITIAL_SFEN,
         nyugyoku_scores: Tuple[int, int] | int = DEFAULT_NYUGYOKU_SCORES,
         draw_turn: int = DEFAULT_DRAW_TURN,
     ) -> None:
@@ -29,7 +29,6 @@ class Board(object):
         Initialize the board object.
         Args:
             initial_sfen (str): SFEN string of the initial board
-            initial_packed_sfen (np.ndarray): Huffman encoded SFEN data of the initial board
             nyugyoku_scores (Tuple[int, int]): Points required for nyugyoku declaration
             draw_turn (int): Number of moves for a draw
         '''
@@ -37,11 +36,7 @@ class Board(object):
             nyugyoku_scores = (nyugyoku_scores, nyugyoku_scores)
 
         self.native = NativeBoard(nyugyoku_scores, draw_turn)
-
-        if initial_sfen is not None:
-            self.native.initialize_with_sfen(initial_sfen)
-        elif initial_packed_sfen is not None:
-            self.native.initialize_with_packed_sfen(initial_packed_sfen)
+        self.native.initialize(initial_sfen)
 
     def play(
         self,
@@ -112,6 +107,13 @@ class Board(object):
         '''
         return self.native.get_hand_piece_num(color, piece)
 
+    def get_last_move(self) -> Tuple[Tuple[int, int], Tuple[int, int], bool]:
+        '''Get the last move.
+        Returns:
+            Tuple[Tuple[int, int], Tuple[int, int], bool]: Last move
+        '''
+        return self.native.get_last_move()
+
     def get_attackers(self, pos: Tuple[int, int]) -> List[Tuple[int, int]]:
         '''Get a list of positions of pieces attacking the specified coordinates.
         Args:
@@ -121,53 +123,55 @@ class Board(object):
         '''
         return self.native.get_attackers(pos[0], pos[1])
 
-    def get_legal_moves(self) -> List[Tuple[Tuple[int, int], Tuple[int, int], bool]]:
-        '''Return legal moves.
+    def get_legal_moves(
+        self,
+        remove_unpromote: bool = True,
+        checkmate_only: bool = False,
+    ) -> List[Tuple[Tuple[int, int], Tuple[int, int], bool]]:
+        '''Get legal moves.
+        Args:
+            remove_unpromote (bool): True to remove non-promotion moves for pawns, bishops, and rooks
+            checkmate_only (bool): True to get only checking moves
         Returns:
             List[Tuple[Tuple[int, int], Tuple[int, int], bool]]: List of legal moves
         '''
-        return self.native.get_legal_moves()
+        return self.native.get_legal_moves(remove_unpromote, checkmate_only)
 
-    def get_history_moves(self) -> List[Tuple[Tuple[int, int], Tuple[int, int], bool]]:
-        '''Return a list of move history.
-        Returns:
-            List[Tuple[Tuple[int, int], Tuple[int, int], bool]]: List of move history
-        '''
-        return self.native.get_history_moves()
-
-    def search_check_move(
+    def get_checkmate_moves(
         self,
-        check_search_depth: int = 31,
-        check_search_node: int = 10_000,
-    ) -> Tuple[Tuple[int, int], Tuple[int, int], bool] | None:
-        '''Search for a checkmate sequence and return the first move.
-        Returns None if no move is found.
+        depth: int,
+    ) -> List[Tuple[Tuple[int, int], Tuple[int, int], bool]]:
+        '''Get the checkmate moves for the current board.
         Args:
-            check_search_depth (int): Depth for checkmate search
-            check_search_node (int): Number of nodes for checkmate search
+            depth (int): Depth of the checkmate search
         Returns:
-            Tuple[Tuple[int, int], Tuple[int, int], bool] | None: Move in the checkmate sequence
+            List[Tuple[Tuple[int, int], Tuple[int, int], bool]]: List of checkmate moves
         '''
-        move = self.native.search_check_move(check_search_depth, check_search_node)
+        return self.native.get_checkmate_moves(depth)
 
-        if move[0][0] == -1:
-            return None
-
-        return move
-
-    def is_nyugyoku(self) -> bool:
+    def is_nyugyoku(self, color: int | None = None) -> bool:
         '''Determine nyugyoku (entering king).
+        Args:
+            color (int | None): Side to move (if None, use current side)
         Returns:
             bool: True if nyugyoku
         '''
-        return self.native.is_nyugyoku()
+        if color is None:
+            color = self.get_color()
 
-    def is_checkmate(self) -> bool:
+        return self.native.is_nyugyoku(color)
+
+    def is_checkmate(self, color: int | None = None) -> bool:
         '''Determine checkmate.
+        Args:
+            color (int | None): Side to move (if None, use current side)
         Returns:
             bool: True if checkmate
         '''
-        return self.native.is_checkmate()
+        if color is None:
+            color = self.get_color()
+
+        return self.native.is_checkmate(color)
 
     def get_sfen(self) -> str:
         '''Return the current position in SFEN format.
@@ -175,13 +179,6 @@ class Board(object):
             str: SFEN string representing the current position
         '''
         return self.native.get_sfen()
-
-    def get_packed_sfen(self) -> np.ndarray:
-        '''Return the current position as Huffman encoded board information.
-        Returns:
-            str: Huffman encoded board information
-        '''
-        return self.native.get_packed_sfen()
 
     def get_inputs(
         self,
@@ -212,7 +209,7 @@ class Board(object):
 
     def __str__(self) -> str:
         '''Return the board as a string.'''
-        return self.native.dump()
+        return self.native.to_string()
 
     def __repr__(self) -> str:
         '''Return the board as a string.'''

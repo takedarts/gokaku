@@ -1,12 +1,21 @@
 #pragma once
 
+#include <cstdint>
+#include <string>
+#include <vector>
+
+#include "Config.h"
 #include "Move.h"
-#include "cshogi/cshogi.h"
 
 namespace deepshogi {
 
 class Board {
  public:
+  /**
+   * Create a board instance.
+   */
+  Board();
+
   /**
    * Create an instance of the initial board.
    * @param nyugyokuScoreBlack Score required for nyugyoku declaration for black
@@ -22,11 +31,6 @@ class Board {
   Board(const Board& board);
 
   /**
-   * Create a board instance.
-   */
-  Board();
-
-  /**
    * Destroy the instance.
    */
   virtual ~Board() = default;
@@ -35,13 +39,7 @@ class Board {
    * Initialize the board with an SFEN string.
    * @param sfen SFEN string
    */
-  void initializeWithSfen(const std::string& sfen);
-
-  /**
-   * Initialize the board with Huffman encoded board information.
-   * @param data Huffman encoded board information
-   */
-  void initializeWithPackedSfen(char* data);
+  void initialize(const std::string& sfen);
 
   /**
    * Move a piece.
@@ -61,6 +59,12 @@ class Board {
    * @return Current number of moves
    */
   int32_t getTurn() const;
+
+  /**
+   * Get the number of moves until draw.
+   * @return Number of moves until draw
+   */
+  int32_t getDrawTurn() const;
 
   /**
    * Get the piece at the specified coordinates.
@@ -86,6 +90,12 @@ class Board {
   int32_t getHandPieceNum(int32_t color, int32_t piece) const;
 
   /**
+   * Get the last move.
+   * @return Last move
+   */
+  Move getLastMove() const;
+
+  /**
    * Get list of coordinates of pieces attacking the specified coordinates.
    * @param x X coordinate
    * @param y Y coordinate
@@ -95,51 +105,38 @@ class Board {
 
   /**
    * Get list of legal moves for the current board.
-   * Returns a list of legal moves with non-promoting moves for pawn, bishop, and rook removed.
+   * @param removeUnpromote True to remove unpromoted moves for pawns, bishops, and rooks
+   * @param checkmateOnly True to get only checking moves
    * @return List of legal moves
    */
-  std::vector<Move> getLegalMoves() const;
+  std::vector<Move> getLegalMoves(bool removeUnpromote, bool checkmateOnly) const;
 
   /**
-   * Get move history.
-   * @return Move history
+   * Get list of moves in checkmate sequence for the current board.
+   * @param depth Depth for checkmate sequence search
+   * @return List of moves in checkmate sequence
    */
-  std::vector<Move> getHistoryMoves() const;
-
-  /**
-   * Search for checkmate sequence and return the first move.
-   * If no checkmate sequence is found, returns pass (MOVE_PASS).
-   * If checkSearchNode is 0, performs exhaustive search.
-   * If checkSearchNode is 1 or more, uses the df-pn algorithm for search.
-   * @param checkSearchDepth Depth for checkmate sequence search
-   * @param checkSearchNode Number of nodes for checkmate sequence search (0 for exhaustive search)
-   * @return Move in checkmate sequence
-   */
-  Move searchCheckMove(int32_t checkSearchDepth, int32_t checkSearchNode);
+  std::vector<Move> getCheckmateMoves(int32_t depth) const;
 
   /**
    * Return true if nyugyoku declaration is possible.
+   * @param color Side to move
    * @return True if nyugyoku declaration is possible
    */
-  bool isNyugyoku() const;
+  bool isNyugyoku(int32_t color) const;
 
   /**
    * Return true if in checkmate.
+   * @param color Side to move
    * @return True if in checkmate
    */
-  bool isCheckmate() const;
+  bool isCheckmate(int32_t color) const;
 
   /**
    * Get SFEN string.
    * @return SFEN string
    */
   std::string getSfen() const;
-
-  /**
-   * Get Huffman encoded board information.
-   * @param data Buffer to store Huffman encoded board information
-   */
-  void getPackedSfen(char* data) const;
 
   /**
    * Get data to input to the model.
@@ -165,35 +162,48 @@ class Board {
    * Get string for displaying board information.
    * @return String for displaying board information
    */
-  std::string dump() const;
-
-  /**
-   * Output the board state.
-   * @param os Output destination
-   */
-  void print(std::ostream& os = std::cout) const;
+  std::string toString() const;
 
  private:
   /**
-   * Object to hold board information.
-   * Uses cshogi's __Board class.
+   * Piece information for each square on the board.
    */
-  cshogi::__Board _board;
+  uint8_t _cells[BOARD_SIZE][BOARD_SIZE];
 
   /**
-   * Score required for nyugyoku declaration for black.
+   * Hand piece information for black.
    */
-  int32_t _nyugyokuScoreBlack;
+  uint8_t _hands[2][PIECE_HAND_END - PIECE_HAND_BEGIN];
 
   /**
-   * Score required for nyugyoku declaration for white.
+   * King positions (0: black, 1: white).
    */
-  int32_t _nyugyokuScoreWhite;
+  int32_t _kingPositions[2];
+
+  /**
+   * Side to move.
+   */
+  int32_t _color;
+
+  /**
+   * Current number of moves.
+   */
+  int32_t _turn;
+
+  /**
+   * Scores required for nyugyoku declaration (0: black, 1: white).
+   */
+  int32_t _nyugyokuScores[2];
 
   /**
    * Number of moves until draw.
    */
   int32_t _drawTurn;
+
+  /**
+   * Last move.
+   */
+  Move _lastMove;
 
   /**
    * Get board data to input to the model.

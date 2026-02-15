@@ -28,25 +28,24 @@ cdef extern from "cpp/Board.h" namespace "deepshogi":
     cdef cppclass Board:
         Board(int32_t, int32_t, int32_t) except +
         bool play(const Move&)
-        void initializeWithSfen(const string)
-        void initializeWithPackedSfen(char *)
+        void initialize(const string)
         int32_t getColor() const
         int32_t getTurn() const
         int32_t getPiece(int32_t, int32_t) const
         int32_t getMovedPiece(const Move&) const
         int32_t getHandPieceNum(int32_t, int32_t) const
+        Move getLastMove() const
         vector[pair[int32_t, int32_t]] getAttackers(int32_t, int32_t) const
-        vector[Move] getLegalMoves() const
-        vector[Move] getHistoryMoves() const
-        Move searchCheckMove(int32_t, int32_t) const
-        bool isNyugyoku() const
-        bool isCheckmate() const
+        vector[Move] getLegalMoves(bool, bool) const
+        vector[Move] getCheckmateMoves(int32_t) const
+        bool isNyugyoku(int32_t) const
+        bool isCheckmate(int32_t) const
         string getSfen() const
-        void getPackedSfen(char *) const
         void getInputs(int32_t*) const
         void getInputs(int32_t*, int32_t, int32_t) const
         void copyFrom(Board*)
-        string dump() const
+        string toString() const
+
 
 cdef class NativeBoard:
     cdef Board *board
@@ -63,24 +62,13 @@ cdef class NativeBoard:
         '''Destroy board object.'''
         del self.board
 
-    def initialize_with_sfen(self, sfen: str) -> None:
+    def initialize(self, sfen: str) -> None:
         '''
         Initialize board with SFEN string.
         Args:
             sfen (str): SFEN string
         '''
-        self.board.initializeWithSfen(sfen.encode('utf-8'))
-
-    def initialize_with_packed_sfen(self, data: numpy.ndarray) -> None:
-        '''
-        Initialize board with Huffman encoded board information.
-        Args:
-            data (numpy.ndarray): Huffman encoded board information
-        '''
-        data = numpy.ascontiguousarray(data, dtype=numpy.uint8)
-        assert data.shape[0] == 32
-
-        self.board.initializeWithPackedSfen(<char *>data.data)
+        self.board.initialize(sfen.encode('utf-8'))
 
     def play(self, src: Tuple[int, int], dst: Tuple[int, int], promote: bool) -> bool:
         '''Apply move.
@@ -137,6 +125,17 @@ cdef class NativeBoard:
         '''
         return self.board.getHandPieceNum(color, piece)
 
+    def get_last_move(self) -> Tuple[Tuple[int, int], Tuple[int, int], bool]:
+        '''Get the last move.
+        Returns:
+            Tuple[Tuple[int, int], Tuple[int, int], bool]: Last move
+        '''
+        cdef Move move = self.board.getLastMove()
+        return (
+            (move.getSrcX(), move.getSrcY()),
+            (move.getDstX(), move.getDstY()),
+            move.isPromote())
+
     def get_attackers(self, x: int, y: int) -> List[Tuple[int,int]]:
         '''Get list of pieces attacking specified coordinates.
         Args:
@@ -148,13 +147,20 @@ cdef class NativeBoard:
         cdef vector[pair[int32_t, int32_t]] attackers = self.board.getAttackers(x, y)
         return [(attacker.first, attacker.second) for attacker in attackers]
 
-    def get_legal_moves(self) -> List[Tuple[int, int], Tuple[int, int], bool]:
+    def get_legal_moves(
+        self,
+        remove_unpromote: bool,
+        checkmate_only: bool,
+    ) -> List[Tuple[int, int], Tuple[int, int], bool]:
         '''
         Get list of legal moves.
-        Return:
+        Args:
+            remove_unpromote (bool): True to remove unpromoted moves for pawn, bishop, and rook
+            checkmate_only (bool): True to get only checkmate moves
+        Returns:
             List[Tuple[int, int], Tuple[int, int], bool]: List of legal moves
         '''
-        cdef vector[Move] moves = self.board.getLegalMoves()
+        cdef vector[Move] moves = self.board.getLegalMoves(remove_unpromote, checkmate_only)
 
         return [
             ((moves[i].getSrcX(), moves[i].getSrcY()),
@@ -162,77 +168,49 @@ cdef class NativeBoard:
              moves[i].isPromote())
             for i in range(moves.size())]
 
-    def get_history_moves(self) -> List[Tuple[int, int], Tuple[int, int], bool]:
+    def get_checkmate_moves(self, depth: int) -> List[Tuple[Tuple[int, int], Tuple[int, int], bool]]:
         '''
-        Get list of move history.
-        Return:
-            List[Tuple[int, int], Tuple[int, int], bool]: List of move history
-        '''
-        cdef vector[Move] moves = self.board.getHistoryMoves()
-
-        return [
-            ((moves[i].getSrcX(), moves[i].getSrcY()),
-             (moves[i].getDstX(), moves[i].getDstY()),
-             moves[i].isPromote())
-            for i in range(moves.size())]
-
-    def search_check_move(
-        self,
-        check_search_depth: int,
-        check_search_node: int,
-    ) -> Tuple[Tuple[int, int], Tuple[int, int], bool]:
-        '''
-        Search for checkmate sequence and return the first move.
+        Get checkmate sequence moves from the current board.
         Args:
-            check_search_depth (int): Depth for checkmate search
-            check_search_node (int): Number of nodes for checkmate search
-        Return:
-            Tuple[Tuple[int, int], Tuple[int, int], bool]: First move in checkmate sequence
+            depth (int): Depth for checkmate search
+        Returns:
+            List[Tuple[Tuple[int, int], Tuple[int, int], bool]]: Checkmate sequence moves
         '''
-        cdef Move move = self.board.searchCheckMove(
-            check_search_depth, check_search_node)
+        cdef vector[Move] moves = self.board.getCheckmateMoves(depth)
 
-        return (
-            (move.getSrcX(), move.getSrcY()),
-            (move.getDstX(), move.getDstY()),
-            move.isPromote())
+        return [
+            ((moves[i].getSrcX(), moves[i].getSrcY()),
+             (moves[i].getDstX(), moves[i].getDstY()),
+             moves[i].isPromote())
+            for i in range(moves.size())]
 
-    def is_nyugyoku(self) -> bool:
+    def is_nyugyoku(self, color: int) -> bool:
         '''
         Return True if nyugyoku declaration is possible.
-        Return:
+        Args:
+            color (int): Side to move
+        Returns:
             bool: True if nyugyoku declaration is possible
         '''
-        return self.board.isNyugyoku()
+        return self.board.isNyugyoku(color)
 
-    def is_checkmate(self) -> bool:
+    def is_checkmate(self, color: int) -> bool:
         '''
         Determine if in checkmate.
-        Return:
+        Args:
+            color (int): Side to move
+        Returns:
             bool: True if in checkmate
         '''
-        return self.board.isCheckmate()
+        return self.board.isCheckmate(color)
 
     def get_sfen(self) -> str:
         '''
         Get SFEN string of the board.
-        Return:
+        Returns:
             str: SFEN string
         '''
         return self.board.getSfen().decode('utf-8')
-
-    def get_packed_sfen(self) -> numpy.ndarray:
-        '''
-        Get Huffman encoded board information.
-        Return:
-            numpy.ndarray: Huffman encoded board information
-        '''
-        cdef numpy.ndarray[numpy.uint8_t, ndim=1, mode="c"] data = numpy.zeros(
-            32, dtype=numpy.uint8)
-
-        self.board.getPackedSfen(<char *>data.data)
-
-        return data
 
     def get_inputs(self, color: int, turn: int) -> numpy.ndarray:
         '''Get board data to input to inference model.
@@ -260,10 +238,10 @@ cdef class NativeBoard:
         '''
         self.board.copyFrom(board.board)
 
-    def dump(self) -> str:
+    def to_string(self) -> str:
         '''
         Get string representation of the board.
-        Return:
+        Returns:
             str: String representation of the board
         '''
-        return self.board.dump().decode('utf-8')
+        return self.board.toString().decode('utf-8')

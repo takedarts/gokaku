@@ -1,6 +1,6 @@
 #pragma once
 
-#include "cshogi/cshogi.h"
+#include <cstdint>
 
 namespace deepshogi {
 
@@ -23,12 +23,6 @@ class Move {
    * @param promote True if promotion
    */
   Move(int32_t srcX, int32_t srcY, int32_t dstX, int32_t dstY, bool promote);
-
-  /**
-   * Create a move object from cshogi's move representation.
-   * @param cshogiMove cshogi move representation
-   */
-  Move(int32_t cshogiMove);
 
   /**
    * Copy constructor.

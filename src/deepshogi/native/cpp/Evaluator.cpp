@@ -265,7 +265,7 @@ void Evaluator::evaluate(Board* board) {
   _processor->execute(inputs, outputs, 1);
 
   // Create list of candidate moves
-  std::vector<Move> legal_moves = board->getLegalMoves();
+  std::vector<Move> legal_moves = board->getLegalMoves(true, false);
 
   for (Move move : legal_moves) {
     // Calculate Policy index

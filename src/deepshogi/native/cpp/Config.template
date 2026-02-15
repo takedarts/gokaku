@@ -54,9 +54,9 @@
 #define PIECE_HAND_LANCE        (${PIECE_HAND_LANCE})
 #define PIECE_HAND_KNIGHT       (${PIECE_HAND_KNIGHT})
 #define PIECE_HAND_SILVER       (${PIECE_HAND_SILVER})
-#define PIECE_HAND_GOLD         (${PIECE_HAND_GOLD})
 #define PIECE_HAND_BISHOP       (${PIECE_HAND_BISHOP})
 #define PIECE_HAND_ROOK         (${PIECE_HAND_ROOK})
+#define PIECE_HAND_GOLD         (${PIECE_HAND_GOLD})
 #define PIECE_HAND_END          (${PIECE_HAND_END})
 
 // Model configuration values
