@@ -3,7 +3,6 @@
 #include <string.h>
 
 #include <algorithm>
-#include <iostream>
 #include <memory>
 #include <sstream>
 
@@ -419,6 +418,35 @@ static std::vector<Move> getLegalHandMoves(
               if ((dst_piece < PIECE_WHITE_BEGIN || PIECE_WHITE_END <= dst_piece) &&
                   !isCheckedPosition(temp_cells, dst_x, dst_y, COLOR_WHITE)) {
                 rescue_move_found = true;
+                break;
+              }
+            }
+          }
+
+          // Check if there is an opponent piece that can capture the pawn
+          if (!rescue_move_found) {
+            for (std::pair<int32_t, int32_t> pos : getAttackerPositions(temp_cells, x, y)) {
+              uint8_t attacker_piece = temp_cells[pos.second][pos.first];
+
+              // Skip if not an opponent piece other than the king
+              if (attacker_piece == PIECE_WHITE_KING ||
+                  attacker_piece < PIECE_WHITE_BEGIN || PIECE_WHITE_END <= attacker_piece) {
+                continue;
+              }
+
+              // Move the opponent piece
+              temp_cells[y][x] = attacker_piece;
+              temp_cells[pos.second][pos.first] = PIECE_EMPTY;
+
+              if (!isCheckedPosition(temp_cells, x, y - 1, COLOR_WHITE)) {
+                rescue_move_found = true;
+              }
+
+              // Restore the board state
+              temp_cells[y][x] = PIECE_BLACK_PAWN;
+              temp_cells[pos.second][pos.first] = attacker_piece;
+
+              if (rescue_move_found) {
                 break;
               }
             }
