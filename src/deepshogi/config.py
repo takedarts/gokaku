@@ -183,11 +183,11 @@ SEARCH_PUCB = 1
 # Default initial board
 DEFAULT_INITIAL_SFEN = 'lnsgkgsnl/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL b - 1'
 # Default depth for checkmate search
-DEFAULT_CHECK_SEARCH_DEPTH = 31
+DEFAULT_CHECK_SEARCH_DEPTH = 21
 # Default number of nodes for checkmate search
 DEFAULT_CHECK_SEARCH_NODE = 10_000
 # Default node depth for checkmate search
-DEFAULT_CHECK_NODE_DEPTH = 4
+DEFAULT_CHECK_NODE_DEPTH = 2
 # Default number of allowed repeats of the same position
 DEFAULT_ALLOWED_REPEATS = 3
 # Default points required for nyugyoku declaration

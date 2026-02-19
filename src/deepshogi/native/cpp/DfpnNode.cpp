@@ -1,6 +1,7 @@
 #include "DfpnNode.h"
 
 #include <algorithm>
+#include <cmath>
 #include <sstream>
 
 #include "DfpnEngine.h"
@@ -147,13 +148,13 @@ void DfpnNode::update(int32_t depth_limit) {
         _pn = child->getPn();
       }
 
-      _dn += child->getDn();
+      _dn = std::min(_dn + child->getDn(), 0xffff);
 
       if (_step > child->getStep() + 1) {
         _step = child->getStep() + 1;
       }
 
-      _size += child->getSize();
+      _size = std::min(_size + child->getSize(), 0xffff);
     }
   }
   // If it's the turn to escape from check
@@ -166,7 +167,7 @@ void DfpnNode::update(int32_t depth_limit) {
     for (auto& child_pair : _children) {
       DfpnNode* child = child_pair.second;
 
-      _pn += child->getPn();
+      _pn = std::min(_pn + child->getPn(), 0xffff);
 
       if (child->getDn() < _dn) {
         _dn = child->getDn();
@@ -176,7 +177,7 @@ void DfpnNode::update(int32_t depth_limit) {
         _step = child->getStep() + 1;
       }
 
-      _size += child->getSize();
+      _size = std::min(_size + child->getSize(), 0xffff);
     }
   }
 }
@@ -192,7 +193,7 @@ DfpnNode* DfpnNode::getNextNode() {
   if (_depth % 2 == 0) {
     // Find the child node with the minimum PN value among the nodes
     // whose mate/non-mate status is not yet determined
-    float min_priority = 0xffff;
+    float max_priority = 0.0f;
 
     for (auto& child_pair : _children) {
       DfpnNode* child = child_pair.second;
@@ -201,17 +202,17 @@ DfpnNode* DfpnNode::getNextNode() {
         continue;
       }
 
-      float priority = child->getPn() + std::log(child->getSize());
+      float priority = 1.0f / (child->getPn() + std::log(child->getSize()));
 
-      if (priority < min_priority) {
-        min_priority = priority;
+      if (priority > max_priority) {
+        max_priority = priority;
         next_node = child;
       }
     }
   } else {
     // Find the child node with the minimum DN value among the nodes
     // whose mate/non-mate status is not yet determined
-    float min_priority = 0xffff;
+    float max_priority = 0.0f;
 
     for (auto& child_pair : _children) {
       DfpnNode* child = child_pair.second;
@@ -220,10 +221,10 @@ DfpnNode* DfpnNode::getNextNode() {
         continue;
       }
 
-      float priority = child->getDn() + std::log(child->getSize());
+      float priority = 1.0f / (child->getDn() + std::log(child->getSize()));
 
-      if (priority < min_priority) {
-        min_priority = priority;
+      if (priority > max_priority) {
+        max_priority = priority;
         next_node = child;
       }
     }

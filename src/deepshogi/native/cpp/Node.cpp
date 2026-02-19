@@ -73,7 +73,6 @@ NodeResult Node::evaluate(
     DfpnEngine* dfpnEngine, int32_t checkSearchDepth,
     float temperature, float noise) {
   NodeResult result;
-  Board search_board;
 
   {
     std::unique_lock<std::shared_mutex> lock(_evalMutex);
@@ -97,16 +96,12 @@ NodeResult Node::evaluate(
 
     // Mark that long checkmate search has been executed
     _checkmateMoveDeepSearched = true;
-
-    // Duplicate the board for checkmate search
-    // Duplicate via SFEN for complete separation
-    search_board.initialize(_board.getSfen());
   }
 
   // Asynchronously execute long checkmate search
-  int32_t remain_turn = search_board.getDrawTurn() - search_board.getTurn() + 1;
+  int32_t remain_turn = _board.getDrawTurn() - _board.getTurn() + 1;
   int32_t search_depth = std::min(checkSearchDepth, remain_turn);
-  std::vector<Move> checkmate_moves = dfpnEngine->getCheckmateMoves(&search_board, search_depth);
+  std::vector<Move> checkmate_moves = dfpnEngine->getCheckmateMoves(&_board, search_depth);
 
   // Save the result of the checkmate search
   {
