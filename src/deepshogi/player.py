@@ -417,10 +417,14 @@ class Player(object):
             # If it is a draw (sennichite), set the specified penalty
             if game_over:
                 if result == RESULT_SENNICHITE and winner == COLOR_NONE:
-                    candidate.value = get_opposite_color(candidate.color) * sennichite_penalty
+                    value = get_opposite_color(candidate.color) * sennichite_penalty
                 else:
-                    candidate.value = winner
+                    value = winner
 
+                candidate.value = value
+                candidate.minimax = value
+                candidate.value_lcb = value
+                candidate.minimax_lcb = value
                 continue
 
             # If not judging repetition for the next side to move, proceed to the next
@@ -441,9 +445,15 @@ class Player(object):
                     continue
                 elif candidate.color == COLOR_BLACK:
                     candidate.value = min(candidate.value, -1 * sennichite_penalty)
+                    candidate.minimax = min(candidate.minimax, -1 * sennichite_penalty)
+                    candidate.value_lcb = min(candidate.value_lcb, -1 * sennichite_penalty)
+                    candidate.minimax_lcb = min(candidate.minimax_lcb, -1 * sennichite_penalty)
                     break
                 else:
                     candidate.value = max(candidate.value, sennichite_penalty)
+                    candidate.minimax = max(candidate.minimax, sennichite_penalty)
+                    candidate.value_lcb = max(candidate.value_lcb, sennichite_penalty)
+                    candidate.minimax_lcb = max(candidate.minimax_lcb, sennichite_penalty)
                     break
 
         # Sort candidate moves
