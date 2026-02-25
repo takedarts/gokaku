@@ -1473,10 +1473,21 @@ bool Board::isNyugyoku(int32_t color) const {
     return false;
   }
 
+  // [Condition 2] The declaring side's king has entered the opponent's camp
+  // (innermost three rows).
+  if (color == COLOR_BLACK) {
+    if (_kingPositions[0] < 0 || _kingPositions[0] >= BOARD_SIZE * 3) {
+      return false;
+    }
+  } else {
+    if (_kingPositions[1] < 0 || _kingPositions[1] < BOARD_SIZE * (BOARD_SIZE - 3)) {
+      return false;
+    }
+  }
+
   // Check pieces within the opponent's camp (innermost three rows)
   int32_t nyugyoku_score = 0;
   int32_t nyugyoku_count = 0;
-  bool king_found = false;
 
   if (color == COLOR_BLACK) {
     for (int32_t y = 0; y <= 2; y++) {
@@ -1489,7 +1500,6 @@ bool Board::isNyugyoku(int32_t color) const {
         }
 
         if (piece == PIECE_BLACK_KING) {
-          king_found = true;
           continue;
         }
 
@@ -1514,7 +1524,6 @@ bool Board::isNyugyoku(int32_t color) const {
         }
 
         if (piece == PIECE_WHITE_KING) {
-          king_found = true;
           continue;
         }
 
@@ -1528,12 +1537,6 @@ bool Board::isNyugyoku(int32_t color) const {
         nyugyoku_count += 1;
       }
     }
-  }
-
-  // [Condition 2] The declaring side's king has entered the opponent's camp
-  // (innermost three rows).
-  if (!king_found) {
-    return false;
   }
 
   // [Condition 4] The declaring side has 10 or more pieces (excluding the king)
