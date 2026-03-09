@@ -6,11 +6,18 @@
 
 #include <cstdint>
 #include <string>
+#include <vector>
 
 namespace deepshogi {
 
 class Model {
  public:
+  /**
+   * Get the list of available GPU numbers.
+   * @return List of GPU numbers
+   */
+  static std::vector<std::int32_t> getAvailableGPUs();
+
   /**
    * Create a model object.
    * If -1 is specified for the GPU number, create an object that computes using the CPU.

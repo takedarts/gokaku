@@ -44,6 +44,32 @@ static at::ScalarType getScalarType(int32_t gpu, bool fp16) {
 }
 
 /**
+ * Get the list of available GPU numbers.
+ * @return List of GPU numbers
+ */
+std::vector<std::int32_t> Model::getAvailableGPUs() {
+  // Return all GPU numbers if CUDA is available
+  if (torch::cuda::is_available()) {
+    int32_t gpuCount = torch::cuda::device_count();
+    std::vector<std::int32_t> gpus;
+
+    for (int32_t i = 0; i < gpuCount; ++i) {
+      gpus.push_back(i);
+    }
+
+    return gpus;
+  }
+
+  // Return GPU number 0 if MPS is available
+  if (torch::mps::is_available()) {
+    return {0};
+  }
+
+  // Return -1 to indicate no GPU is available
+  return {-1};
+}
+
+/**
  * Create a model object.
  * If -1 is specified for the GPU number, create an object that computes using the CPU.
  * @param filename Model file

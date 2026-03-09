@@ -7,7 +7,6 @@ from pathlib import Path
 from typing import List
 
 import cmake
-import torch
 from deepshogi import config
 
 SRC_PATH = Path(__file__).parent.absolute()
@@ -18,15 +17,31 @@ def parse_args() -> argparse.Namespace:
         description='Build native codes',
         formatter_class=argparse.RawTextHelpFormatter)
     parser.add_argument(
+        '--torch-path', type=str, default=None, help='Path to libtorch.')
+    parser.add_argument(
         '--debug', action='store_true', default=False, help='Build with debug options.')
     parser.add_argument(
         '--clean', action='store_true', default=False, help='Clean object files only.')
     return parser.parse_args()
 
 
-def make_files(path: str, debug: bool) -> None:
+def make_files(
+    base_path: str,
+    torch_path: str | None = None,
+    debug: bool = False,
+) -> None:
     '''Create Config.h'''
-    work_path = Path(__file__).parent / path
+    work_path = Path(__file__).parent / base_path
+
+    # If the path to libtorch is not specified, infer it from `torch.__file__`
+    if torch_path is None:
+        try:
+            import torch
+        except ModuleNotFoundError:
+            raise Exception(
+                'torch is not found. Please specify --torch-path or install pytorch.')
+
+        torch_path = str(Path(torch.__file__).parent).replace('\\', '/')
 
     # Create Config.h
     config_path = work_path / 'cpp' / 'Config.h'
@@ -37,7 +52,6 @@ def make_files(path: str, debug: bool) -> None:
         config_path.write_text(config_text)
 
     # Create CMakeLists.txt
-    torch_path = str(Path(torch.__file__).parent).replace('\\', '/')
     cpp_paths = [
         p.relative_to(work_path) for p in sorted((work_path / 'cpp').glob('**/*.cpp'))]
     cpp_files = ' '.join(map(str, cpp_paths)).replace('\\', '/')
@@ -136,13 +150,13 @@ def clean(path: str) -> None:
 
 def main() -> None:
     args = parse_args()
-    path = 'deepshogi/native'
+    base_path = 'deepshogi/native'
 
     if args.clean:
-        clean(path)
+        clean(base_path)
     else:
-        make_files(path, args.debug)
-        run_cmake(path)
+        make_files(base_path, args.torch_path, args.debug)
+        run_cmake(base_path)
 
 
 if __name__ == '__main__':

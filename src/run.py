@@ -1,7 +1,6 @@
 import argparse
 import sys
 
-import torch
 from deepshogi.config import (DEFAULT_CHECK_NODE_DEPTH,
                               DEFAULT_CHECK_SEARCH_DEPTH,
                               DEFAULT_CHECK_SEARCH_NODE, DEFAULT_DRAW_TURN,
@@ -90,12 +89,6 @@ def main() -> None:
 
     # Set up log output
     start_logging(debug=args.verbose, console=sys.stderr)
-
-    # Configure GPU settings
-    if torch.cuda.device_count() != 0:
-        torch.backends.cudnn.enabled = True
-        torch.backends.cudnn.benchmark = True
-        torch.backends.cudnn.deterministic = False
 
     # Create inference object
     processor = Processor(args.model, args.gpus, args.batch_size, args.fp16)

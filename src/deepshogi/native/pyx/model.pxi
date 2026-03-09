@@ -1,3 +1,4 @@
+from typing import List
 from libc.stdint cimport int32_t
 
 import numpy
@@ -9,6 +10,14 @@ from pyx.model cimport Model
 
 cdef class NativeModel:
     cdef Model *model
+
+    @staticmethod
+    def get_available_gpus() -> List[int]:
+        '''Get the list of available GPU IDs.
+        Returns:
+            list[int]: List of GPU IDs
+        '''
+        return Model.getAvailableGPUs()
 
     def __cinit__(self, model: str, gpu: int, fp16: bool, deterministic: bool) -> None:
         '''Create model object.
