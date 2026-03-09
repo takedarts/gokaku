@@ -1,120 +1,51 @@
 #include "Move.h"
 
+#include <sstream>
+
 #include "Config.h"
 
 namespace deepshogi {
 
 /**
- * Create a move object.
+ * Creates an invalid move object.
  */
-Move::Move() : Move(-1, -1, -1, -1, false) {}
-
-/**
- * Create a move object.
- * @param srcX Source X coordinate
- * @param srcY Source Y coordinate
- * @param dstX Destination X coordinate
- * @param dstY Destination Y coordinate
- * @param promote True if promotion
- */
-Move::Move(int32_t srcX, int32_t srcY, int32_t dstX, int32_t dstY, bool promote)
-    : _srcX(srcX), _srcY(srcY), _dstX(dstX), _dstY(dstY), _promote(promote) {
+Move::Move()
+    : _move(-1) {
 }
 
 /**
- * Get the source X coordinate.
- * @return X coordinate
+ * Creates a move object with source and destination coordinates and promotion flag.
+ * @param src Source position index
+ * @param dst Destination position index
+ * @param promote Whether to promote
  */
-int32_t Move::getSrcX() const {
-  return _srcX;
+Move::Move(const Position& src, const Position& dst, bool promote)
+    : _move(((src.getIndex() & 0x7F) << 7) |
+            ((dst.getIndex() & 0x7F) << 0) |
+            ((promote ? 1 : 0) << 14)) {
 }
 
 /**
- * Get the source Y coordinate.
- * @return Y coordinate
+ * Creates a move object with the specified move number.
+ * @param move Move number
  */
-int32_t Move::getSrcY() const {
-  return _srcY;
+Move::Move(int16_t move)
+    : _move(move) {
 }
 
 /**
- * Get the destination X coordinate.
- * @return X coordinate
+ * Returns the string representation of this move.
+ * @return String representation of the move.
  */
-int32_t Move::getDstX() const {
-  return _dstX;
-}
+std::string Move::toString() const {
+  if (_move < 0) {
+    return "invalid";
+  }
 
-/**
- * Get the destination Y coordinate.
- * @return Y coordinate
- */
-int32_t Move::getDstY() const {
-  return _dstY;
-}
-
-/**
- * Return true if promotion.
- * @return True if promotion
- */
-bool Move::isPromote() const {
-  return _promote;
-}
-
-/**
- * Return true if this is a pass move.
- * @return True if this is a pass move
- */
-bool Move::isPass() const {
-  return _srcX == -1;
-}
-
-/**
- * Return the value representing this move.
- * This value is the same as cshogi's move representation `move16`.
- * @return Value representing the move
- */
-int32_t Move::getValue() const {
-  return (
-      ((_srcX * BOARD_SIZE + _srcY) << 7) |
-      ((_dstX * BOARD_SIZE + _dstY) << 0) |
-      (_promote << 14));
-}
-
-/**
- * Return true if the moves are the same.
- */
-bool Move::operator==(const Move& move) const {
-  return (
-      _srcX == move._srcX &&
-      _srcY == move._srcY &&
-      _dstX == move._dstX &&
-      _dstY == move._dstY &&
-      _promote == move._promote);
-}
-
-/**
- * Return true if the moves are different.
- */
-bool Move::operator!=(const Move& move) const {
-  return (
-      _srcX != move._srcX ||
-      _srcY != move._srcY ||
-      _dstX != move._dstX ||
-      _dstY != move._dstY ||
-      _promote != move._promote);
-}
-
-/**
- * Return true if this move is less than the specified move.
- */
-bool Move::operator<(const Move& move) const {
-  return (
-      _srcX < move._srcX ||
-      _srcY < move._srcY ||
-      _dstX < move._dstX ||
-      _dstY < move._dstY ||
-      _promote < move._promote);
+  std::stringstream ss;
+  ss << getSrc() << " -> " << getDst();
+  ss << " (pro=" << (isPromote() ? "1" : "0") << ")";
+  return ss.str();
 }
 
 }  // namespace deepshogi

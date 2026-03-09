@@ -1,19 +1,22 @@
 from typing import List, Tuple
 
 from libc.stdint cimport int32_t
-from libcpp cimport bool
-from libcpp.pair cimport pair
 from libcpp.vector cimport vector
 
 import numpy
+
 cimport numpy
 
 from deepshogi.config import MODEL_INPUT_PACK_SIZE
+
 from pyx.board cimport Board
 from pyx.move cimport Move
+from pyx.position cimport Position
+from pyx.result cimport Result
 
 
 cdef class NativeBoard:
+    '''Class to manage the state of the board.'''
     cdef Board *board
 
     def __cinit__(self, nyugyoku_scores: Tuple[int, int], draw_turn: int) -> None:
@@ -36,16 +39,47 @@ cdef class NativeBoard:
         '''
         self.board.initialize(sfen.encode('utf-8'))
 
-    def play(self, src: Tuple[int, int], dst: Tuple[int, int], promote: bool) -> bool:
+    def play(
+        self,
+        src: Tuple[int, int],
+        dst: Tuple[int, int],
+        promote: bool,
+    ) -> Tuple[Tuple[int, int], Tuple[int, int], bool, int]:
         '''Apply move.
+        Returns the result of moving a piece:
+        (source coordinates, destination coordinates, promotion flag, captured piece type).
         Args:
             src (Tuple[int, int]): Source coordinates
             dst (Tuple[int, int]): Destination coordinates
             promote (bool): True if promote
         Returns:
-            bool: True if legal move
+            Tuple[Tuple[int, int], Tuple[int, int], bool, int]: Result of the move
         '''
-        return self.board.play(Move(src[0], src[1], dst[0], dst[1], promote))
+        cdef Position src_pos = Position(src[0], src[1])
+        cdef Position dst_pos = Position(dst[0], dst[1])
+        cdef Move move = Move(src_pos, dst_pos, promote)
+        cdef Result result = self.board.play(move)
+
+        return (
+            (result.getMove().getSrc().getX(), result.getMove().getSrc().getY()),
+            (result.getMove().getDst().getX(), result.getMove().getDst().getY()),
+            result.getMove().isPromote(),
+            result.getCaptured())
+
+    def undo(self, src: Tuple[int, int], dst: Tuple[int, int], promote: bool, captured: int) -> None:
+        '''Return to the state before moving a piece.
+        Args:
+            src (Tuple[int, int]): Source coordinates
+            dst (Tuple[int, int]): Destination coordinates
+            promote (bool): True if promote
+            captured (int): Type of captured piece
+        '''
+        cdef Position src_pos = Position(src[0], src[1])
+        cdef Position dst_pos = Position(dst[0], dst[1])
+        cdef Move move = Move(src_pos, dst_pos, promote)
+        cdef Result result = Result(move, captured)
+
+        self.board.undo(result)
 
     def get_color(self) -> int:
         '''Get side to move.
@@ -61,6 +95,13 @@ cdef class NativeBoard:
         '''
         return self.board.getTurn()
 
+    def get_hash(self) -> int:
+        '''Get hash value of the board.
+        Returns:
+            int: Hash value of the board
+        '''
+        return self.board.getHash()
+
     def get_piece(self, pos: Tuple[int, int]) -> int:
         '''Get piece at specified coordinates.
         Args:
@@ -68,18 +109,7 @@ cdef class NativeBoard:
         Returns:
             int: Type of piece
         '''
-        return self.board.getPiece(pos[0], pos[1])
-
-    def get_moved_piece(self, src: Tuple[int, int], dst: Tuple[int, int], promote: bool) -> int:
-        '''Get piece moved by specified move.
-        Args:
-            src (Tuple[int, int]): Source coordinates
-            dst (Tuple[int, int]): Destination coordinates
-            promote (bool): True if promote
-        Returns:
-            int: Type of piece
-        '''
-        return self.board.getMovedPiece(Move(src[0], src[1], dst[0], dst[1], promote))
+        return self.board.getPiece(Position(pos[0], pos[1]))
 
     def get_hand_piece_num(self, color: int, piece: int) -> int:
         '''Get number of specified hand pieces.
@@ -98,8 +128,8 @@ cdef class NativeBoard:
         '''
         cdef Move move = self.board.getLastMove()
         return (
-            (move.getSrcX(), move.getSrcY()),
-            (move.getDstX(), move.getDstY()),
+            (move.getSrc().getX(), move.getSrc().getY()),
+            (move.getDst().getX(), move.getDst().getY()),
             move.isPromote())
 
     def get_attackers(self, x: int, y: int) -> List[Tuple[int,int]]:
@@ -108,29 +138,29 @@ cdef class NativeBoard:
             x (int): X coordinate
             y (int): Y coordinate
         Returns:
-            List[int]: List of piece types
+            List[int]: List of piece types attacking the specified coordinates
         '''
-        cdef vector[pair[int32_t, int32_t]] attackers = self.board.getAttackers(x, y)
-        return [(attacker.first, attacker.second) for attacker in attackers]
+        cdef vector[Position] attackers = self.board.getAttackers(Position(x, y))
+        return [(pos.getX(), pos.getY()) for pos in attackers]
 
     def get_legal_moves(
         self,
         remove_unpromote: bool,
-        checkmate_only: bool,
+        check_only: bool,
     ) -> List[Tuple[int, int], Tuple[int, int], bool]:
         '''
         Get list of legal moves.
         Args:
             remove_unpromote (bool): True to remove unpromoted moves for pawn, bishop, and rook
-            checkmate_only (bool): True to get only checkmate moves
+            check_only (bool): True to get only check moves
         Returns:
             List[Tuple[int, int], Tuple[int, int], bool]: List of legal moves
         '''
-        cdef vector[Move] moves = self.board.getLegalMoves(remove_unpromote, checkmate_only)
+        cdef vector[Move] moves = self.board.getLegalMoves(remove_unpromote, check_only)
 
         return [
-            ((moves[i].getSrcX(), moves[i].getSrcY()),
-             (moves[i].getDstX(), moves[i].getDstY()),
+            ((moves[i].getSrc().getX(), moves[i].getSrc().getY()),
+             (moves[i].getDst().getX(), moves[i].getDst().getY()),
              moves[i].isPromote())
             for i in range(moves.size())]
 
@@ -145,8 +175,8 @@ cdef class NativeBoard:
         cdef vector[Move] moves = self.board.getCheckmateMoves(depth)
 
         return [
-            ((moves[i].getSrcX(), moves[i].getSrcY()),
-             (moves[i].getDstX(), moves[i].getDstY()),
+            ((moves[i].getSrc().getX(), moves[i].getSrc().getY()),
+             (moves[i].getDst().getX(), moves[i].getDst().getY()),
              moves[i].isPromote())
             for i in range(moves.size())]
 
@@ -160,15 +190,15 @@ cdef class NativeBoard:
         '''
         return self.board.isNyugyoku(color)
 
-    def is_checkmate(self, color: int) -> bool:
+    def is_check(self, color: int) -> bool:
         '''
-        Determine if in checkmate.
+        Determine if in check.
         Args:
             color (int): Side to move
         Returns:
-            bool: True if in checkmate
+            bool: True if in check
         '''
-        return self.board.isCheckmate(color)
+        return self.board.isCheck(color)
 
     def get_sfen(self) -> str:
         '''
@@ -178,21 +208,17 @@ cdef class NativeBoard:
         '''
         return self.board.getSfen().decode('utf-8')
 
-    def get_inputs(self, color: int, turn: int) -> numpy.ndarray:
+    def get_inputs(self, color: int) -> numpy.ndarray:
         '''Get board data to input to inference model.
         Args:
             color (int): Side to move
-            turn (int): Number of moves (Specify -1 to execute processing for MCTS search)
         Returns:
             numpy.ndarray: Board data
         '''
         cdef numpy.ndarray[numpy.int32_t, ndim=1, mode="c"] inputs = numpy.empty(
             (MODEL_INPUT_PACK_SIZE,), dtype=numpy.int32)
 
-        if turn == -1:
-            self.board.getInputs(<int32_t*> &inputs[0])
-        else:
-            self.board.getInputs(<int32_t*> &inputs[0], color, turn)
+        self.board.getInputs(<int32_t*> &inputs[0], color)
 
         return inputs
 

@@ -1,26 +1,124 @@
 #include "Board.h"
 
-#include <string.h>
-
 #include <algorithm>
-#include <memory>
+#include <map>
 #include <sstream>
 
-#include "Config.h"
+#include "Constant.h"
 
 namespace deepshogi {
 
-// Array of piece types in hand pieces in SFEN format
+// Mapping table between piece numbers and characters in SFEN format
+static const std::map<uint8_t, const char*> SFEN_PIECE_NAMES = {
+    {PIECE_BLACK_PAWN, "P"},
+    {PIECE_BLACK_LANCE, "L"},
+    {PIECE_BLACK_KNIGHT, "N"},
+    {PIECE_BLACK_SILVER, "S"},
+    {PIECE_BLACK_GOLD, "G"},
+    {PIECE_BLACK_BISHOP, "B"},
+    {PIECE_BLACK_ROOK, "R"},
+    {PIECE_BLACK_KING, "K"},
+    {PIECE_BLACK_PRO_PAWN, "+P"},
+    {PIECE_BLACK_PRO_LANCE, "+L"},
+    {PIECE_BLACK_PRO_KNIGHT, "+N"},
+    {PIECE_BLACK_PRO_SILVER, "+S"},
+    {PIECE_BLACK_HORSE, "+B"},
+    {PIECE_BLACK_DRAGON, "+R"},
+    {PIECE_WHITE_PAWN, "p"},
+    {PIECE_WHITE_LANCE, "l"},
+    {PIECE_WHITE_KNIGHT, "n"},
+    {PIECE_WHITE_SILVER, "s"},
+    {PIECE_WHITE_GOLD, "g"},
+    {PIECE_WHITE_BISHOP, "b"},
+    {PIECE_WHITE_ROOK, "r"},
+    {PIECE_WHITE_KING, "k"},
+    {PIECE_WHITE_PRO_PAWN, "+p"},
+    {PIECE_WHITE_PRO_LANCE, "+l"},
+    {PIECE_WHITE_PRO_KNIGHT, "+n"},
+    {PIECE_WHITE_PRO_SILVER, "+s"},
+    {PIECE_WHITE_HORSE, "+b"},
+    {PIECE_WHITE_DRAGON, "+r"},
+};
+
+// Mapping table between SFEN format piece characters and their numbers
+// For promoted pieces, convert to the piece number before promotion (promotion processing follows after)
+static const std::map<char, uint8_t> SFEN_PIECE_TYPES = {
+    {'P', PIECE_BLACK_PAWN},
+    {'L', PIECE_BLACK_LANCE},
+    {'N', PIECE_BLACK_KNIGHT},
+    {'S', PIECE_BLACK_SILVER},
+    {'G', PIECE_BLACK_GOLD},
+    {'B', PIECE_BLACK_BISHOP},
+    {'R', PIECE_BLACK_ROOK},
+    {'K', PIECE_BLACK_KING},
+    {'p', PIECE_WHITE_PAWN},
+    {'l', PIECE_WHITE_LANCE},
+    {'n', PIECE_WHITE_KNIGHT},
+    {'s', PIECE_WHITE_SILVER},
+    {'g', PIECE_WHITE_GOLD},
+    {'b', PIECE_WHITE_BISHOP},
+    {'r', PIECE_WHITE_ROOK},
+    {'k', PIECE_WHITE_KING},
+};
+
+// Array of SFEN format hand piece names
+static const std::map<uint8_t, const char*> SFEN_HAND_PIECE_NAMES[2] = {
+    {
+        {PIECE_HAND_ROOK, "R"},
+        {PIECE_HAND_BISHOP, "B"},
+        {PIECE_HAND_GOLD, "G"},
+        {PIECE_HAND_SILVER, "S"},
+        {PIECE_HAND_KNIGHT, "N"},
+        {PIECE_HAND_LANCE, "L"},
+        {PIECE_HAND_PAWN, "P"},
+    },
+    {
+        {PIECE_HAND_ROOK, "r"},
+        {PIECE_HAND_BISHOP, "b"},
+        {PIECE_HAND_GOLD, "g"},
+        {PIECE_HAND_SILVER, "s"},
+        {PIECE_HAND_KNIGHT, "n"},
+        {PIECE_HAND_LANCE, "l"},
+        {PIECE_HAND_PAWN, "p"},
+    },
+};
+
+// Mapping table between SFEN format hand piece characters and their {color, piece number}
+static const std::map<char, std::pair<uint8_t, uint8_t>> SFEN_HAND_PIECE_TYPES = {
+    {'R', {COLOR_BLACK, PIECE_HAND_ROOK}},
+    {'B', {COLOR_BLACK, PIECE_HAND_BISHOP}},
+    {'G', {COLOR_BLACK, PIECE_HAND_GOLD}},
+    {'S', {COLOR_BLACK, PIECE_HAND_SILVER}},
+    {'N', {COLOR_BLACK, PIECE_HAND_KNIGHT}},
+    {'L', {COLOR_BLACK, PIECE_HAND_LANCE}},
+    {'P', {COLOR_BLACK, PIECE_HAND_PAWN}},
+    {'r', {COLOR_WHITE, PIECE_HAND_ROOK}},
+    {'b', {COLOR_WHITE, PIECE_HAND_BISHOP}},
+    {'g', {COLOR_WHITE, PIECE_HAND_GOLD}},
+    {'s', {COLOR_WHITE, PIECE_HAND_SILVER}},
+    {'n', {COLOR_WHITE, PIECE_HAND_KNIGHT}},
+    {'l', {COLOR_WHITE, PIECE_HAND_LANCE}},
+    {'p', {COLOR_WHITE, PIECE_HAND_PAWN}},
+};
+
+// Array of hand piece types in SFEN format
+// Used to determine the display order in SFEN format
 static const uint8_t SFEN_HAND_PIECES[] = {
     PIECE_HAND_ROOK, PIECE_HAND_BISHOP, PIECE_HAND_GOLD,
     PIECE_HAND_SILVER, PIECE_HAND_KNIGHT, PIECE_HAND_LANCE, PIECE_HAND_PAWN};
 
-// Array of piece names in hand pieces in SFEN format
-static const char* SFEN_HAND_BLACK_NAMES[] = {"R", "B", "G", "S", "N", "L", "P"};
-static const char* SFEN_HAND_WHITE_NAMES[] = {"r", "b", "g", "s", "n", "l", "p"};
+// Bitboard index corresponding to piece type
+static constexpr int8_t PAWN_INDEX = PIECE_BLACK_PAWN - PIECE_BLACK_BEGIN;
+static constexpr int8_t LANCE_INDEX = PIECE_BLACK_LANCE - PIECE_BLACK_BEGIN;
+static constexpr int8_t KNIGHT_INDEX = PIECE_BLACK_KNIGHT - PIECE_BLACK_BEGIN;
+static constexpr int8_t SILVER_INDEX = PIECE_BLACK_SILVER - PIECE_BLACK_BEGIN;
+static constexpr int8_t GOLD_INDEX = PIECE_BLACK_GOLD - PIECE_BLACK_BEGIN;
+static constexpr int8_t KING_INDEX = PIECE_BLACK_KING - PIECE_BLACK_BEGIN;
+static constexpr int8_t BISHOP_INDEX = PIECE_BLACK_BISHOP - PIECE_BLACK_BEGIN;
+static constexpr int8_t ROOK_INDEX = PIECE_BLACK_ROOK - PIECE_BLACK_BEGIN;
 
 /**
- * Set the specified bit.
+ * Sets the specified bit.
  * @param inputs Bit sequence
  * @param index Position of the bit to set
  */
@@ -29,891 +127,116 @@ inline void setInputBit(int32_t* inputs, int32_t index, int32_t value = 1) {
 }
 
 /**
- * Determine whether a piece can move to the specified coordinates.
- * @param piece Type of piece
- * @param src_x X coordinate of the source position
- * @param src_y Y coordinate of the source position
- * @param dst_x X coordinate of the destination position
- * @param dst_y Y coordinate of the destination position
- * @return True if the piece can move
+ * Searches whether there is a checkmate move from the specified board.
+ * Returns an array with the checkmate move sequence stored in reverse order.
+ * Returns an empty array if no checkmate move is found.
+ * Note that the contents of the Board object change during the search.
+ * @param board Board object
+ * @param depth Search depth
+ * @return List of checkmate moves
  */
-inline bool isMovable(
-    uint8_t piece, int32_t src_x, int32_t src_y, int32_t dst_x, int32_t dst_y) {
-  if (src_x == dst_x && src_y == dst_y) {
-    return false;
-  }
-
-  if (piece == PIECE_BLACK_PAWN) {
-    if (src_x == dst_x && src_y - 1 == dst_y) {
-      return true;
-    }
-  } else if (piece == PIECE_BLACK_LANCE) {
-    if (src_x == dst_x && src_y > dst_y) {
-      return true;
-    }
-  } else if (piece == PIECE_BLACK_KNIGHT) {
-    if ((src_x - 1 == dst_x && src_y - 2 == dst_y) ||
-        (src_x + 1 == dst_x && src_y - 2 == dst_y)) {
-      return true;
-    }
-  } else if (piece == PIECE_BLACK_SILVER) {
-    if ((src_x == dst_x && src_y - 1 == dst_y) ||
-        (src_x - 1 == dst_x && src_y - 1 == dst_y) ||
-        (src_x + 1 == dst_x && src_y - 1 == dst_y) ||
-        (src_x - 1 == dst_x && src_y + 1 == dst_y) ||
-        (src_x + 1 == dst_x && src_y + 1 == dst_y)) {
-      return true;
-    }
-  } else if ((piece == PIECE_BLACK_GOLD) ||
-             (piece == PIECE_BLACK_PRO_PAWN) ||
-             (piece == PIECE_BLACK_PRO_LANCE) ||
-             (piece == PIECE_BLACK_PRO_KNIGHT) ||
-             (piece == PIECE_BLACK_PRO_SILVER)) {
-    if ((src_x == dst_x && src_y - 1 == dst_y) ||
-        (src_x - 1 == dst_x && src_y - 1 == dst_y) ||
-        (src_x + 1 == dst_x && src_y - 1 == dst_y) ||
-        (src_x - 1 == dst_x && src_y == dst_y) ||
-        (src_x + 1 == dst_x && src_y == dst_y) ||
-        (src_x == dst_x && src_y + 1 == dst_y)) {
-      return true;
-    }
-  } else if (piece == PIECE_WHITE_PAWN) {
-    if (src_x == dst_x && src_y + 1 == dst_y) {
-      return true;
-    }
-  } else if (piece == PIECE_WHITE_LANCE) {
-    if (src_x == dst_x && src_y < dst_y) {
-      return true;
-    }
-  } else if (piece == PIECE_WHITE_KNIGHT) {
-    if ((src_x - 1 == dst_x && src_y + 2 == dst_y) ||
-        (src_x + 1 == dst_x && src_y + 2 == dst_y)) {
-      return true;
-    }
-  } else if (piece == PIECE_WHITE_SILVER) {
-    if ((src_x == dst_x && src_y + 1 == dst_y) ||
-        (src_x - 1 == dst_x && src_y + 1 == dst_y) ||
-        (src_x + 1 == dst_x && src_y + 1 == dst_y) ||
-        (src_x - 1 == dst_x && src_y - 1 == dst_y) ||
-        (src_x + 1 == dst_x && src_y - 1 == dst_y)) {
-      return true;
-    }
-  } else if ((piece == PIECE_WHITE_GOLD) ||
-             (piece == PIECE_WHITE_PRO_PAWN) ||
-             (piece == PIECE_WHITE_PRO_LANCE) ||
-             (piece == PIECE_WHITE_PRO_KNIGHT) ||
-             (piece == PIECE_WHITE_PRO_SILVER)) {
-    if ((src_x == dst_x && src_y + 1 == dst_y) ||
-        (src_x - 1 == dst_x && src_y + 1 == dst_y) ||
-        (src_x + 1 == dst_x && src_y + 1 == dst_y) ||
-        (src_x - 1 == dst_x && src_y == dst_y) ||
-        (src_x + 1 == dst_x && src_y == dst_y) ||
-        (src_x == dst_x && src_y - 1 == dst_y)) {
-      return true;
-    }
-  } else if ((piece == PIECE_BLACK_BISHOP) ||
-             (piece == PIECE_WHITE_BISHOP)) {
-    if (abs(src_x - dst_x) == abs(src_y - dst_y)) {
-      return true;
-    }
-  } else if ((piece == PIECE_BLACK_ROOK) ||
-             (piece == PIECE_WHITE_ROOK)) {
-    if (src_x == dst_x || src_y == dst_y) {
-      return true;
-    }
-  } else if ((piece == PIECE_BLACK_HORSE) ||
-             (piece == PIECE_WHITE_HORSE)) {
-    if (abs(src_x - dst_x) == abs(src_y - dst_y) ||
-        (abs(src_x - dst_x) <= 1 && abs(src_y - dst_y) <= 1)) {
-      return true;
-    }
-  } else if ((piece == PIECE_BLACK_DRAGON) ||
-             (piece == PIECE_WHITE_DRAGON)) {
-    if (src_x == dst_x || src_y == dst_y ||
-        (abs(src_x - dst_x) <= 1 && abs(src_y - dst_y) <= 1)) {
-      return true;
-    }
-  } else if ((piece == PIECE_BLACK_KING) ||
-             (piece == PIECE_WHITE_KING)) {
-    if (abs(src_x - dst_x) <= 1 && abs(src_y - dst_y) <= 1) {
-      return true;
-    }
-  }
-
-  return false;
-}
-
-/**
- * Get a list of coordinates of pieces attacking the specified square.
- * @param cells Piece information for each square on the board
- * @param x X coordinate
- * @param y Y coordinate
- * @return List of coordinates of attacking pieces
- */
-static std::vector<std::pair<int32_t, int32_t>> getAttackerPositions(
-    const uint8_t cells[BOARD_SIZE][BOARD_SIZE], int32_t x, int32_t y) {
-  std::vector<std::pair<int32_t, int32_t>> attackers;
-
-  // Search for pieces in the upward direction
-  std::pair<int32_t, int32_t> upper = std::make_pair(-1, -1);
-
-  for (int32_t dy = y - 1; dy >= 0; dy--) {
-    if (cells[dy][x] != PIECE_EMPTY) {
-      upper = std::make_pair(x, dy);
-      break;
-    }
-  }
-
-  if (upper.first != -1) {
-    uint8_t piece = cells[upper.second][upper.first];
-
-    if (isMovable(piece, upper.first, upper.second, x, y)) {
-      attackers.push_back(upper);
-    }
-  }
-
-  // Search for pieces in the downward direction
-  std::pair<int32_t, int32_t> lower = std::make_pair(-1, -1);
-
-  for (int32_t dy = y + 1; dy < BOARD_SIZE; dy++) {
-    if (cells[dy][x] != PIECE_EMPTY) {
-      lower = std::make_pair(x, dy);
-      break;
-    }
-  }
-
-  if (lower.first != -1) {
-    uint8_t piece = cells[lower.second][lower.first];
-
-    if (isMovable(piece, lower.first, lower.second, x, y)) {
-      attackers.push_back(lower);
-    }
-  }
-
-  // Search for pieces in the left direction
-  std::pair<int32_t, int32_t> left = std::make_pair(-1, -1);
-
-  for (int32_t dx = x - 1; dx >= 0; dx--) {
-    if (cells[y][dx] != PIECE_EMPTY) {
-      left = std::make_pair(dx, y);
-      break;
-    }
-  }
-
-  if (left.first != -1) {
-    uint8_t piece = cells[left.second][left.first];
-
-    if (isMovable(piece, left.first, left.second, x, y)) {
-      attackers.push_back(left);
-    }
-  }
-
-  // Search for pieces in the right direction
-  std::pair<int32_t, int32_t> right = std::make_pair(-1, -1);
-
-  for (int32_t dx = x + 1; dx < BOARD_SIZE; dx++) {
-    if (cells[y][dx] != PIECE_EMPTY) {
-      right = std::make_pair(dx, y);
-      break;
-    }
-  }
-
-  if (right.first != -1) {
-    uint8_t piece = cells[right.second][right.first];
-
-    if (isMovable(piece, right.first, right.second, x, y)) {
-      attackers.push_back(right);
-    }
-  }
-
-  // Search for pieces in the upper-left direction
-  std::pair<int32_t, int32_t> upper_left = std::make_pair(-1, -1);
-
-  for (int32_t d = 1; x - d >= 0 && y - d >= 0; d++) {
-    if (cells[y - d][x - d] != PIECE_EMPTY) {
-      upper_left = std::make_pair(x - d, y - d);
-      break;
-    }
-  }
-
-  if (upper_left.first != -1) {
-    uint8_t piece = cells[upper_left.second][upper_left.first];
-
-    if (isMovable(piece, upper_left.first, upper_left.second, x, y)) {
-      attackers.push_back(upper_left);
-    }
-  }
-
-  // Search for pieces in the upper-right direction
-  std::pair<int32_t, int32_t> upper_right = std::make_pair(-1, -1);
-
-  for (int32_t d = 1; x + d < BOARD_SIZE && y - d >= 0; d++) {
-    if (cells[y - d][x + d] != PIECE_EMPTY) {
-      upper_right = std::make_pair(x + d, y - d);
-      break;
-    }
-  }
-
-  if (upper_right.first != -1) {
-    uint8_t piece = cells[upper_right.second][upper_right.first];
-
-    if (isMovable(piece, upper_right.first, upper_right.second, x, y)) {
-      attackers.push_back(upper_right);
-    }
-  }
-
-  // Search for pieces in the lower-left direction
-  std::pair<int32_t, int32_t> lower_left = std::make_pair(-1, -1);
-
-  for (int32_t d = 1; x - d >= 0 && y + d < BOARD_SIZE; d++) {
-    if (cells[y + d][x - d] != PIECE_EMPTY) {
-      lower_left = std::make_pair(x - d, y + d);
-      break;
-    }
-  }
-
-  if (lower_left.first != -1) {
-    uint8_t piece = cells[lower_left.second][lower_left.first];
-
-    if (isMovable(piece, lower_left.first, lower_left.second, x, y)) {
-      attackers.push_back(lower_left);
-    }
-  }
-
-  // Search for pieces in the lower-right direction
-  std::pair<int32_t, int32_t> lower_right = std::make_pair(-1, -1);
-
-  for (int32_t d = 1; x + d < BOARD_SIZE && y + d < BOARD_SIZE; d++) {
-    if (cells[y + d][x + d] != PIECE_EMPTY) {
-      lower_right = std::make_pair(x + d, y + d);
-      break;
-    }
-  }
-
-  if (lower_right.first != -1) {
-    uint8_t piece = cells[lower_right.second][lower_right.first];
-
-    if (isMovable(piece, lower_right.first, lower_right.second, x, y)) {
-      attackers.push_back(lower_right);
-    }
-  }
-
-  // Search for pieces in the knight's move directions
-  if (x - 1 >= 0 && y - 2 >= 0 &&
-      isMovable(cells[y - 2][x - 1], x - 1, y - 2, x, y)) {
-    attackers.push_back(std::make_pair(x - 1, y - 2));
-  }
-
-  if (x + 1 < BOARD_SIZE && y - 2 >= 0 &&
-      isMovable(cells[y - 2][x + 1], x + 1, y - 2, x, y)) {
-    attackers.push_back(std::make_pair(x + 1, y - 2));
-  }
-
-  if (x - 1 >= 0 && y + 2 < BOARD_SIZE &&
-      isMovable(cells[y + 2][x - 1], x - 1, y + 2, x, y)) {
-    attackers.push_back(std::make_pair(x - 1, y + 2));
-  }
-
-  if (x + 1 < BOARD_SIZE && y + 2 < BOARD_SIZE &&
-      isMovable(cells[y + 2][x + 1], x + 1, y + 2, x, y)) {
-    attackers.push_back(std::make_pair(x + 1, y + 2));
-  }
-
-  return attackers;
-}
-
-/**
- * Determines if the specified position is under attack by the opponent's pieces.
- * @param cells Piece information for each square on the board
- * @param x X coordinate
- * @param y Y coordinate
- * @param color Color of the current player
- * @return True if the position is under attack, false otherwise
- */
-static bool isCheckedPosition(
-    const uint8_t cells[BOARD_SIZE][BOARD_SIZE],
-    int32_t x, int32_t y, int32_t color) {
-  // Get a list of attacking pieces
-  std::vector<std::pair<int32_t, int32_t>> attackers = getAttackerPositions(cells, x, y);
-
-  // Check if any of the attacking pieces belong to the opponent
-  for (const auto& pos : attackers) {
-    uint8_t piece = cells[pos.second][pos.first];
-
-    if (color == COLOR_BLACK &&
-        PIECE_WHITE_BEGIN <= piece && piece < PIECE_WHITE_END) {
-      return true;
-    } else if (color == COLOR_WHITE &&
-               PIECE_BLACK_BEGIN <= piece && piece < PIECE_BLACK_END) {
-      return true;
-    }
-  }
-
-  return false;
-}
-
-/**
- * Gets a list of legal moves that can be made with the specified player's hand pieces.
- * Implemented for the black player, so for the white player, pass a flipped board.
- * @param cells Piece information for each square on the board
- * @param hands Information about the player's hand pieces
- * @return List of legal moves
- */
-static std::vector<Move> getLegalHandMoves(
-    const uint8_t cells[BOARD_SIZE][BOARD_SIZE],
-    const uint8_t hands[PIECE_HAND_END - PIECE_HAND_BEGIN]) {
-  std::vector<Move> legal_moves;
-
-  // Check which columns have pawns already present
-  uint8_t pawn_exists[BOARD_SIZE] = {0};
-
-  for (int32_t y = 0; y < BOARD_SIZE; y++) {
-    for (int32_t x = 0; x < BOARD_SIZE; x++) {
-      uint8_t piece = cells[y][x];
-
-      if (piece == PIECE_BLACK_PAWN) {
-        pawn_exists[x] = 1;
-      }
-    }
-  }
-
-  // Add moves for dropping pawns from the hand
-  int32_t hand_pawn_num = hands[PIECE_HAND_PAWN - PIECE_HAND_BEGIN];
-
-  if (hand_pawn_num > 0) {
-    for (int32_t x = 0; x < BOARD_SIZE; x++) {
-      // Cannot drop a pawn in a column that already has one
-      if (pawn_exists[x] > 0) {
-        continue;
-      }
-
-      for (int32_t y = 1; y < BOARD_SIZE; y++) {
-        uint8_t piece = cells[y][x];
-
-        // Can only drop on an empty square
-        if (piece != PIECE_EMPTY) {
-          continue;
-        }
-
-        // If dropping a pawn would result in checkmate,
-        // ensure it is not an illegal pawn drop
-        if (cells[y - 1][x] == PIECE_WHITE_KING) {
-          // Create a board after dropping the pawn
-          uint8_t temp_cells[BOARD_SIZE][BOARD_SIZE];
-
-          memcpy(temp_cells, cells, sizeof(temp_cells));
-          temp_cells[y][x] = PIECE_BLACK_PAWN;
-
-          // Check if the king's escape squares are under attack
-          bool rescue_move_found = false;
-          const std::vector<std::pair<int32_t, int32_t>> directions = {
-              {-1, -1}, {0, -1}, {1, -1}, {-1, 0}, {1, 0}, {-1, 1}, {0, 1}, {1, 1}};
-          for (const auto& dir : directions) {
-            int32_t dst_x = x + dir.first;
-            int32_t dst_y = y - 1 + dir.second;
-
-            if (0 <= dst_x && dst_x < BOARD_SIZE && 0 <= dst_y && dst_y < BOARD_SIZE) {
-              uint8_t dst_piece = temp_cells[dst_y][dst_x];
-
-              if ((dst_piece < PIECE_WHITE_BEGIN || PIECE_WHITE_END <= dst_piece) &&
-                  !isCheckedPosition(temp_cells, dst_x, dst_y, COLOR_WHITE)) {
-                rescue_move_found = true;
-                break;
-              }
-            }
-          }
-
-          // Check if there is an opponent piece that can capture the pawn
-          if (!rescue_move_found) {
-            for (std::pair<int32_t, int32_t> pos : getAttackerPositions(temp_cells, x, y)) {
-              uint8_t attacker_piece = temp_cells[pos.second][pos.first];
-
-              // Skip if not an opponent piece other than the king
-              if (attacker_piece == PIECE_WHITE_KING ||
-                  attacker_piece < PIECE_WHITE_BEGIN || PIECE_WHITE_END <= attacker_piece) {
-                continue;
-              }
-
-              // Move the opponent piece
-              temp_cells[y][x] = attacker_piece;
-              temp_cells[pos.second][pos.first] = PIECE_EMPTY;
-
-              if (!isCheckedPosition(temp_cells, x, y - 1, COLOR_WHITE)) {
-                rescue_move_found = true;
-              }
-
-              // Restore the board state
-              temp_cells[y][x] = PIECE_BLACK_PAWN;
-              temp_cells[pos.second][pos.first] = attacker_piece;
-
-              if (rescue_move_found) {
-                break;
-              }
-            }
-          }
-
-          // If the opponent's king cannot escape, it would be an illegal pawn drop
-          if (!rescue_move_found) {
-            continue;
-          }
-        }
-
-        // Add the move for dropping the pawn
-        legal_moves.emplace_back(BOARD_SIZE, PIECE_HAND_PAWN, x, y, false);
-      }
-    }
-  }
-
-  // Add moves for dropping lances from the hand
-  int32_t hand_lance_num = hands[PIECE_HAND_LANCE - PIECE_HAND_BEGIN];
-
-  if (hand_lance_num > 0) {
-    for (int32_t y = 1; y < BOARD_SIZE; y++) {
-      for (int32_t x = 0; x < BOARD_SIZE; x++) {
-        uint8_t piece = cells[y][x];
-
-        // Can only drop on an empty square
-        if (piece != PIECE_EMPTY) {
-          continue;
-        }
-
-        // Add the move for dropping the lance
-        legal_moves.emplace_back(BOARD_SIZE, PIECE_HAND_LANCE, x, y, false);
-      }
-    }
-  }
-
-  // Add moves for dropping knights from the hand
-  int32_t hand_knight_num = hands[PIECE_HAND_KNIGHT - PIECE_HAND_BEGIN];
-
-  if (hand_knight_num > 0) {
-    for (int32_t y = 2; y < BOARD_SIZE; y++) {
-      for (int32_t x = 0; x < BOARD_SIZE; x++) {
-        uint8_t piece = cells[y][x];
-
-        // Can only drop on an empty square
-        if (piece != PIECE_EMPTY) {
-          continue;
-        }
-
-        // Add the move for dropping the knight
-        legal_moves.emplace_back(BOARD_SIZE, PIECE_HAND_KNIGHT, x, y, false);
-      }
-    }
-  }
-
-  // Add moves for dropping silver, gold, bishop, and rook from the hand
-  for (int32_t piece : {PIECE_HAND_SILVER, PIECE_HAND_GOLD,
-                        PIECE_HAND_BISHOP, PIECE_HAND_ROOK}) {
-    int32_t hand_piece_num = hands[piece - PIECE_HAND_BEGIN];
-
-    if (hand_piece_num > 0) {
-      for (int32_t y = 0; y < BOARD_SIZE; y++) {
-        for (int32_t x = 0; x < BOARD_SIZE; x++) {
-          uint8_t board_piece = cells[y][x];
-
-          // Can only drop on an empty square
-          if (board_piece != PIECE_EMPTY) {
-            continue;
-          }
-
-          // Add the move for dropping the piece
-          legal_moves.emplace_back(BOARD_SIZE, piece, x, y, false);
-        }
-      }
-    }
-  }
-
-  return legal_moves;
-}
-
-/**
- * Get a list of legal moves that can be made on the specified board.
- * Implemented for black's turn, so if it's white's turn, pass a flipped board.
- * @param cells The piece information for each square on the board
- * @param removeUnpromote If true, remove moves that do not promote pawns, bishops, or rooks
- * @return A list of legal moves
- */
-static std::vector<Move> getLegalBoardMoves(
-    const uint8_t cells[BOARD_SIZE][BOARD_SIZE], bool removeUnpromote) {
-  std::vector<Move> legal_moves;
-
-  // Add moves for moving pieces on the board
-  for (int32_t y = 0; y < BOARD_SIZE; y++) {
-    for (int32_t x = 0; x < BOARD_SIZE; x++) {
-      uint8_t piece = cells[y][x];
-
-      // Skip if it's not my piece
-      if (piece < PIECE_BLACK_BEGIN || PIECE_BLACK_END <= piece) {
-        continue;
-      }
-
-      // Add moves for moving pawns
-      if (piece == PIECE_BLACK_PAWN) {
-        if (y > 0) {
-          uint8_t dst_piece = cells[y - 1][x];
-
-          if (PIECE_BLACK_BEGIN <= dst_piece && dst_piece < PIECE_BLACK_END) {
-            continue;
-          } else if (y - 1 == 0) {
-            legal_moves.emplace_back(x, y, x, y - 1, true);
-          } else if (y - 1 > 2) {
-            legal_moves.emplace_back(x, y, x, y - 1, false);
-          } else if (removeUnpromote) {
-            legal_moves.emplace_back(x, y, x, y - 1, true);
-          } else {
-            legal_moves.emplace_back(x, y, x, y - 1, false);
-            legal_moves.emplace_back(x, y, x, y - 1, true);
-          }
-        }
-      }
-      // Add moves for moving lances
-      else if (piece == PIECE_BLACK_LANCE) {
-        for (int32_t dy = y - 1; dy >= 0; dy--) {
-          uint8_t dst_piece = cells[dy][x];
-
-          if (PIECE_BLACK_BEGIN <= dst_piece && dst_piece < PIECE_BLACK_END) {
-            break;
-          } else if (dy == 0) {
-            legal_moves.emplace_back(x, y, x, dy, true);
-          } else if (dy > 2) {
-            legal_moves.emplace_back(x, y, x, dy, false);
-          } else {
-            legal_moves.emplace_back(x, y, x, dy, false);
-            legal_moves.emplace_back(x, y, x, dy, true);
-          }
-
-          if (dst_piece != PIECE_EMPTY) {
-            break;
-          }
-        }
-      }
-      // Add moves for moving knights
-      else if (piece == PIECE_BLACK_KNIGHT) {
-        for (int32_t dx : {-1, 1}) {
-          int32_t dst_x = x + dx;
-          int32_t dst_y = y - 2;
-
-          if (dst_x < 0 || BOARD_SIZE <= dst_x ||
-              dst_y < 0 || BOARD_SIZE <= dst_y) {
-            continue;
-          }
-
-          uint8_t dst_piece = cells[dst_y][dst_x];
-
-          if (PIECE_BLACK_BEGIN <= dst_piece && dst_piece < PIECE_BLACK_END) {
-            continue;
-          } else if (dst_y < 2) {
-            legal_moves.emplace_back(x, y, dst_x, dst_y, true);
-          } else if (dst_y > 2) {
-            legal_moves.emplace_back(x, y, dst_x, dst_y, false);
-          } else {
-            legal_moves.emplace_back(x, y, dst_x, dst_y, false);
-            legal_moves.emplace_back(x, y, dst_x, dst_y, true);
-          }
-        }
-      }
-      // Add moves for moving silver generals
-      else if (piece == PIECE_BLACK_SILVER) {
-        const std::vector<std::pair<int32_t, int32_t>> directions = {
-            {-1, -1}, {0, -1}, {1, -1}, {-1, 1}, {1, 1}};
-        for (const auto& dir : directions) {
-          int32_t dst_x = x + dir.first;
-          int32_t dst_y = y + dir.second;
-
-          if (dst_x < 0 || BOARD_SIZE <= dst_x ||
-              dst_y < 0 || BOARD_SIZE <= dst_y) {
-            continue;
-          }
-
-          uint8_t dst_piece = cells[dst_y][dst_x];
-
-          if (PIECE_BLACK_BEGIN <= dst_piece && dst_piece < PIECE_BLACK_END) {
-            continue;
-          } else if (y > 2 && dst_y > 2) {
-            legal_moves.emplace_back(x, y, dst_x, dst_y, false);
-          } else {
-            legal_moves.emplace_back(x, y, dst_x, dst_y, true);
-            legal_moves.emplace_back(x, y, dst_x, dst_y, false);
-          }
-        }
-      }
-      // Add moves for moving rooks and dragons
-      else if (piece == PIECE_BLACK_ROOK || piece == PIECE_BLACK_DRAGON) {
-        const std::vector<std::pair<int32_t, int32_t>> directions = {
-            {0, -1}, {1, 0}, {0, 1}, {-1, 0}};
-        for (const auto& dir : directions) {
-          int32_t dst_x = x;
-          int32_t dst_y = y;
-
-          while (true) {
-            dst_x += dir.first;
-            dst_y += dir.second;
-
-            if (dst_x < 0 || BOARD_SIZE <= dst_x ||
-                dst_y < 0 || BOARD_SIZE <= dst_y) {
-              break;
-            }
-
-            uint8_t dst_piece = cells[dst_y][dst_x];
-
-            if (PIECE_BLACK_BEGIN <= dst_piece && dst_piece < PIECE_BLACK_END) {
-              break;
-            } else if ((y > 2 && dst_y > 2) || piece == PIECE_BLACK_DRAGON) {
-              legal_moves.emplace_back(x, y, dst_x, dst_y, false);
-            } else if (removeUnpromote) {
-              legal_moves.emplace_back(x, y, dst_x, dst_y, true);
-            } else {
-              legal_moves.emplace_back(x, y, dst_x, dst_y, true);
-              legal_moves.emplace_back(x, y, dst_x, dst_y, false);
-            }
-
-            if (dst_piece != PIECE_EMPTY) {
-              break;
-            }
-          }
-        }
-
-        if (piece == PIECE_BLACK_DRAGON) {
-          const std::vector<std::pair<int32_t, int32_t>> diag_directions = {
-              {-1, -1}, {1, -1}, {1, 1}, {-1, 1}};
-          for (const auto& dir : diag_directions) {
-            int32_t dst_x = x + dir.first;
-            int32_t dst_y = y + dir.second;
-
-            if (dst_x < 0 || BOARD_SIZE <= dst_x ||
-                dst_y < 0 || BOARD_SIZE <= dst_y) {
-              continue;
-            }
-
-            uint8_t dst_piece = cells[dst_y][dst_x];
-
-            if (PIECE_BLACK_BEGIN <= dst_piece && dst_piece < PIECE_BLACK_END) {
-              continue;
-            } else {
-              legal_moves.emplace_back(x, y, dst_x, dst_y, false);
-            }
-          }
-        }
-      }
-      // Add moves for moving bishops and horses
-      else if (piece == PIECE_BLACK_BISHOP || piece == PIECE_BLACK_HORSE) {
-        const std::vector<std::pair<int32_t, int32_t>> directions = {
-            {-1, -1}, {1, -1}, {1, 1}, {-1, 1}};
-        for (const auto& dir : directions) {
-          int32_t dst_x = x;
-          int32_t dst_y = y;
-
-          while (true) {
-            dst_x += dir.first;
-            dst_y += dir.second;
-
-            if (dst_x < 0 || BOARD_SIZE <= dst_x ||
-                dst_y < 0 || BOARD_SIZE <= dst_y) {
-              break;
-            }
-
-            uint8_t dst_piece = cells[dst_y][dst_x];
-
-            if (PIECE_BLACK_BEGIN <= dst_piece && dst_piece < PIECE_BLACK_END) {
-              break;
-            } else if ((y > 2 && dst_y > 2) || piece == PIECE_BLACK_HORSE) {
-              legal_moves.emplace_back(x, y, dst_x, dst_y, false);
-            } else if (removeUnpromote) {
-              legal_moves.emplace_back(x, y, dst_x, dst_y, true);
-            } else {
-              legal_moves.emplace_back(x, y, dst_x, dst_y, true);
-              legal_moves.emplace_back(x, y, dst_x, dst_y, false);
-            }
-
-            if (dst_piece != PIECE_EMPTY) {
-              break;
-            }
-          }
-        }
-
-        if (piece == PIECE_BLACK_HORSE) {
-          const std::vector<std::pair<int32_t, int32_t>> ortho_directions = {
-              {0, -1}, {1, 0}, {0, 1}, {-1, 0}};
-          for (const auto& dir : ortho_directions) {
-            int32_t dst_x = x + dir.first;
-            int32_t dst_y = y + dir.second;
-
-            if (dst_x < 0 || BOARD_SIZE <= dst_x ||
-                dst_y < 0 || BOARD_SIZE <= dst_y) {
-              continue;
-            }
-
-            uint8_t dst_piece = cells[dst_y][dst_x];
-
-            if (PIECE_BLACK_BEGIN <= dst_piece && dst_piece < PIECE_BLACK_END) {
-              continue;
-            } else {
-              legal_moves.emplace_back(x, y, dst_x, dst_y, false);
-            }
-          }
-        }
-      }
-      // Add moves for moving gold generals and promoted pieces
-      else if (piece == PIECE_BLACK_GOLD ||
-               piece == PIECE_BLACK_PRO_PAWN ||
-               piece == PIECE_BLACK_PRO_LANCE ||
-               piece == PIECE_BLACK_PRO_KNIGHT ||
-               piece == PIECE_BLACK_PRO_SILVER) {
-        const std::vector<std::pair<int32_t, int32_t>> directions = {
-            {-1, -1}, {0, -1}, {1, -1}, {-1, 0}, {1, 0}, {0, 1}};
-        for (const auto& dir : directions) {
-          int32_t dst_x = x + dir.first;
-          int32_t dst_y = y + dir.second;
-
-          if (dst_x < 0 || BOARD_SIZE <= dst_x ||
-              dst_y < 0 || BOARD_SIZE <= dst_y) {
-            continue;
-          }
-
-          uint8_t dst_piece = cells[dst_y][dst_x];
-
-          if (PIECE_BLACK_BEGIN <= dst_piece && dst_piece < PIECE_BLACK_END) {
-            continue;
-          } else {
-            legal_moves.emplace_back(x, y, dst_x, dst_y, false);
-          }
-        }
-      }
-      // Add moves for moving the king
-      else if (piece == PIECE_BLACK_KING) {
-        const std::vector<std::pair<int32_t, int32_t>> directions = {
-            {-1, -1}, {0, -1}, {1, -1}, {-1, 0}, {1, 0}, {-1, 1}, {0, 1}, {1, 1}};
-        for (const auto& dir : directions) {
-          int32_t dst_x = x + dir.first;
-          int32_t dst_y = y + dir.second;
-
-          if (dst_x < 0 || BOARD_SIZE <= dst_x ||
-              dst_y < 0 || BOARD_SIZE <= dst_y) {
-            continue;
-          }
-
-          uint8_t dst_piece = cells[dst_y][dst_x];
-
-          if (PIECE_BLACK_BEGIN <= dst_piece && dst_piece < PIECE_BLACK_END) {
-            continue;
-          } else {
-            legal_moves.emplace_back(x, y, dst_x, dst_y, false);
-          }
-        }
-      }
-    }
-  }
-
-  return legal_moves;
-}
-
-/**
- * Search for checkmate moves from the specified board.
- * Returns an array of moves in reverse order leading to checkmate.
- * If no checkmate moves are found, returns an empty array.
- * @param boards Array holding board information
- * @param depth Depth to search
- * @return Array of moves in reverse order leading to checkmate
- */
-static std::vector<Move> searchCheckmateMove(Board* boards, int32_t depth) {
-  // Depth must be odd
-  if (depth % 2 == 0) {
-    depth -= 1;
-  }
-
-  // If depth is 0 or less, no checkmate moves were found, so return an empty array
+static std::vector<Move> searchCheckmateMoves(Board& board, int32_t depth) {
+  // If depth is 0 or less, no checkmate move was found, so return an empty array
   if (depth <= 0) {
     return {};
   }
 
-  // If the number of turns exceeds the draw turn, return an empty array
-  if (boards[depth].getTurn() >= boards[depth].getDrawTurn()) {
+  // If the draw turn count is exceeded, return an empty array
+  if (board.getTurn() >= board.getDrawTurn()) {
     return {};
   }
 
-  // Try moves that put the opponent in check
+  // Try moves that give check
   std::vector<Move> shortest_moves;
 
-  for (Move& move : boards[depth].getLegalMoves(false, true)) {
-    // Create the next board state
-    boards[depth - 1].copyFrom(&boards[depth]);
-    boards[depth - 1].play(move);
+  for (const Move& move : board.getLegalMoves(false, true)) {
+    // Advance the board and save the result
+    Result checkmate_result = board.play(move);
 
-    // Check if there are any moves to escape from check
-    std::vector<Move> rescue_moves = boards[depth - 1].getLegalMoves(false, false);
+    // Check if there are any moves to escape the check
+    std::vector<Move> escape_moves = board.getLegalMoves(false, false);
 
-    // If there are no moves to escape from check,
-    // a checkmate move has been found, so return that move
-    if (rescue_moves.empty()) {
-      // Skip if it's a pawn drop checkmate
-      if (move.getSrcX() == BOARD_SIZE && move.getSrcY() == PIECE_HAND_PAWN) {
-        continue;
-      }
-
+    // If there are no escape moves, checkmate is found, so return the checkmate move
+    if (escape_moves.empty()) {
+      board.undo(checkmate_result);
       return {move};
     }
 
-    // If the search depth is 1, do not try moves to escape from check
-    if (depth - 1 == 0) {
+    // If search depth is 1 or less, do not try escape moves
+    if (depth - 1 <= 0) {
+      board.undo(checkmate_result);
       continue;
     }
 
-    // Try all moves to escape from check and find the deepest checkmate sequence
-    bool all_rescue_moves_checkmated = true;
+    // Try all escape moves and find the deepest checkmate sequence
+    bool checkmated = true;
     std::vector<Move> longest_moves;
 
-    for (Move& rescue_move : rescue_moves) {
+    for (Move& escape_move : escape_moves) {
       // Create the next board state
-      boards[depth - 2].copyFrom(&boards[depth - 1]);
-      boards[depth - 2].play(rescue_move);
+      Result escape_result = board.play(escape_move);
 
       // Recursively search for checkmate moves
-      std::vector<Move> moves = searchCheckmateMove(boards, depth - 2);
+      std::vector<Move> moves = searchCheckmateMoves(board, depth - 2);
 
+      // If no checkmate move is found, determine it as not checkmate and exit loop
       if (moves.empty()) {
-        all_rescue_moves_checkmated = false;
+        board.undo(escape_result);
+        checkmated = false;
         break;
-      } else if (longest_moves.empty() || moves.size() > longest_moves.size() - 1) {
-        longest_moves = moves;
-        longest_moves.push_back(rescue_move);
       }
+
+      // Save the deepest checkmate sequence
+      if (longest_moves.empty() || moves.size() > longest_moves.size() - 1) {
+        longest_moves = moves;
+        longest_moves.push_back(escape_move);
+      }
+
+      // Restore the board to its previous state
+      board.undo(escape_result);
     }
 
-    // If all moves to escape from check are checkmated,
-    // a checkmate move has been found, so return that move
-    if (all_rescue_moves_checkmated) {
+    // If all escape moves lead to checkmate, a checkmate sequence has been found
+    // Save the shallowest checkmate sequence
+    if (checkmated) {
       if (shortest_moves.empty() || longest_moves.size() < shortest_moves.size() - 1) {
         shortest_moves = longest_moves;
         shortest_moves.push_back(move);
       }
     }
+
+    // Restore the board to its previous state
+    board.undo(checkmate_result);
   }
 
+  // Return the shallowest checkmate sequence
   return shortest_moves;
 }
 
 /**
- * Create a board instance.
+ * Creates a board object.
+ * Does not place pieces on the board.
  */
 Board::Board()
-    : _cells{},
-      _hands{},
-      _kingPositions{-1, -1},
+    : _cells{0},
+      _hands{{0}},
+      _kingPositions{POSITION_INVALID, POSITION_INVALID},
+      _nyugyokuScores{28, 27},
       _color(COLOR_BLACK),
       _turn(0),
-      _nyugyokuScores{28, 27},
-      _drawTurn(0x7fffffff),
-      _lastMove() {
+      _drawTurn(0x7fff),
+      _hash(0),
+      _lastMove(MOVE_INVALID) {
 }
 
 /**
- * Create an instance of the initial board.
- * @param nyugyokuScoreBlack Score required for nyugyoku declaration for black
- * @param nyugyokuScoreWhite Score required for nyugyoku declaration for white
- * @param drawTurn Number of moves until draw
+ * Creates a board object.
+ * Does not place pieces on the board.
+ * @param nyugyokuScoreBlack The score required for black to declare nyugyoku
+ * @param nyugyokuScoreWhite The score required for white to declare nyugyoku
+ * @param drawTurn The number of moves until a draw
  */
-Board::Board(int32_t nyugyokuScoreBlack, int32_t nyugyokuScoreWhite, int32_t drawTurn)
+Board::Board(int8_t nyugyokuScoreBlack, int8_t nyugyokuScoreWhite, int16_t drawTurn)
     : Board() {
   _nyugyokuScores[0] = nyugyokuScoreBlack;
   _nyugyokuScores[1] = nyugyokuScoreWhite;
@@ -921,26 +244,28 @@ Board::Board(int32_t nyugyokuScoreBlack, int32_t nyugyokuScoreWhite, int32_t dra
 }
 
 /**
- * Create an instance by specifying the board.
- * @param board Object holding board information
- */
-Board::Board(const Board& board)
-    : Board() {
-  copyFrom(&board);
-}
-
-/**
- * Initialize the board with an SFEN string.
- * @param sfen SFEN string
+ * Initializes the board with a string in SFEN format.
+ * @param sfen A string in SFEN format
  */
 void Board::initialize(const std::string& sfen) {
-  // Initialize
-  memset(_cells, 0, sizeof(_cells));
-  memset(_hands, 0, sizeof(_hands));
-  _kingPositions[0] = -1;
-  _kingPositions[1] = -1;
+  // Initialize the board
+  std::fill(std::begin(_cells), std::end(_cells), 0);
+  std::fill(_hands[0], _hands[0] + (sizeof(_hands[0]) / sizeof(_hands[0][0])), 0);
+  std::fill(_hands[1], _hands[1] + (sizeof(_hands[1]) / sizeof(_hands[1][0])), 0);
 
-  // Determine the split position of the SFEN string
+  _kingPositions[0] = POSITION_INVALID;
+  _kingPositions[1] = POSITION_INVALID;
+  _hash = 0;
+
+  _colorBitBoards[0].clearAll();
+  _colorBitBoards[1].clearAll();
+
+  for (int32_t p = 0; p < PIECE_BLACK_PRO_PAWN - PIECE_BLACK_BEGIN; p++) {
+    _pieceBitBoards[0][p].clearAll();
+    _pieceBitBoards[1][p].clearAll();
+  }
+
+  // Determine the split positions of the SFEN string
   char* c_sfen = const_cast<char*>(sfen.c_str());
   int32_t board_sfen_length = 0;
   int32_t hand_sfen_length = 0;
@@ -953,7 +278,7 @@ void Board::initialize(const std::string& sfen) {
     hand_sfen_length++;
   }
 
-  // Reflect SFEN information for the board
+  // Reflect the SFEN information on the board
   int32_t pos_x = BOARD_SIZE - 1;
   int32_t pos_y = 0;
   bool promote = false;
@@ -979,61 +304,29 @@ void Board::initialize(const std::string& sfen) {
       break;
     }
 
-    // If it's a number, set empty squares
+    // If it's a number, move to the next position by the number of empty squares
     if ('1' <= c && c <= '9') {
-      int32_t empty_count = c - '0';
-
-      for (int32_t j = 0; j < empty_count && pos_x >= 0; j++) {
-        _cells[pos_y][pos_x] = PIECE_EMPTY;
-        pos_x -= 1;
-      }
-
+      pos_x -= c - '0';
       continue;
     }
 
     // If it's a piece symbol, set the piece
-    if (c == 'P') {
-      _cells[pos_y][pos_x] = promote ? PIECE_BLACK_PRO_PAWN : PIECE_BLACK_PAWN;
-    } else if (c == 'L') {
-      _cells[pos_y][pos_x] = promote ? PIECE_BLACK_PRO_LANCE : PIECE_BLACK_LANCE;
-    } else if (c == 'N') {
-      _cells[pos_y][pos_x] = promote ? PIECE_BLACK_PRO_KNIGHT : PIECE_BLACK_KNIGHT;
-    } else if (c == 'S') {
-      _cells[pos_y][pos_x] = promote ? PIECE_BLACK_PRO_SILVER : PIECE_BLACK_SILVER;
-    } else if (c == 'B') {
-      _cells[pos_y][pos_x] = promote ? PIECE_BLACK_HORSE : PIECE_BLACK_BISHOP;
-    } else if (c == 'R') {
-      _cells[pos_y][pos_x] = promote ? PIECE_BLACK_DRAGON : PIECE_BLACK_ROOK;
-    } else if (c == 'G') {
-      _cells[pos_y][pos_x] = PIECE_BLACK_GOLD;
-    } else if (c == 'K') {
-      _cells[pos_y][pos_x] = PIECE_BLACK_KING;
-      _kingPositions[0] = pos_y * BOARD_SIZE + pos_x;
-    } else if (c == 'p') {
-      _cells[pos_y][pos_x] = promote ? PIECE_WHITE_PRO_PAWN : PIECE_WHITE_PAWN;
-    } else if (c == 'l') {
-      _cells[pos_y][pos_x] = promote ? PIECE_WHITE_PRO_LANCE : PIECE_WHITE_LANCE;
-    } else if (c == 'n') {
-      _cells[pos_y][pos_x] = promote ? PIECE_WHITE_PRO_KNIGHT : PIECE_WHITE_KNIGHT;
-    } else if (c == 's') {
-      _cells[pos_y][pos_x] = promote ? PIECE_WHITE_PRO_SILVER : PIECE_WHITE_SILVER;
-    } else if (c == 'b') {
-      _cells[pos_y][pos_x] = promote ? PIECE_WHITE_HORSE : PIECE_WHITE_BISHOP;
-    } else if (c == 'r') {
-      _cells[pos_y][pos_x] = promote ? PIECE_WHITE_DRAGON : PIECE_WHITE_ROOK;
-    } else if (c == 'g') {
-      _cells[pos_y][pos_x] = PIECE_WHITE_GOLD;
-    } else if (c == 'k') {
-      _cells[pos_y][pos_x] = PIECE_WHITE_KING;
-      _kingPositions[1] = pos_y * BOARD_SIZE + pos_x;
+    Position pos(pos_x, pos_y);
+    uint8_t piece = SFEN_PIECE_TYPES.at(c);
+
+    // Handle promotion
+    if (promote) {
+      piece += PIECE_PROMOTE;
     }
+
+    _putPiece(pos, piece);
 
     // Move to the next position
     promote = false;
     pos_x -= 1;
   }
 
-  // Reflect SFEN information for hand pieces
+  // Reflect the SFEN information of the hands
   int32_t hand_piece_num = 1;
 
   for (int32_t i = 0; i < hand_sfen_length; i++) {
@@ -1046,40 +339,17 @@ void Board::initialize(const std::string& sfen) {
     }
 
     // If it's a piece symbol, set the hand pieces
-    if (c == 'P') {
-      _hands[0][PIECE_HAND_PAWN - PIECE_HAND_BEGIN] += hand_piece_num;
-    } else if (c == 'L') {
-      _hands[0][PIECE_HAND_LANCE - PIECE_HAND_BEGIN] += hand_piece_num;
-    } else if (c == 'N') {
-      _hands[0][PIECE_HAND_KNIGHT - PIECE_HAND_BEGIN] += hand_piece_num;
-    } else if (c == 'S') {
-      _hands[0][PIECE_HAND_SILVER - PIECE_HAND_BEGIN] += hand_piece_num;
-    } else if (c == 'B') {
-      _hands[0][PIECE_HAND_BISHOP - PIECE_HAND_BEGIN] += hand_piece_num;
-    } else if (c == 'R') {
-      _hands[0][PIECE_HAND_ROOK - PIECE_HAND_BEGIN] += hand_piece_num;
-    } else if (c == 'G') {
-      _hands[0][PIECE_HAND_GOLD - PIECE_HAND_BEGIN] += hand_piece_num;
-    } else if (c == 'p') {
-      _hands[1][PIECE_HAND_PAWN - PIECE_HAND_BEGIN] += hand_piece_num;
-    } else if (c == 'l') {
-      _hands[1][PIECE_HAND_LANCE - PIECE_HAND_BEGIN] += hand_piece_num;
-    } else if (c == 'n') {
-      _hands[1][PIECE_HAND_KNIGHT - PIECE_HAND_BEGIN] += hand_piece_num;
-    } else if (c == 's') {
-      _hands[1][PIECE_HAND_SILVER - PIECE_HAND_BEGIN] += hand_piece_num;
-    } else if (c == 'b') {
-      _hands[1][PIECE_HAND_BISHOP - PIECE_HAND_BEGIN] += hand_piece_num;
-    } else if (c == 'r') {
-      _hands[1][PIECE_HAND_ROOK - PIECE_HAND_BEGIN] += hand_piece_num;
-    } else if (c == 'g') {
-      _hands[1][PIECE_HAND_GOLD - PIECE_HAND_BEGIN] += hand_piece_num;
+    if (SFEN_HAND_PIECE_TYPES.count(c) > 0) {
+      auto [color, piece] = SFEN_HAND_PIECE_TYPES.at(c);
+
+      _addHand(color, piece, hand_piece_num);
     }
 
+    // If it's not a number, reset the number of pieces to 1
     hand_piece_num = 1;
   }
 
-  // Set the side to move
+  // Set the turn
   if (c_sfen[board_sfen_length + 1] == 'b') {
     _color = COLOR_BLACK;
   } else if (c_sfen[board_sfen_length + 1] == 'w') {
@@ -1087,344 +357,183 @@ void Board::initialize(const std::string& sfen) {
   }
 
   // Set the turn number
-  _turn = std::stoi(sfen.substr(board_sfen_length + 3 + hand_sfen_length + 1)) - 1;
+  _turn = static_cast<int16_t>(
+      std::stoi(sfen.substr(board_sfen_length + 3 + hand_sfen_length + 1)) - 1);
 }
 
 /**
- * Move a piece.
- * @param move Move
- * @return True if legal move
+ * Moves a piece.
+ * @param move The move to play
+ * @return The result of the move
  */
-bool Board::play(const Move& move) {
-  // Move a piece
-  if (move.getSrcX() == BOARD_SIZE) {
-    uint8_t hand_piece = move.getSrcY();
-    uint8_t dst_piece = _cells[move.getDstY()][move.getDstX()];
+Result Board::play(const Move& move) {
+  Position src = move.getSrc();
+  Position dst = move.getDst();
+  uint8_t captured_piece = PIECE_EMPTY;
 
-    if (_color == COLOR_BLACK) {
-      if (_hands[0][hand_piece] < 1 && dst_piece != PIECE_EMPTY) {
-        return false;
+  // If the move is from a hand piece
+  if (src.getX() == BOARD_SIZE) {
+    // Decrease the hand piece
+    uint8_t hand_piece = src.getY();
+
+    _removeHand(_color, hand_piece);
+
+    // Place the piece on the board
+    uint8_t dst_piece =
+        (_color == COLOR_BLACK)
+            ? (hand_piece - PIECE_HAND_BEGIN + PIECE_BLACK_BEGIN)
+            : (hand_piece - PIECE_HAND_BEGIN + PIECE_WHITE_BEGIN);
+
+    _putPiece(dst, dst_piece);
+  }
+  // If the move is from a piece on the board
+  else {
+    // If there is a piece at the destination, capture it
+    captured_piece = _cells[dst.getIndex()];
+
+    if (captured_piece != PIECE_EMPTY) {
+      int32_t hand_piece =
+          (captured_piece < PIECE_WHITE_BEGIN)
+              ? (captured_piece - PIECE_BLACK_BEGIN + PIECE_HAND_BEGIN)
+              : (captured_piece - PIECE_WHITE_BEGIN + PIECE_HAND_BEGIN);
+
+      // If the captured piece is promoted, convert it to the unpromoted piece type
+      if (hand_piece >= PIECE_HAND_END) {
+        hand_piece -= PIECE_PROMOTE;
       }
 
-      _hands[0][hand_piece] -= 1;
-      _cells[move.getDstY()][move.getDstX()] = hand_piece + PIECE_BLACK_BEGIN;
-    } else {
-      if (_hands[1][hand_piece] < 1 && dst_piece != PIECE_EMPTY) {
-        return false;
-      }
+      // Remove the piece from the destination
+      _removePiece(dst);
 
-      _hands[1][hand_piece] -= 1;
-      _cells[move.getDstY()][move.getDstX()] = hand_piece + PIECE_WHITE_BEGIN;
+      // Add the captured piece to the hand
+      _addHand(_color, hand_piece);
     }
-  } else {
-    uint8_t src_piece = _cells[move.getSrcY()][move.getSrcX()];
-    uint8_t dst_piece = _cells[move.getDstY()][move.getDstX()];
-    uint8_t moved_piece = src_piece;
 
+    // Get the piece from the source
+    uint8_t src_piece = _cells[src.getIndex()];
+
+    // Handle promotion
     if (move.isPromote()) {
-      moved_piece += PIECE_PROMOTE;
+      src_piece += PIECE_PROMOTE;
     }
 
-    if (_color == COLOR_BLACK) {
-      if ((src_piece < PIECE_BLACK_BEGIN || PIECE_BLACK_END <= src_piece) ||
-          (PIECE_BLACK_BEGIN <= dst_piece && dst_piece < PIECE_BLACK_END) ||
-          (moved_piece >= PIECE_BLACK_END)) {
-        return false;
-      }
-
-      if (PIECE_WHITE_BEGIN <= dst_piece && dst_piece < PIECE_WHITE_END) {
-        uint8_t captured_piece = dst_piece - PIECE_WHITE_BEGIN;
-
-        if (captured_piece >= PIECE_PROMOTE) {
-          captured_piece -= PIECE_PROMOTE;
-        }
-
-        _hands[0][captured_piece] += 1;
-      }
-
-      _cells[move.getSrcY()][move.getSrcX()] = PIECE_EMPTY;
-      _cells[move.getDstY()][move.getDstX()] = moved_piece;
-
-      if (moved_piece == PIECE_BLACK_KING) {
-        _kingPositions[0] = move.getDstY() * BOARD_SIZE + move.getDstX();
-      }
-    } else {
-      if ((src_piece < PIECE_WHITE_BEGIN || PIECE_WHITE_END <= src_piece) ||
-          (PIECE_WHITE_BEGIN <= dst_piece && dst_piece < PIECE_WHITE_END) ||
-          (moved_piece >= PIECE_WHITE_END)) {
-        return false;
-      }
-
-      if (PIECE_BLACK_BEGIN <= dst_piece && dst_piece < PIECE_BLACK_END) {
-        uint8_t captured_piece = dst_piece - PIECE_BLACK_BEGIN;
-
-        if (captured_piece >= PIECE_PROMOTE) {
-          captured_piece -= PIECE_PROMOTE;
-        }
-
-        _hands[1][captured_piece] += 1;
-      }
-
-      _cells[move.getSrcY()][move.getSrcX()] = PIECE_EMPTY;
-      _cells[move.getDstY()][move.getDstX()] = moved_piece;
-
-      if (moved_piece == PIECE_WHITE_KING) {
-        _kingPositions[1] = move.getDstY() * BOARD_SIZE + move.getDstX();
-      }
-    }
+    // Move the piece
+    _removePiece(src);
+    _putPiece(dst, src_piece);
   }
 
-  // Update side to move and turn number
+  // Change the turn
   _color = (_color == COLOR_BLACK) ? COLOR_WHITE : COLOR_BLACK;
+
+  // Increase the turn number
   _turn += 1;
 
-  // Update the last move
+  // Save the move
   _lastMove = move;
 
-  return true;
+  // Return the result of the move
+  return Result(move, captured_piece);
 }
 
 /**
- * Get side to move.
- * @return Side to move
+ * Undoes the specified move on the board.
+ * This function assumes that the specified move is the most recent move.
+ * @param result The result of the move to undo
  */
-int32_t Board::getColor() const {
-  return _color;
-}
+void Board::undo(const Result& result) {
+  Move move = result.getMove();
+  Position src = move.getSrc();
+  Position dst = move.getDst();
+  uint8_t captured_piece = result.getCaptured();
 
-/**
- * Get current number of moves.
- * @return Current number of moves
- */
-int32_t Board::getTurn() const {
-  return _turn;
-}
+  // Change the turn
+  _color = (_color == COLOR_BLACK) ? COLOR_WHITE : COLOR_BLACK;
 
-/**
- * Get the number of moves until draw.
- * @return Number of moves until draw
- */
-int32_t Board::getDrawTurn() const {
-  return _drawTurn;
-}
+  // Decrease the turn number
+  _turn -= 1;
 
-/**
- * Get the piece at the specified coordinates.
- * @param x X coordinate
- * @param y Y coordinate
- * @return Type of piece
- */
-int32_t Board::getPiece(int32_t x, int32_t y) const {
-  return _cells[y][x];
-}
+  // Reset the last move
+  _lastMove = MOVE_INVALID;
 
-/**
- * Get the type of piece after moving.
- * @param move Move
- * @return Type of piece
- */
-int32_t Board::getMovedPiece(const Move& move) const {
-  // When dropping from hand, the type of piece to drop is in the source Y coordinate
-  if (move.getSrcX() == BOARD_SIZE) {
-    int32_t hand_piece = move.getSrcY();
+  // Restore the piece to its original position
+  if (src.getX() == BOARD_SIZE) {
+    // If the move was from a hand piece, remove the piece and increase the hand piece
+    _removePiece(dst);
+    _addHand(_color, src.getY());
+  } else {
+    // If the move was from a piece on the board, move the piece and restore any captured piece
+    uint8_t dst_piece = _cells[dst.getIndex()];
 
-    if (_color == COLOR_WHITE) {
-      return PIECE_WHITE_BEGIN + hand_piece;
-    } else {
-      return PIECE_BLACK_BEGIN + hand_piece;
+    if (move.isPromote()) {
+      dst_piece -= PIECE_PROMOTE;
     }
-  }
 
-  // Get the type of piece at the source
-  uint8_t piece = _cells[move.getSrcY()][move.getSrcX()];
+    _removePiece(dst);
+    _putPiece(src, dst_piece);
 
-  // If promoted, convert to promoted piece
-  if (move.isPromote()) {
-    piece += PIECE_PROMOTE;
-  }
+    // If there was a captured piece, restore it
+    if (captured_piece != PIECE_EMPTY) {
+      uint8_t hand_piece =
+          (captured_piece < PIECE_WHITE_BEGIN)
+              ? (captured_piece - PIECE_BLACK_BEGIN + PIECE_HAND_BEGIN)
+              : (captured_piece - PIECE_WHITE_BEGIN + PIECE_HAND_BEGIN);
 
-  return piece;
-}
-
-/**
- * Get the number of specified hand pieces.
- * @param color Side to move
- * @param piece Type of piece
- * @return Number of hand pieces
- */
-int32_t Board::getHandPieceNum(int32_t color, int32_t piece) const {
-  if (color == COLOR_BLACK) {
-    return _hands[0][piece - PIECE_HAND_BEGIN];
-  } else {
-    return _hands[1][piece - PIECE_HAND_BEGIN];
-  }
-}
-
-/**
- * Get the last move.
- * @return Last move
- */
-Move Board::getLastMove() const {
-  return _lastMove;
-}
-
-/**
- * Get a list of coordinates of pieces attacking the specified square.
- * @param x X coordinate
- * @param y Y coordinate
- * @return List of coordinates of attacking pieces
- */
-std::vector<std::pair<int32_t, int32_t>> Board::getAttackers(int32_t x, int32_t y) const {
-  return getAttackerPositions(_cells, x, y);
-}
-
-/**
- * Get list of legal moves for the current board.
- * @param removeUnpromote True to remove unpromoted moves for pawns, bishops, and rooks
- * @param checkmateOnly True to get only checking moves
- * @return List of legal moves
- */
-std::vector<Move> Board::getLegalMoves(
-    bool removeUnpromote, bool checkmateOnly) const {
-  std::vector<Move> all_moves;
-
-  // Convert board information to match the current player's perspective
-  uint8_t cells[BOARD_SIZE][BOARD_SIZE];
-  uint8_t hands[PIECE_HAND_END - PIECE_HAND_BEGIN];
-
-  if (_color == COLOR_BLACK) {
-    // If it's black's turn, copy as is
-    memcpy(cells, _cells, sizeof(cells));
-
-    // Copy hand pieces as is
-    memcpy(hands, _hands[0], sizeof(hands));
-  } else {
-    // If it's white's turn, flip and copy
-    for (int32_t y = 0; y < BOARD_SIZE; y++) {
-      for (int32_t x = 0; x < BOARD_SIZE; x++) {
-        uint8_t piece = _cells[BOARD_SIZE - 1 - y][BOARD_SIZE - 1 - x];
-
-        if (piece == PIECE_EMPTY) {
-          cells[y][x] = PIECE_EMPTY;
-        } else if (PIECE_BLACK_BEGIN <= piece && piece < PIECE_BLACK_END) {
-          cells[y][x] = piece - PIECE_BLACK_BEGIN + PIECE_WHITE_BEGIN;
-        } else if (PIECE_WHITE_BEGIN <= piece && piece < PIECE_WHITE_END) {
-          cells[y][x] = piece - PIECE_WHITE_BEGIN + PIECE_BLACK_BEGIN;
-        } else {  // If an invalid piece exists, set it to empty
-          cells[y][x] = PIECE_EMPTY;
-        }
+      if (hand_piece >= PIECE_HAND_END) {
+        hand_piece -= PIECE_PROMOTE;
       }
-    }
 
-    // Copy hand pieces as is
-    memcpy(hands, _hands[1], sizeof(hands));
+      _putPiece(dst, captured_piece);
+      _removeHand(_color, hand_piece);
+    }
+  }
+}
+
+/**
+ * Gets the positions of pieces that attack the specified position.
+ * @param position The position to check
+ * @return A list of positions of pieces that attack the specified position
+ */
+std::vector<Position> Board::getAttackers(const Position& position) const {
+  // Reserve size in advance since at most 10 pieces can attack a position
+  std::vector<Position> attackers;
+  attackers.reserve(10);
+
+  // Get the positions of pieces that attack the specified position
+  for (int8_t color : {COLOR_BLACK, COLOR_WHITE}) {
+    for (int8_t attacker : _getAttackers<false, false>(color, position.getIndex())) {
+      attackers.emplace_back(attacker);
+    }
   }
 
-  // Get moves for dropping pieces from hand
-  std::vector<Move> hand_moves = getLegalHandMoves(cells, hands);
-  all_moves.insert(all_moves.end(), hand_moves.begin(), hand_moves.end());
+  return attackers;
+}
 
-  // Get moves for moving pieces on the board
-  std::vector<Move> board_moves = getLegalBoardMoves(cells, removeUnpromote);
-  all_moves.insert(all_moves.end(), board_moves.begin(), board_moves.end());
-
-  // Extract only moves that evade check
+/**
+ * Gets the list of legal moves for the current board.
+ * @param removeUnpromote If true, removes unpromoted moves for pawns, bishops, rooks, and lances on the second row
+ * @param checkOnly If true, only gets moves that result in check
+ * @return A list of legal moves
+ */
+std::vector<Move> Board::getLegalMoves(bool removeUnpromote, bool checkOnly) const {
   std::vector<Move> legal_moves;
-  int32_t my_king_pos = (_color == COLOR_BLACK) ? _kingPositions[0] : _kingPositions[1];
-  int32_t op_king_pos = (_color == COLOR_BLACK) ? _kingPositions[1] : _kingPositions[0];
 
-  if (_color == COLOR_WHITE) {
-    my_king_pos = BOARD_SIZE * BOARD_SIZE - 1 - my_king_pos;
-    op_king_pos = BOARD_SIZE * BOARD_SIZE - 1 - op_king_pos;
+  if (checkOnly) {
+    legal_moves.reserve(16);
+  } else {
+    legal_moves.reserve(64);
   }
 
-  for (const Move& move : all_moves) {
-    // Create the board state after dropping a hand piece and check for check
-    if (move.getSrcX() == BOARD_SIZE) {
-      // Create the board state after dropping a hand piece
-      uint8_t dst_piece = cells[move.getDstY()][move.getDstX()];
-      cells[move.getDstY()][move.getDstX()] = move.getSrcY() + PIECE_BLACK_BEGIN;
-
-      // Check for checkmate
-      bool my_king_checked = false;
-      bool op_king_checked = true;
-
-      if (my_king_pos >= 0) {
-        my_king_checked = isCheckedPosition(
-            cells, my_king_pos % BOARD_SIZE, my_king_pos / BOARD_SIZE, COLOR_BLACK);
-      }
-
-      if (checkmateOnly && op_king_pos >= 0) {
-        op_king_checked = isCheckedPosition(
-            cells, op_king_pos % BOARD_SIZE, op_king_pos / BOARD_SIZE, COLOR_WHITE);
-      }
-
-      // Restore the board state
-      cells[move.getDstY()][move.getDstX()] = dst_piece;
-
-      // If the king is in check, skip this move (do not register it)
-      if (my_king_checked || !op_king_checked) {
-        continue;
-      }
-    }
-    // Create the board state after moving a piece and check for check
-    else {
-      // Create the board state after moving a piece
-      uint8_t src_piece = cells[move.getSrcY()][move.getSrcX()];
-      uint8_t dst_piece = cells[move.getDstY()][move.getDstX()];
-      uint8_t moved_piece = src_piece;
-
-      if (move.isPromote()) {
-        moved_piece += PIECE_PROMOTE;
-      }
-
-      cells[move.getSrcY()][move.getSrcX()] = PIECE_EMPTY;
-      cells[move.getDstY()][move.getDstX()] = moved_piece;
-
-      // Check for checkmate
-      bool my_king_checked = false;
-      bool op_king_checked = true;
-
-      if (src_piece == PIECE_BLACK_KING) {
-        my_king_checked = isCheckedPosition(
-            cells, move.getDstX(), move.getDstY(), COLOR_BLACK);
-      } else if (my_king_pos >= 0) {
-        my_king_checked = isCheckedPosition(
-            cells, my_king_pos % BOARD_SIZE, my_king_pos / BOARD_SIZE, COLOR_BLACK);
-      }
-
-      if (checkmateOnly && op_king_pos >= 0) {
-        op_king_checked = isCheckedPosition(
-            cells, op_king_pos % BOARD_SIZE, op_king_pos / BOARD_SIZE, COLOR_WHITE);
-      }
-
-      // Restore the board state
-      cells[move.getSrcY()][move.getSrcX()] = src_piece;
-      cells[move.getDstY()][move.getDstX()] = dst_piece;
-
-      // If the king is in check, skip this move (do not register it)
-      if (my_king_checked || !op_king_checked) {
-        continue;
-      }
-    }
-
-    // If it's white's turn, register the move with flipped coordinates
-    if (_color == COLOR_BLACK) {
-      legal_moves.push_back(move);
-    } else if (move.getSrcX() == BOARD_SIZE) {
-      legal_moves.emplace_back(
-          BOARD_SIZE,
-          move.getSrcY(),
-          BOARD_SIZE - 1 - move.getDstX(),
-          BOARD_SIZE - 1 - move.getDstY(),
-          move.isPromote());
+  if (removeUnpromote) {
+    if (checkOnly) {
+      _getLegalMoves<true, true>(legal_moves);
     } else {
-      legal_moves.emplace_back(
-          BOARD_SIZE - 1 - move.getSrcX(),
-          BOARD_SIZE - 1 - move.getSrcY(),
-          BOARD_SIZE - 1 - move.getDstX(),
-          BOARD_SIZE - 1 - move.getDstY(),
-          move.isPromote());
+      _getLegalMoves<true, false>(legal_moves);
+    }
+  } else {
+    if (checkOnly) {
+      _getLegalMoves<false, true>(legal_moves);
+    } else {
+      _getLegalMoves<false, false>(legal_moves);
     }
   }
 
@@ -1432,27 +541,20 @@ std::vector<Move> Board::getLegalMoves(
 }
 
 /**
- * Get list of moves in checkmate sequence for the current board.
- * @param depth Depth for checkmate sequence search
- * @return List of moves in checkmate sequence
+ * Gets the sequence of moves that lead to checkmate for the current board.
+ * @param depth The depth of the checkmate search
+ * @return A sequence of moves that lead to checkmate
  */
 std::vector<Move> Board::getCheckmateMoves(int32_t depth) const {
-  // Depth must be an odd number greater than or equal to 1
-  if (depth < 1) {
-    depth = 1;
-  } else if (depth % 2 == 0) {
-    depth = depth - 1;
-  }
+  // Create a clone of the board for calculation
+  // During the search, the contents of the Board object change,
+  // so a separate board is prepared for the search
+  Board clone_board(*this);
 
-  // Create an array of boards for calculation
-  std::unique_ptr<Board[]> boards(new Board[depth + 1]);
+  // Execute the checkmate search
+  std::vector<Move> moves = searchCheckmateMoves(clone_board, depth);
 
-  boards[depth].copyFrom(this);
-
-  // Execute checkmate search
-  std::vector<Move> moves = searchCheckmateMove(boards.get(), depth);
-
-  // Return the sequence of moves in the checkmate sequence
+  // Return the sequence of moves that lead to checkmate
   // (stored in reverse order, so reverse the order)
   std::reverse(moves.begin(), moves.end());
 
@@ -1460,163 +562,94 @@ std::vector<Move> Board::getCheckmateMoves(int32_t depth) const {
 }
 
 /**
- * Return true if nyugyoku declaration is possible.
- * @param color Side to move
+ * Returns true if the board is in a state where nyugyoku declaration is possible.
+ * @param color The color of the player making the declaration
  * @return True if nyugyoku declaration is possible
  */
-bool Board::isNyugyoku(int32_t color) const {
-  // [Condition 1] It is the declaring side's turn.
-  // [Condition 6] The declaring side has remaining time.
+bool Board::isNyugyoku(int8_t color) const {
+  int8_t my_color_idx = (color == COLOR_BLACK) ? 0 : 1;
 
-  // [Condition 5] The declaring side's king is not in check.
-  if (isCheckmate(color)) {
+  // [Condition 1] It is the declaring player's turn
+  // [Condition 6] The declaring player has remaining time
+
+  // [Condition 5] The declaring player's king is not in check
+  if (isCheck(color)) {
     return false;
   }
 
-  // [Condition 2] The declaring side's king has entered the opponent's camp
-  // (innermost three rows).
-  if (color == COLOR_BLACK) {
-    if (_kingPositions[0] < 0 || _kingPositions[0] >= BOARD_SIZE * 3) {
-      return false;
-    }
-  } else {
-    if (_kingPositions[1] < 0 || _kingPositions[1] < BOARD_SIZE * (BOARD_SIZE - 3)) {
-      return false;
-    }
-  }
+  // [Condition 2] The declaring player's king has entered the opponent's territory (inner 3 rows)
+  int8_t king_pos_idx = _kingPositions[my_color_idx].getIndex();
 
-  // Check pieces within the opponent's camp (innermost three rows)
-  int32_t nyugyoku_score = 0;
-  int32_t nyugyoku_count = 0;
-
-  if (color == COLOR_BLACK) {
-    for (int32_t y = 0; y <= 2; y++) {
-      for (int32_t x = 0; x < BOARD_SIZE; x++) {
-        uint8_t piece = _cells[y][x];
-
-        if (piece == PIECE_EMPTY ||
-            piece < PIECE_BLACK_BEGIN || PIECE_BLACK_END <= piece) {
-          continue;
-        }
-
-        if (piece == PIECE_BLACK_KING) {
-          continue;
-        }
-
-        if (piece == PIECE_BLACK_ROOK || piece == PIECE_BLACK_DRAGON ||
-            piece == PIECE_BLACK_BISHOP || piece == PIECE_BLACK_HORSE) {
-          nyugyoku_score += 5;
-        } else {
-          nyugyoku_score += 1;
-        }
-
-        nyugyoku_count += 1;
-      }
-    }
-  } else {
-    for (int32_t y = 6; y <= 8; y++) {
-      for (int32_t x = 0; x < BOARD_SIZE; x++) {
-        uint8_t piece = _cells[y][x];
-
-        if (piece == PIECE_EMPTY ||
-            piece < PIECE_WHITE_BEGIN || PIECE_WHITE_END <= piece) {
-          continue;
-        }
-
-        if (piece == PIECE_WHITE_KING) {
-          continue;
-        }
-
-        if (piece == PIECE_WHITE_ROOK || piece == PIECE_WHITE_DRAGON ||
-            piece == PIECE_WHITE_BISHOP || piece == PIECE_WHITE_HORSE) {
-          nyugyoku_score += 5;
-        } else {
-          nyugyoku_score += 1;
-        }
-
-        nyugyoku_count += 1;
-      }
-    }
-  }
-
-  // [Condition 4] The declaring side has 10 or more pieces (excluding the king)
-  // in the opponent's camp (innermost three rows).
-  if (nyugyoku_count < 10) {
+  if (king_pos_idx < 0 ||
+      !BITBOARD_ENEMY_AREAS[my_color_idx].hasBit(king_pos_idx)) {
     return false;
   }
 
-  // [Condition 3] The declaring side's score is calculated with 5 points
-  // for major pieces and 1 point for minor pieces.
-  // Only the declaring side's hand pieces and the declaring side's pieces
-  // (excluding the king) in the opponent's camp are counted for scoring.
-  if (color == COLOR_BLACK) {
-    nyugyoku_score +=
-        _hands[0][PIECE_HAND_ROOK - PIECE_HAND_BEGIN] * 5 +
-        _hands[0][PIECE_HAND_BISHOP - PIECE_HAND_BEGIN] * 5 +
-        _hands[0][PIECE_HAND_PAWN - PIECE_HAND_BEGIN] +
-        _hands[0][PIECE_HAND_LANCE - PIECE_HAND_BEGIN] +
-        _hands[0][PIECE_HAND_KNIGHT - PIECE_HAND_BEGIN] +
-        _hands[0][PIECE_HAND_SILVER - PIECE_HAND_BEGIN] +
-        _hands[0][PIECE_HAND_GOLD - PIECE_HAND_BEGIN];
-  } else {
-    nyugyoku_score +=
-        _hands[1][PIECE_HAND_ROOK - PIECE_HAND_BEGIN] * 5 +
-        _hands[1][PIECE_HAND_BISHOP - PIECE_HAND_BEGIN] * 5 +
-        _hands[1][PIECE_HAND_PAWN - PIECE_HAND_BEGIN] +
-        _hands[1][PIECE_HAND_LANCE - PIECE_HAND_BEGIN] +
-        _hands[1][PIECE_HAND_KNIGHT - PIECE_HAND_BEGIN] +
-        _hands[1][PIECE_HAND_SILVER - PIECE_HAND_BEGIN] +
-        _hands[1][PIECE_HAND_GOLD - PIECE_HAND_BEGIN];
+  // [Condition 4] The declaring player has 10 or more pieces
+  // in the opponent's territory (inner 3 rows), excluding the king
+  // Since the king is in the enemy territory, a total of 11 or more pieces must exist
+  BitBoard invasion_bitboard =
+      _colorBitBoards[my_color_idx] & BITBOARD_ENEMY_AREAS[my_color_idx];
+
+  if (invasion_bitboard.countBit() < 11) {
+    return false;
   }
 
-  // Get the required score for nyugyoku declaration
-  int required_score = 0;
-
-  if (color == COLOR_BLACK) {
-    required_score = _nyugyokuScores[0];
-  } else {
-    required_score = _nyugyokuScores[1];
-  }
+  // [Condition 3] The declaring player's score is calculated as:
+  // major pieces (rook/bishop) = 5 points, minor pieces = 1 point
+  // Points are counted only from the declaring player's captured pieces
+  // and pieces in the enemy territory (excluding the king)
+  BitBoard bishop_rook_bitboard =
+      (_pieceBitBoards[my_color_idx][PIECE_BLACK_BISHOP - PIECE_BLACK_BEGIN] |
+       _pieceBitBoards[my_color_idx][PIECE_BLACK_ROOK - PIECE_BLACK_BEGIN]) &
+      invasion_bitboard;
+  int8_t nyugyoku_score =
+      (invasion_bitboard.countBit() - 1) +
+      (bishop_rook_bitboard.countBit() * 4) +
+      _hands[my_color_idx][PIECE_HAND_ROOK - PIECE_HAND_BEGIN] * 5 +
+      _hands[my_color_idx][PIECE_HAND_BISHOP - PIECE_HAND_BEGIN] * 5 +
+      _hands[my_color_idx][PIECE_HAND_PAWN - PIECE_HAND_BEGIN] +
+      _hands[my_color_idx][PIECE_HAND_LANCE - PIECE_HAND_BEGIN] +
+      _hands[my_color_idx][PIECE_HAND_KNIGHT - PIECE_HAND_BEGIN] +
+      _hands[my_color_idx][PIECE_HAND_SILVER - PIECE_HAND_BEGIN] +
+      _hands[my_color_idx][PIECE_HAND_GOLD - PIECE_HAND_BEGIN];
 
   // Check if the required score for nyugyoku declaration is met
-  return nyugyoku_score >= required_score;
+  return nyugyoku_score >= _nyugyokuScores[my_color_idx];
 }
 
 /**
- * Return true if in checkmate.
- * @param color Side to move
- * @return True if in checkmate
+ * Returns true if the board is in a state where the king is in check.
+ * @param color The color of the player whose king is in check
+ * @return True if the king is in check
  */
-bool Board::isCheckmate(int32_t color) const {
-  // Get the king's position
-  int32_t king_position =
-      (color == COLOR_BLACK) ? _kingPositions[0] : _kingPositions[1];
+bool Board::isCheck(int8_t color) const {
+  int8_t color_idx = (color == COLOR_BLACK) ? 0 : 1;
+  int8_t king_pos_idx = _kingPositions[color_idx].getIndex();
 
-  // If the king does not exist, it is considered not in check
-  if (king_position < 0) {
+  // If the king is not on the board, it cannot be in check
+  if (king_pos_idx < 0) {
     return false;
   }
-
-  // Check if the king's position is under attack
-  int32_t king_x = king_position % BOARD_SIZE;
-  int32_t king_y = king_position / BOARD_SIZE;
-
-  return isCheckedPosition(_cells, king_x, king_y, color);
+  // If the king is on the board, check if it is in check
+  else {
+    return !_getAttackers<true, false>(color, king_pos_idx).empty();
+  }
 }
 
 /**
- * Get SFEN string.
- * @return SFEN string
+ * Returns the SFEN string representation of the board.
+ * @return The SFEN string representation of the board
  */
 std::string Board::getSfen() const {
   std::stringstream ss;
 
-  // Set board information
+  // Set the board information
   for (int32_t y = 0; y < BOARD_SIZE; y++) {
     int32_t empty_count = 0;
 
     for (int32_t x = BOARD_SIZE - 1; x >= 0; x--) {
-      uint8_t piece = _cells[y][x];
+      uint8_t piece = _cells[y + BOARD_SIZE * x];
 
       if (piece == PIECE_EMPTY) {
         empty_count++;
@@ -1628,63 +661,7 @@ std::string Board::getSfen() const {
         empty_count = 0;
       }
 
-      if (piece == PIECE_BLACK_PAWN) {
-        ss << "P";
-      } else if (piece == PIECE_BLACK_LANCE) {
-        ss << "L";
-      } else if (piece == PIECE_BLACK_KNIGHT) {
-        ss << "N";
-      } else if (piece == PIECE_BLACK_SILVER) {
-        ss << "S";
-      } else if (piece == PIECE_BLACK_BISHOP) {
-        ss << "B";
-      } else if (piece == PIECE_BLACK_ROOK) {
-        ss << "R";
-      } else if (piece == PIECE_BLACK_GOLD) {
-        ss << "G";
-      } else if (piece == PIECE_BLACK_KING) {
-        ss << "K";
-      } else if (piece == PIECE_BLACK_PRO_PAWN) {
-        ss << "+P";
-      } else if (piece == PIECE_BLACK_PRO_LANCE) {
-        ss << "+L";
-      } else if (piece == PIECE_BLACK_PRO_KNIGHT) {
-        ss << "+N";
-      } else if (piece == PIECE_BLACK_PRO_SILVER) {
-        ss << "+S";
-      } else if (piece == PIECE_BLACK_HORSE) {
-        ss << "+B";
-      } else if (piece == PIECE_BLACK_DRAGON) {
-        ss << "+R";
-      } else if (piece == PIECE_WHITE_PAWN) {
-        ss << "p";
-      } else if (piece == PIECE_WHITE_LANCE) {
-        ss << "l";
-      } else if (piece == PIECE_WHITE_KNIGHT) {
-        ss << "n";
-      } else if (piece == PIECE_WHITE_SILVER) {
-        ss << "s";
-      } else if (piece == PIECE_WHITE_BISHOP) {
-        ss << "b";
-      } else if (piece == PIECE_WHITE_ROOK) {
-        ss << "r";
-      } else if (piece == PIECE_WHITE_GOLD) {
-        ss << "g";
-      } else if (piece == PIECE_WHITE_KING) {
-        ss << "k";
-      } else if (piece == PIECE_WHITE_PRO_PAWN) {
-        ss << "+p";
-      } else if (piece == PIECE_WHITE_PRO_LANCE) {
-        ss << "+l";
-      } else if (piece == PIECE_WHITE_PRO_KNIGHT) {
-        ss << "+n";
-      } else if (piece == PIECE_WHITE_PRO_SILVER) {
-        ss << "+s";
-      } else if (piece == PIECE_WHITE_HORSE) {
-        ss << "+b";
-      } else if (piece == PIECE_WHITE_DRAGON) {
-        ss << "+r";
-      }
+      ss << SFEN_PIECE_NAMES.at(piece);
     }
 
     if (empty_count > 0) {
@@ -1696,43 +673,30 @@ std::string Board::getSfen() const {
     }
   }
 
-  // Set the side to move
+  // Set the turn
   if (_color == COLOR_BLACK) {
     ss << " b ";
   } else {
     ss << " w ";
   }
 
-  // Set information about hand pieces
+  // Set the hand piece information
   bool has_hand = false;
 
-  for (int32_t i = 0; i < PIECE_HAND_END - PIECE_HAND_BEGIN; i++) {
-    int32_t hand_piece = SFEN_HAND_PIECES[i];
-    const char* hand_name = SFEN_HAND_BLACK_NAMES[i];
-    uint8_t hand_count = _hands[0][hand_piece - PIECE_HAND_BEGIN];
+  for (int8_t color_idx = 0; color_idx < 2; color_idx++) {
+    for (int32_t i = 0; i < PIECE_HAND_END - PIECE_HAND_BEGIN; i++) {
+      uint8_t hand_piece = SFEN_HAND_PIECES[i];
+      const char* hand_name = SFEN_HAND_PIECE_NAMES[color_idx].at(hand_piece);
+      uint8_t hand_count = _hands[color_idx][hand_piece - PIECE_HAND_BEGIN];
 
-    if (hand_count > 0) {
-      if (hand_count > 1) {
-        ss << static_cast<int32_t>(hand_count);
+      if (hand_count > 0) {
+        if (hand_count > 1) {
+          ss << static_cast<int32_t>(hand_count);
+        }
+
+        ss << hand_name;
+        has_hand = true;
       }
-
-      ss << hand_name;
-      has_hand = true;
-    }
-  }
-
-  for (int32_t i = 0; i < PIECE_HAND_END - PIECE_HAND_BEGIN; i++) {
-    int32_t hand_piece = SFEN_HAND_PIECES[i];
-    const char* hand_name = SFEN_HAND_WHITE_NAMES[i];
-    uint8_t hand_count = _hands[1][hand_piece - PIECE_HAND_BEGIN];
-
-    if (hand_count > 0) {
-      if (hand_count > 1) {
-        ss << static_cast<int32_t>(hand_count);
-      }
-
-      ss << hand_name;
-      has_hand = true;
     }
   }
 
@@ -1747,67 +711,59 @@ std::string Board::getSfen() const {
 }
 
 /**
- * Get data to input to the model.
- * @param inputs Data to input to the model
+ * Retrieves the data to be input into the model.
+ * @param inputs The data to be input into the model
  */
 void Board::getInputs(int32_t* inputs) const {
-  getInputs(inputs, getColor(), getTurn());
+  getInputs(inputs, _color);
 }
 
 /**
- * Get data to input to the model.
- * @param inputs Data to input to the model
- * @param color Side to move
- * @param turn Number of moves
+ * Retrieves the data to be input into the model.
+ * @param inputs The data to be input into the model
+ * @param color The color of the player whose turn it is
  */
-void Board::getInputs(int32_t* inputs, int32_t color, int32_t turn) const {
-  // Initialize with 0
+void Board::getInputs(int32_t* inputs, int8_t color) const {
+  // Initialize the input array
   std::fill_n(inputs, MODEL_INPUT_PACK_SIZE, 0);
 
-  // Get input data for the model
+  // Retrieve the data to be input into the model
   _getBoardInputs(inputs, color);
-  _getInfoInputs(inputs, color, turn);
+  _getInfoInputs(inputs, color);
 }
 
 /**
- * Copy the board state.
- * @param board Source board to copy from
+ * Copies the state of the board.
+ * @param board The board to copy from
  */
 void Board::copyFrom(const Board* board) {
-  memcpy(_cells, board->_cells, sizeof(_cells));
-  memcpy(_hands, board->_hands, sizeof(_hands));
-  memcpy(_kingPositions, board->_kingPositions, sizeof(_kingPositions));
-  _color = board->_color;
-  _turn = board->_turn;
-  memcpy(_nyugyokuScores, board->_nyugyokuScores, sizeof(_nyugyokuScores));
-  _drawTurn = board->_drawTurn;
-  _lastMove = board->_lastMove;
+  *this = *board;
 }
 
 /**
- * Get string for displaying board information.
- * @return String for displaying board information
+ * Returns a string representation of the board.
+ * @return A string representation of the board
  */
 std::string Board::toString() const {
-  // String in CSA format for displaying piece information.
-  static char piece_names[][3] = {
+  // CSA形式の文字列を作成するための駒情報の配列
+  const char piece_names[][3] = {
       "FU", "KY", "KE", "GI", "KA", "HI", "KI", "OU",
       "TO", "NY", "NK", "NG", "UM", "RY"};
-  static char hand_color_names[][3] = {"P+", "P-"};
+  const char hand_color_names[][3] = {"P+", "P-"};
 
-  // Stream object for creating a string
+  // Create a string stream object to build the string
   std::stringstream ss;
 
-  // Create side to move and turn number
+  // Create the turn and turn number
   ss << "Color: " << ((_color == COLOR_WHITE) ? "white" : "black");
   ss << ", Turn: " << _turn << std::endl;
 
-  // Create piece information for the board
+  // Create the board piece information
   for (int32_t y = 0; y < BOARD_SIZE; y++) {
     ss << "P" << y + 1;
 
-    for (int32_t x = 0; x < BOARD_SIZE; x++) {
-      uint8_t piece = _cells[y][BOARD_SIZE - 1 - x];
+    for (int32_t x = BOARD_SIZE - 1; x >= 0; x--) {
+      uint8_t piece = _cells[y + x * BOARD_SIZE];
 
       if (PIECE_BLACK_BEGIN <= piece && piece < PIECE_BLACK_END) {
         ss << "+" << piece_names[piece - PIECE_BLACK_BEGIN];
@@ -1821,7 +777,7 @@ std::string Board::toString() const {
     ss << std::endl;
   }
 
-  // Create information about hand pieces
+  // Create the hand piece information
   for (int32_t c = 0; c < 2; c++) {
     ss << hand_color_names[c];
 
@@ -1831,130 +787,1668 @@ std::string Board::toString() const {
       }
     }
 
-    ss << std::endl;
+    if (c == 0) {
+      ss << std::endl;
+    }
   }
 
   return ss.str();
 }
 
 /**
- * Get board data to input to the model.
- * @param inputs Board data to input to the model
- * @param color Side to move
+ * Places a piece at the specified position.
+ * This method assumes that there is no piece at the specified coordinates.
+ * @param pos The position to place the piece
+ * @param piece The integer value representing the piece to place
  */
-void Board::_getBoardInputs(int32_t* inputs, int32_t color) const {
-  const size_t black_offset = 1;
-  const size_t white_offset = black_offset + 14 + 14 + 6;
-  const size_t other_offset = white_offset + 14 + 14 + 6;
-  const int board_square = BOARD_SIZE * BOARD_SIZE;
+void Board::_putPiece(const Position& pos, uint8_t piece) {
+  int8_t pos_idx = pos.getIndex();
 
-  for (int32_t y = 0; y < BOARD_SIZE; y++) {
-    for (int32_t x = 0; x < BOARD_SIZE; x++) {
-      // Calculate the index of the location to set the value
-      // If it's white's turn, rotate the board 180 degrees
-      int32_t dst = y + x * BOARD_SIZE;
+  // Update the hash value
+  _hash ^= BOARD_HASH_VALUES[pos_idx][piece];
 
-      if (color == COLOR_WHITE) {
-        dst = board_square - 1 - dst;
+  // Place the piece at the specified position
+  _cells[pos_idx] = piece;
+
+  // Update the bitboards based on the type of piece
+  int32_t color_idx = (piece < PIECE_WHITE_BEGIN) ? 0 : 1;
+  int32_t piece_idx = (piece < PIECE_WHITE_BEGIN)
+                          ? (piece - PIECE_BLACK_BEGIN)
+                          : (piece - PIECE_WHITE_BEGIN);
+
+  _colorBitBoards[color_idx].setBit(pos_idx);
+
+  if (piece_idx < PIECE_BLACK_PRO_PAWN - PIECE_BLACK_BEGIN) {
+    _pieceBitBoards[color_idx][piece_idx].setBit(pos_idx);
+  } else if (piece_idx < PIECE_BLACK_HORSE - PIECE_BLACK_BEGIN) {
+    _pieceBitBoards[color_idx][PIECE_BLACK_GOLD - PIECE_BLACK_BEGIN].setBit(pos_idx);
+  } else if (piece_idx == PIECE_BLACK_HORSE - PIECE_BLACK_BEGIN) {
+    _pieceBitBoards[color_idx][PIECE_BLACK_BISHOP - PIECE_BLACK_BEGIN].setBit(pos_idx);
+    _pieceBitBoards[color_idx][PIECE_BLACK_KING - PIECE_BLACK_BEGIN].setBit(pos_idx);
+  } else if (piece_idx == PIECE_BLACK_DRAGON - PIECE_BLACK_BEGIN) {
+    _pieceBitBoards[color_idx][PIECE_BLACK_ROOK - PIECE_BLACK_BEGIN].setBit(pos_idx);
+    _pieceBitBoards[color_idx][PIECE_BLACK_KING - PIECE_BLACK_BEGIN].setBit(pos_idx);
+  }
+
+  // Update the king's position
+  if (piece == PIECE_BLACK_KING) {
+    _kingPositions[0] = pos;
+  } else if (piece == PIECE_WHITE_KING) {
+    _kingPositions[1] = pos;
+  }
+}
+
+/**
+ * Removes a piece from the specified position.
+ * @param pos The position to remove the piece from
+ */
+void Board::_removePiece(const Position& pos) {
+  int8_t pos_idx = pos.getIndex();
+  uint8_t piece = _cells[pos_idx];
+
+  // Update the hash value
+  _hash ^= BOARD_HASH_VALUES[pos_idx][piece];
+
+  // Remove the piece from the specified position
+  _cells[pos_idx] = PIECE_EMPTY;
+
+  // Update the bitboards based on the type of piece
+  // Promoted pawn, promoted lance, promoted knight, and promoted silver use the same bitboard as gold
+  // Horse uses the same bitboard as bishop and king
+  // Dragon uses the same bitboard as rook and king
+  int32_t color_idx = (piece < PIECE_WHITE_BEGIN) ? 0 : 1;
+  int32_t piece_idx = (piece < PIECE_WHITE_BEGIN)
+                          ? (piece - PIECE_BLACK_BEGIN)
+                          : (piece - PIECE_WHITE_BEGIN);
+
+  _colorBitBoards[color_idx].clearBit(pos_idx);
+
+  if (piece_idx < PIECE_BLACK_PRO_PAWN - PIECE_BLACK_BEGIN) {
+    _pieceBitBoards[color_idx][piece_idx].clearBit(pos_idx);
+  } else if (piece_idx < PIECE_BLACK_HORSE - PIECE_BLACK_BEGIN) {
+    _pieceBitBoards[color_idx][PIECE_BLACK_GOLD - PIECE_BLACK_BEGIN].clearBit(pos_idx);
+  } else if (piece_idx == PIECE_BLACK_HORSE - PIECE_BLACK_BEGIN) {
+    _pieceBitBoards[color_idx][PIECE_BLACK_BISHOP - PIECE_BLACK_BEGIN].clearBit(pos_idx);
+    _pieceBitBoards[color_idx][PIECE_BLACK_KING - PIECE_BLACK_BEGIN].clearBit(pos_idx);
+  } else if (piece_idx == PIECE_BLACK_DRAGON - PIECE_BLACK_BEGIN) {
+    _pieceBitBoards[color_idx][PIECE_BLACK_ROOK - PIECE_BLACK_BEGIN].clearBit(pos_idx);
+    _pieceBitBoards[color_idx][PIECE_BLACK_KING - PIECE_BLACK_BEGIN].clearBit(pos_idx);
+  }
+
+  // Update the king's position
+  if (piece == PIECE_BLACK_KING) {
+    _kingPositions[0] = POSITION_INVALID;
+  } else if (piece == PIECE_WHITE_KING) {
+    _kingPositions[1] = POSITION_INVALID;
+  }
+}
+
+/**
+ * Adds a piece to the hand.
+ * @param color The color of the player (COLOR_BLACK or COLOR_WHITE)
+ * @param piece The integer value representing the piece to add
+ * @param num The number of pieces to add
+ */
+void Board::_addHand(int8_t color, uint8_t piece, int32_t num) {
+  int32_t color_idx = (color == COLOR_BLACK) ? 0 : 1;
+  int32_t piece_idx = piece - PIECE_HAND_BEGIN;
+
+  // Update the hash value
+  _hash ^= HAND_HASH_VALUES[color_idx][piece_idx][_hands[color_idx][piece_idx]];
+
+  // Add the specified piece to the hand
+  _hands[color_idx][piece_idx] += num;
+
+  // Update the hash value
+  _hash ^= HAND_HASH_VALUES[color_idx][piece_idx][_hands[color_idx][piece_idx]];
+}
+
+/**
+ * Adds a piece to the hand.
+ * @param color The color of the player (COLOR_BLACK or COLOR_WHITE)
+ * @param piece The integer value representing the piece to add
+ */
+void Board::_addHand(int8_t color, uint8_t piece) {
+  _addHand(color, piece, 1);
+}
+
+/**
+ * Removes a piece from the hand.
+ * This function assumes that the specified piece exists in the hand.
+ * @param color The color of the player (COLOR_BLACK or COLOR_WHITE)
+ * @param piece The integer value representing the piece to remove
+ */
+void Board::_removeHand(int8_t color, uint8_t piece) {
+  int32_t color_idx = (color == COLOR_BLACK) ? 0 : 1;
+  int32_t piece_idx = piece - PIECE_HAND_BEGIN;
+
+  // Update the hash value
+  _hash ^= HAND_HASH_VALUES[color_idx][piece_idx][_hands[color_idx][piece_idx]];
+
+  // Remove the specified piece from the hand
+  _hands[color_idx][piece_idx] -= 1;
+
+  // Update the hash value
+  _hash ^= HAND_HASH_VALUES[color_idx][piece_idx][_hands[color_idx][piece_idx]];
+}
+
+/**
+ * Returns a list of positions of pieces attacking the specified coordinate.
+ * If the template argument returnOnFirstAttacker is true, only the first attacking piece found is returned.
+ * If additionalOccIndex is specified, a piece blocking that square is assumed when calculating slider attacks.
+ * If the template argument removeOwnKing is true, the own king square is removed when calculating slider attacks.
+ * @param color The side being attacked
+ * @param posIndex The coordinate to check for attacking pieces
+ * @param additionalOccIndex Coordinate to assume a piece is on (-1 if not adding)
+ * @return List of positions of pieces attacking the specified coordinate
+ */
+template <bool returnOnFirstAttacker, bool removeOwnKing>
+std::vector<int8_t> Board::_getAttackers(
+    int8_t color, int8_t posIndex, int8_t additionalOccIndex) const {
+  // Calculate the array indices for the color being attacked and the color attacking
+  int8_t my_color_idx = (color == COLOR_BLACK) ? 0 : 1;
+  int8_t op_color_idx = 1 - my_color_idx;
+
+  // Object to store the coordinates of attacking pieces
+  // Reserve space for up to 10 coordinates in advance
+
+  std::vector<int8_t> attacker_indices;
+
+  if constexpr (returnOnFirstAttacker) {
+    attacker_indices.reserve(1);
+  } else {
+    attacker_indices.reserve(10);
+  }
+
+  // Check pawn attacks
+  BitBoard pawn_bitboard =
+      BITBOARD_PAWN_ATTACKS[my_color_idx][posIndex] &
+      _pieceBitBoards[op_color_idx][PAWN_INDEX];
+
+  while (pawn_bitboard) {
+    attacker_indices.push_back(pawn_bitboard.popRightmostBitIndex());
+
+    if constexpr (returnOnFirstAttacker) {
+      return attacker_indices;
+    }
+  }
+
+  // Check knight attacks
+  BitBoard knight_bitboard =
+      BITBOARD_KNIGHT_ATTACKS[my_color_idx][posIndex] &
+      _pieceBitBoards[op_color_idx][KNIGHT_INDEX];
+
+  while (knight_bitboard) {
+    attacker_indices.push_back(knight_bitboard.popRightmostBitIndex());
+
+    if constexpr (returnOnFirstAttacker) {
+      return attacker_indices;
+    }
+  }
+
+  // Check silver attacks
+  BitBoard silver_bitboard =
+      BITBOARD_SILVER_ATTACKS[my_color_idx][posIndex] &
+      _pieceBitBoards[op_color_idx][SILVER_INDEX];
+
+  while (silver_bitboard) {
+    attacker_indices.push_back(silver_bitboard.popRightmostBitIndex());
+
+    if constexpr (returnOnFirstAttacker) {
+      return attacker_indices;
+    }
+  }
+
+  // Check gold attacks
+  BitBoard gold_bitboard =
+      BITBOARD_GOLD_ATTACKS[my_color_idx][posIndex] &
+      _pieceBitBoards[op_color_idx][GOLD_INDEX];
+
+  while (gold_bitboard) {
+    attacker_indices.push_back(gold_bitboard.popRightmostBitIndex());
+
+    if constexpr (returnOnFirstAttacker) {
+      return attacker_indices;
+    }
+  }
+
+  // Check king attacks
+  // Since king attacks can overlap with bishop and rook attacks,
+  // create a mask to exclude the coordinates found here
+  BitBoard king_bitboard =
+      BITBOARD_KING_ATTACKS[posIndex] & _pieceBitBoards[op_color_idx][KING_INDEX];
+  BitBoard horse_dragon_bitboard = king_bitboard;
+
+  while (king_bitboard) {
+    attacker_indices.push_back(king_bitboard.popRightmostBitIndex());
+
+    if constexpr (returnOnFirstAttacker) {
+      return attacker_indices;
+    }
+  }
+
+  // Create bitboards representing the squares attacked by lance, bishop, and rook
+  BitBoard occ_bitboard = _colorBitBoards[0] | _colorBitBoards[1];
+  BitBoard lance_attack_bitboard;
+  BitBoard bishop_attack_bitboard;
+  BitBoard rook_attack_bitboard;
+
+  // If removeOwnKing is true, remove the position of the player's own king from the occupancy bitboard
+  if constexpr (removeOwnKing) {
+    int8_t king_pos_idx = _kingPositions[my_color_idx].getIndex();
+
+    if (king_pos_idx >= 0) {
+      occ_bitboard.clearBit(king_pos_idx);
+    }
+  }
+
+  // If additionalOccIndex is not -1, assume there is a piece at that position
+  if (additionalOccIndex >= 0) {
+    occ_bitboard.setBit(additionalOccIndex);
+  }
+
+  // Check upward attacks
+  int8_t up_index =
+      (BITBOARD_LONG_ATTACKS[0][posIndex] & occ_bitboard).getLeftmostBitIndex();
+
+  if (up_index >= 0 && !horse_dragon_bitboard.hasBit(up_index)) {
+    if (color == COLOR_BLACK) {
+      lance_attack_bitboard.setBit(up_index);
+    }
+
+    rook_attack_bitboard.setBit(up_index);
+  }
+
+  // Check up-right attacks
+  int8_t up_right_index =
+      (BITBOARD_LONG_ATTACKS[1][posIndex] & occ_bitboard).getLeftmostBitIndex();
+
+  if (up_right_index >= 0 && !horse_dragon_bitboard.hasBit(up_right_index)) {
+    bishop_attack_bitboard.setBit(up_right_index);
+  }
+
+  // Check right attacks
+  int8_t right_index =
+      (BITBOARD_LONG_ATTACKS[2][posIndex] & occ_bitboard).getLeftmostBitIndex();
+
+  if (right_index >= 0 && !horse_dragon_bitboard.hasBit(right_index)) {
+    rook_attack_bitboard.setBit(right_index);
+  }
+
+  // Check down-right attacks
+  int8_t down_right_index =
+      (BITBOARD_LONG_ATTACKS[3][posIndex] & occ_bitboard).getLeftmostBitIndex();
+
+  if (down_right_index >= 0 && !horse_dragon_bitboard.hasBit(down_right_index)) {
+    bishop_attack_bitboard.setBit(down_right_index);
+  }
+
+  // Check downward attacks
+  int8_t down_index =
+      (BITBOARD_LONG_ATTACKS[4][posIndex] & occ_bitboard).getRightmostBitIndex();
+
+  if (down_index >= 0 && !horse_dragon_bitboard.hasBit(down_index)) {
+    if (color == COLOR_WHITE) {
+      lance_attack_bitboard.setBit(down_index);
+    }
+
+    rook_attack_bitboard.setBit(down_index);
+  }
+
+  // Check down-left attacks
+  int8_t down_left_index =
+      (BITBOARD_LONG_ATTACKS[5][posIndex] & occ_bitboard).getRightmostBitIndex();
+
+  if (down_left_index >= 0 && !horse_dragon_bitboard.hasBit(down_left_index)) {
+    bishop_attack_bitboard.setBit(down_left_index);
+  }
+
+  // Check left attacks
+  int8_t left_index =
+      (BITBOARD_LONG_ATTACKS[6][posIndex] & occ_bitboard).getRightmostBitIndex();
+
+  if (left_index >= 0 && !horse_dragon_bitboard.hasBit(left_index)) {
+    rook_attack_bitboard.setBit(left_index);
+  }
+
+  // Check up-left attacks
+  int8_t up_left_index =
+      (BITBOARD_LONG_ATTACKS[7][posIndex] & occ_bitboard).getRightmostBitIndex();
+
+  if (up_left_index >= 0 && !horse_dragon_bitboard.hasBit(up_left_index)) {
+    bishop_attack_bitboard.setBit(up_left_index);
+  }
+
+  // Check lance attacks
+  BitBoard lance_bitboard =
+      lance_attack_bitboard & _pieceBitBoards[op_color_idx][LANCE_INDEX];
+
+  if (lance_bitboard) {
+    attacker_indices.push_back(lance_bitboard.getRightmostBitIndex());
+
+    if constexpr (returnOnFirstAttacker) {
+      return attacker_indices;
+    }
+  }
+
+  // Check bishop attacks
+  BitBoard bishop_bitboard =
+      bishop_attack_bitboard & _pieceBitBoards[op_color_idx][BISHOP_INDEX];
+
+  while (bishop_bitboard) {
+    attacker_indices.push_back(bishop_bitboard.popRightmostBitIndex());
+
+    if constexpr (returnOnFirstAttacker) {
+      return attacker_indices;
+    }
+  }
+
+  // Check rook attacks
+  BitBoard rook_bitboard =
+      rook_attack_bitboard & _pieceBitBoards[op_color_idx][ROOK_INDEX];
+
+  while (rook_bitboard) {
+    attacker_indices.push_back(rook_bitboard.popRightmostBitIndex());
+
+    if constexpr (returnOnFirstAttacker) {
+      return attacker_indices;
+    }
+  }
+
+  return attacker_indices;
+}
+
+/**
+ * Get a list of legal moves for the current board.
+ * If the template parameter removeUnpromote is true,
+ * moves that do not promote pawns, bishops, rooks, or lances on the second rank are removed.
+ * If the template parameter checkOnly is true, only moves that result in check are retrieved.
+ * @param legalMoves A vector to which the list of legal moves will be added.
+ */
+template <bool removeUnpromote, bool checkOnly>
+void Board::_getLegalMoves(std::vector<Move>& legalMoves) const {
+  int8_t my_color_idx = (_color == COLOR_BLACK) ? 0 : 1;
+  int8_t op_color_idx = 1 - my_color_idx;
+
+  // Check the situation of check
+  int8_t king_pos_idx = _kingPositions[my_color_idx].getIndex();
+  std::vector<int8_t> checking_piece_indices;
+
+  if (king_pos_idx >= 0) {
+    checking_piece_indices = _getAttackers<false, false>(_color, king_pos_idx);
+  }
+
+  // If there are no pieces giving check, all legal moves are valid
+  // If there is one piece giving check, the legal moves are capturing that piece,
+  //  moving the king, or placing a piece between the king and the attacking piece
+  // If there are two or more pieces giving check, only moving the king is a legal move
+  BitBoard destination_bitboard;  // Initially initialized to 0
+
+  if (checking_piece_indices.empty()) {
+    destination_bitboard = ~_colorBitBoards[my_color_idx];
+  } else if (checking_piece_indices.size() == 1) {
+    int8_t op_pos_idx = checking_piece_indices[0];
+    int8_t direction = DIRECTION_INDICES[king_pos_idx][op_pos_idx];
+
+    if (direction != 8) {
+      destination_bitboard =
+          BITBOARD_LONG_ATTACKS[direction][king_pos_idx] &
+          BITBOARD_LONG_ATTACKS[(direction + 4) % 8][op_pos_idx];
+    }
+
+    destination_bitboard.setBit(op_pos_idx);
+  }
+
+  // Create moves for moving pieces on the board
+  // Since the one-square moves of horse and dragon can overlap with the king's moves and horse/dragon moves,
+  // generate legal moves for the king, horse, and dragon first and remove duplicate moves
+  _getLegalKingMoves<checkOnly>(legalMoves, destination_bitboard);
+  _getLegalBishopMoves<removeUnpromote, checkOnly>(legalMoves, destination_bitboard);
+  _getLegalRookMoves<removeUnpromote, checkOnly>(legalMoves, destination_bitboard);
+
+  // Remove duplicate moves
+  std::sort(legalMoves.begin(), legalMoves.end());
+  legalMoves.erase(std::unique(legalMoves.begin(), legalMoves.end()), legalMoves.end());
+
+  // Generate legal moves for pawns, lances, knights, silvers, and golds
+  _getLegalPawnMoves<removeUnpromote, checkOnly>(legalMoves, destination_bitboard);
+  _getLegalLanceMoves<removeUnpromote, checkOnly>(legalMoves, destination_bitboard);
+  _getLegalKnightMoves<checkOnly>(legalMoves, destination_bitboard);
+  _getLegalSilverMoves<checkOnly>(legalMoves, destination_bitboard);
+  _getLegalGoldMoves<checkOnly>(legalMoves, destination_bitboard);
+
+  // Generate legal moves for dropping pawns, lances, knights, silvers, golds, bishops, and rooks
+  // Since these are moves for dropping pieces from hand, moves that capture opponent's pieces are excluded
+  destination_bitboard &= ~_colorBitBoards[op_color_idx];
+  _getLegalHandPawnMoves<checkOnly>(legalMoves, destination_bitboard);
+  _getLegalHandLanceMoves<checkOnly>(legalMoves, destination_bitboard);
+  _getLegalHandKnightMoves<checkOnly>(legalMoves, destination_bitboard);
+  _getLegalHandSilverMoves<checkOnly>(legalMoves, destination_bitboard);
+  _getLegalHandGoldMoves<checkOnly>(legalMoves, destination_bitboard);
+  _getLegalHandBishopMoves<checkOnly>(legalMoves, destination_bitboard);
+  _getLegalHandRookMoves<checkOnly>(legalMoves, destination_bitboard);
+}
+
+/**
+ * Create legal moves for pawns.
+ * If the template parameter removeUnpromote is true, moves that do not promote pawns are removed.
+ * If the template parameter checkOnly is true, only moves that give check are obtained.
+ * @param legalMoves Array object to which the list of legal moves for pawns is added
+ * @param destinationBitBoard Bitboard representing valid destination squares for pawn moves
+ */
+template <bool removeUnpromote, bool checkOnly>
+void Board::_getLegalPawnMoves(
+    std::vector<Move>& legalMoves, const BitBoard& destinationBitBoard) const {
+  int8_t my_color_idx = (_color == COLOR_BLACK) ? 0 : 1;
+
+  // Create bitboard for pawns
+  BitBoard pawn_bitboard = _pieceBitBoards[my_color_idx][PAWN_INDEX];
+
+  // Generate legal moves for each pawn
+  while (pawn_bitboard) {
+    int8_t src_idx = pawn_bitboard.popRightmostBitIndex();
+    BitBoard move_bitboard =
+        BITBOARD_PAWN_ATTACKS[my_color_idx][src_idx] & destinationBitBoard;
+
+    // If there are no valid destinations, move on to the next pawn
+    if (!move_bitboard) {
+      continue;
+    }
+
+    // Get the coordinates of the destination
+    int8_t dst_idx = move_bitboard.getRightmostBitIndex();
+
+    // Check if the move is possible (i.e., not a discovered check)
+    if (_isDiscoveredCheckMove(src_idx, dst_idx, _color)) {
+      continue;
+    }
+
+    // Check if the move can promote
+    bool promote = BITBOARD_ENEMY_AREAS[my_color_idx].hasBit(dst_idx);
+
+    // If only checking for check, register the move only if it gives check
+    // Otherwise, register the move unconditionally
+    if constexpr (checkOnly) {
+      bool check = (promote) ? _isCheckMove<PIECE_BLACK_GOLD>(src_idx, dst_idx)
+                             : _isCheckMove<PIECE_BLACK_PAWN>(src_idx, dst_idx);
+      if (check) {
+        legalMoves.emplace_back(Position(src_idx), Position(dst_idx), promote);
       }
+    } else {
+      legalMoves.emplace_back(Position(src_idx), Position(dst_idx), promote);
+    }
 
-      // Set information about empty squares
-      if (_cells[y][x] == PIECE_EMPTY) {
-        setInputBit(inputs, 0 * board_square + dst);
-      }
-
-      // Set the piece placement value
-      uint8_t piece = _cells[y][x];
-
-      if (color == COLOR_BLACK) {
-        if (PIECE_BLACK_BEGIN <= piece && piece < PIECE_BLACK_END) {
-          int32_t idx = piece - PIECE_BLACK_BEGIN;
-          setInputBit(inputs, (black_offset + idx) * board_square + dst);
-        } else if (PIECE_WHITE_BEGIN <= piece && piece < PIECE_WHITE_END) {
-          int32_t idx = piece - PIECE_WHITE_BEGIN;
-          setInputBit(inputs, (white_offset + idx) * board_square + dst);
-        }
-      } else {
-        if (PIECE_BLACK_BEGIN <= piece && piece < PIECE_BLACK_END) {
-          int32_t idx = piece - PIECE_BLACK_BEGIN;
-          setInputBit(inputs, (white_offset + idx) * board_square + dst);
-        } else if (PIECE_WHITE_BEGIN <= piece && piece < PIECE_WHITE_END) {
-          int32_t idx = piece - PIECE_WHITE_BEGIN;
-          setInputBit(inputs, (black_offset + idx) * board_square + dst);
-        }
-      }
-
-      // Set the piece attack value
-      int32_t black_att_count = 0;
-      int32_t white_att_count = 0;
-
-      for (std::pair<int32_t, int32_t> pos : getAttackers(x, y)) {
-        uint8_t att_piece = _cells[pos.second][pos.first];
-
-        if (color == COLOR_BLACK) {
-          if (PIECE_BLACK_BEGIN <= att_piece && att_piece < PIECE_BLACK_END) {
-            int32_t idx = att_piece - PIECE_BLACK_BEGIN;
-            setInputBit(inputs, (black_offset + 14 + idx) * board_square + dst);
-            black_att_count += 1;
-          } else if (PIECE_WHITE_BEGIN <= att_piece && att_piece < PIECE_WHITE_END) {
-            int32_t idx = att_piece - PIECE_WHITE_BEGIN;
-            setInputBit(inputs, (white_offset + 14 + idx) * board_square + dst);
-            white_att_count += 1;
+    // Register promoted moves, and if removeUnpromote is false, also register unpromoted moves
+    // However, if the pawn moves to the first rank, it can only promote, so do not register unpromoted moves
+    if constexpr (!removeUnpromote) {
+      if (promote && BITBOARD_PAWN_DROPABLES[my_color_idx].hasBit(dst_idx)) {
+        // If only checking for check, register the move only if it gives check
+        // Otherwise, register the move unconditionally
+        if constexpr (checkOnly) {
+          if (_isCheckMove<PIECE_BLACK_PAWN>(src_idx, dst_idx)) {
+            legalMoves.emplace_back(Position(src_idx), Position(dst_idx), false);
           }
         } else {
-          if (PIECE_BLACK_BEGIN <= att_piece && att_piece < PIECE_BLACK_END) {
-            int32_t idx = att_piece - PIECE_BLACK_BEGIN;
-            setInputBit(inputs, (white_offset + 14 + idx) * board_square + dst);
-            white_att_count += 1;
-          } else if (PIECE_WHITE_BEGIN <= att_piece && att_piece < PIECE_WHITE_END) {
-            int32_t idx = att_piece - PIECE_WHITE_BEGIN;
-            setInputBit(inputs, (black_offset + 14 + idx) * board_square + dst);
-            black_att_count += 1;
-          }
+          legalMoves.emplace_back(Position(src_idx), Position(dst_idx), false);
         }
-      }
-
-      // Set the number of piece attacks
-      black_att_count = std::min(black_att_count, 5);
-      white_att_count = std::min(white_att_count, 5);
-
-      setInputBit(inputs, (black_offset + 14 + 14 + black_att_count) * board_square + dst);
-      setInputBit(inputs, (white_offset + 14 + 14 + white_att_count) * board_square + dst);
-
-      // Set the coordinates of the last moved piece
-      if (_lastMove.getSrcX() >= 0 && _lastMove.getDstX() == x && _lastMove.getDstY() == y) {
-        setInputBit(inputs, other_offset * board_square + dst);
-      }
-
-      // Set the row and column numbers
-      const size_t row_offset = other_offset + 1;
-      const size_t col_offset = row_offset + BOARD_SIZE;
-
-      if (color == COLOR_BLACK) {
-        setInputBit(inputs, (row_offset + y) * board_square + dst);
-        setInputBit(inputs, (col_offset + std::min(x, BOARD_SIZE - 1 - x)) * board_square + dst);
-      } else {
-        setInputBit(inputs, (row_offset + BOARD_SIZE - 1 - y) * board_square + dst);
-        setInputBit(inputs, (col_offset + std::min(x, BOARD_SIZE - 1 - x)) * board_square + dst);
       }
     }
   }
 }
 
 /**
- * Get game data to input to the model.
- * @param inputs Game data to input to the model
- * @param color Side to move
- * @param turn Number of moves
+ * Create legal moves for lances.
+ * If the template parameter removeUnpromote is true, moves that do not promote lances are removed.
+ * If the template parameter checkOnly is true, only moves that give check are obtained.
+ * @param legalMoves Array object to which the list of legal moves for lances is added
+ * @param destinationBitBoard Bitboard representing valid destination squares for lance moves
  */
-void Board::_getInfoInputs(int32_t* inputs, int32_t color, int32_t turn) const {
-  const static size_t info_offset = MODEL_FEATURES * BOARD_SIZE * BOARD_SIZE;
-  const static size_t hand_offsets[] = {0, 18, 22, 26, 30, 32, 34};
-  const static size_t color_offset = 38;
+template <bool removeUnpromote, bool checkOnly>
+void Board::_getLegalLanceMoves(
+    std::vector<Move>& legalMoves, const BitBoard& destinationBitBoard) const {
+  int8_t my_color_idx = (_color == COLOR_BLACK) ? 0 : 1;
 
-  // Set information about pieces in hand
-  int32_t black_color = (color == COLOR_WHITE) ? COLOR_WHITE : COLOR_BLACK;
-  int32_t white_color = (color == COLOR_WHITE) ? COLOR_BLACK : COLOR_WHITE;
+  // Create bitboard for lances
+  BitBoard lance_bitboard = _pieceBitBoards[my_color_idx][LANCE_INDEX];
+
+  // Generate legal moves for each lance
+  BitBoard occupied_bitboard = _colorBitBoards[0] | _colorBitBoards[1];
+
+  while (lance_bitboard) {
+    int8_t src_idx = lance_bitboard.popRightmostBitIndex();
+
+    // Create bitboard for lance destinations
+    BitBoard move_bitboard;
+
+    if (_color == COLOR_BLACK) {
+      int8_t target_idx =
+          (BITBOARD_LONG_ATTACKS[0][src_idx] & occupied_bitboard).getLeftmostBitIndex();
+
+      if (target_idx == -1) {
+        target_idx = BITBOARD_LONG_ATTACKS[0][src_idx].getRightmostBitIndex();
+      }
+
+      move_bitboard = BITBOARD_LONG_ATTACKS[0][src_idx] & BITBOARD_LONG_ATTACKS[4][target_idx];
+      move_bitboard.setBit(target_idx);
+    } else {
+      int8_t target_idx =
+          (BITBOARD_LONG_ATTACKS[4][src_idx] & occupied_bitboard).getRightmostBitIndex();
+
+      if (target_idx == -1) {
+        target_idx = BITBOARD_LONG_ATTACKS[4][src_idx].getLeftmostBitIndex();
+      }
+
+      move_bitboard = BITBOARD_LONG_ATTACKS[4][src_idx] & BITBOARD_LONG_ATTACKS[0][target_idx];
+      move_bitboard.setBit(target_idx);
+    }
+
+    move_bitboard &= destinationBitBoard;
+
+    // Generate legal moves for each destination
+    while (move_bitboard) {
+      int8_t dst_idx = move_bitboard.popRightmostBitIndex();
+
+      // Check if the move is possible (i.e., not a discovered check)
+      if (_isDiscoveredCheckMove(src_idx, dst_idx, _color)) {
+        continue;
+      }
+
+      // Check if the move can promote
+      bool promote = BITBOARD_ENEMY_AREAS[my_color_idx].hasBit(dst_idx);
+
+      // If only checking for check, register the move only if it gives check
+      // Otherwise, register the move unconditionally
+      if constexpr (checkOnly) {
+        bool check = (promote) ? _isCheckMove<PIECE_BLACK_GOLD>(src_idx, dst_idx)
+                               : _isCheckMove<PIECE_BLACK_LANCE>(src_idx, dst_idx);
+        if (check) {
+          legalMoves.emplace_back(Position(src_idx), Position(dst_idx), promote);
+        }
+      } else {
+        legalMoves.emplace_back(Position(src_idx), Position(dst_idx), promote);
+      }
+
+      // If removeUnpromote is false, also register unpromoted moves for the 2nd and 3rd ranks
+      // If removeUnpromote is true, only register unpromoted moves for the 3rd rank
+      if constexpr (removeUnpromote) {
+        // Use the same bitboard as for checking if a knight can be dropped for the 3rd rank
+        if (promote && BITBOARD_KNIGHT_DROPABLES[my_color_idx].hasBit(dst_idx)) {
+          // If only checking for check, register the move only if it gives check
+          // Otherwise, register the move unconditionally
+          if constexpr (checkOnly) {
+            if (_isCheckMove<PIECE_BLACK_LANCE>(src_idx, dst_idx)) {
+              legalMoves.emplace_back(Position(src_idx), Position(dst_idx), false);
+            }
+          } else {
+            legalMoves.emplace_back(Position(src_idx), Position(dst_idx), false);
+          }
+        }
+      } else {
+        // Use the same bitboard as for checking if a pawn can be dropped for the 2nd rank
+        if (promote && BITBOARD_PAWN_DROPABLES[my_color_idx].hasBit(dst_idx)) {
+          // If only checking for check, register the move only if it gives check
+          // Otherwise, register the move unconditionally
+          if constexpr (checkOnly) {
+            if (_isCheckMove<PIECE_BLACK_LANCE>(src_idx, dst_idx)) {
+              legalMoves.emplace_back(Position(src_idx), Position(dst_idx), false);
+            }
+          } else {
+            legalMoves.emplace_back(Position(src_idx), Position(dst_idx), false);
+          }
+        }
+      }
+    }
+  }
+}
+
+/**
+ * Generate legal moves for knights.
+ * If the template parameter checkOnly is true, only moves that give check are generated.
+ * @param legalMoves Array object to which the list of legal knight moves is added
+ * @param destinationBitBoard Bitboard representing valid destination squares for knight moves
+ */
+template <bool checkOnly>
+void Board::_getLegalKnightMoves(
+    std::vector<Move>& legalMoves, const BitBoard& destinationBitBoard) const {
+  int8_t my_color_idx = (_color == COLOR_BLACK) ? 0 : 1;
+
+  // Create a bitboard for knights
+  BitBoard knight_bitboard = _pieceBitBoards[my_color_idx][KNIGHT_INDEX];
+
+  // Generate legal moves for each knight
+  while (knight_bitboard) {
+    int8_t src_idx = knight_bitboard.popRightmostBitIndex();
+    BitBoard move_bitboard =
+        BITBOARD_KNIGHT_ATTACKS[my_color_idx][src_idx] & destinationBitBoard;
+
+    // Generate legal moves for each destination
+    while (move_bitboard) {
+      int8_t dst_idx = move_bitboard.popRightmostBitIndex();
+
+      // Check if the move is possible (i.e., not a discovered check)
+      if (_isDiscoveredCheckMove(src_idx, dst_idx, _color)) {
+        continue;
+      }
+
+      // Check if the move can promote
+      bool promote = BITBOARD_ENEMY_AREAS[my_color_idx].hasBit(dst_idx);
+
+      // If only checking for check, register the move only if it gives check
+      // Otherwise, register the move unconditionally
+      if constexpr (checkOnly) {
+        bool check = (promote) ? _isCheckMove<PIECE_BLACK_GOLD>(src_idx, dst_idx)
+                               : _isCheckMove<PIECE_BLACK_KNIGHT>(src_idx, dst_idx);
+        if (check) {
+          legalMoves.emplace_back(Position(src_idx), Position(dst_idx), promote);
+        }
+      } else {
+        legalMoves.emplace_back(Position(src_idx), Position(dst_idx), promote);
+      }
+
+      // If a promotion move was registered, also register the non-promotion move
+      if (promote && BITBOARD_KNIGHT_DROPABLES[my_color_idx].hasBit(dst_idx)) {
+        // If only checking for check, register the move only if it gives check
+        // Otherwise, register the move unconditionally
+        if constexpr (checkOnly) {
+          if (_isCheckMove<PIECE_BLACK_KNIGHT>(src_idx, dst_idx)) {
+            legalMoves.emplace_back(Position(src_idx), Position(dst_idx), false);
+          }
+        } else {
+          legalMoves.emplace_back(Position(src_idx), Position(dst_idx), false);
+        }
+      }
+    }
+  }
+}
+
+/**
+ * Generate legal moves for silvers.
+ * If the template parameter checkOnly is true, only moves that give check are generated.
+ * @param legalMoves Array object to which the list of legal silver moves is added
+ * @param destinationBitBoard Bitboard representing valid destination squares for silver moves
+ */
+template <bool checkOnly>
+void Board::_getLegalSilverMoves(
+    std::vector<Move>& legalMoves, const BitBoard& destinationBitBoard) const {
+  int8_t my_color_idx = (_color == COLOR_BLACK) ? 0 : 1;
+
+  // Create a bitboard for silvers
+  BitBoard silver_bitboard = _pieceBitBoards[my_color_idx][SILVER_INDEX];
+
+  // Generate legal moves for each silver
+  while (silver_bitboard) {
+    int8_t src_idx = silver_bitboard.popRightmostBitIndex();
+
+    // Create a bitboard for silver moves
+    BitBoard move_bitboard =
+        BITBOARD_SILVER_ATTACKS[my_color_idx][src_idx] & destinationBitBoard;
+
+    // Generate legal moves for each destination
+    while (move_bitboard) {
+      int8_t dst_idx = move_bitboard.popRightmostBitIndex();
+
+      // Check if the move is possible (i.e., not a discovered check)
+      if (_isDiscoveredCheckMove(src_idx, dst_idx, _color)) {
+        continue;
+      }
+
+      // Check if the move can promote
+      bool promote =
+          BITBOARD_ENEMY_AREAS[my_color_idx].hasBit(src_idx) ||
+          BITBOARD_ENEMY_AREAS[my_color_idx].hasBit(dst_idx);
+
+      // If only checking for check, register the move only if it gives check
+      // Otherwise, register the move unconditionally
+      if constexpr (checkOnly) {
+        bool check = (promote) ? _isCheckMove<PIECE_BLACK_GOLD>(src_idx, dst_idx)
+                               : _isCheckMove<PIECE_BLACK_SILVER>(src_idx, dst_idx);
+        if (check) {
+          legalMoves.emplace_back(Position(src_idx), Position(dst_idx), promote);
+        }
+      } else {
+        legalMoves.emplace_back(Position(src_idx), Position(dst_idx), promote);
+      }
+
+      // If a promotion move was registered, also register the non-promotion move
+      if (promote) {
+        // If only checking for check, register the move only if it gives check
+        // Otherwise, register the move unconditionally
+        if constexpr (checkOnly) {
+          if (_isCheckMove<PIECE_BLACK_SILVER>(src_idx, dst_idx)) {
+            legalMoves.emplace_back(Position(src_idx), Position(dst_idx), false);
+          }
+        } else {
+          legalMoves.emplace_back(Position(src_idx), Position(dst_idx), false);
+        }
+      }
+    }
+  }
+}
+
+/**
+ * Generate legal moves for golds.
+ * If the template parameter checkOnly is true, only moves that give check are generated.
+ * @param legalMoves Array object to which the list of legal gold moves is added
+ * @param destinationBitBoard Bitboard representing valid destination squares for gold moves
+ */
+template <bool checkOnly>
+void Board::_getLegalGoldMoves(
+    std::vector<Move>& legalMoves, const BitBoard& destinationBitBoard) const {
+  int8_t my_color_idx = (_color == COLOR_BLACK) ? 0 : 1;
+
+  // Create a bitboard for golds
+  BitBoard gold_bitboard = _pieceBitBoards[my_color_idx][GOLD_INDEX];
+
+  // Generate legal moves for each gold
+  while (gold_bitboard) {
+    int8_t src_idx = gold_bitboard.popRightmostBitIndex();
+
+    // Create a bitboard for gold moves
+    BitBoard move_bitboard =
+        BITBOARD_GOLD_ATTACKS[my_color_idx][src_idx] & destinationBitBoard;
+
+    // Generate legal moves for each destination
+    while (move_bitboard) {
+      int8_t dst_idx = move_bitboard.popRightmostBitIndex();
+
+      // Check if the move is possible (i.e., not a discovered check)
+      if (_isDiscoveredCheckMove(src_idx, dst_idx, _color)) {
+        continue;
+      }
+
+      // If only checking for check, register the move only if it gives check
+      // Otherwise, register the move unconditionally
+      if constexpr (checkOnly) {
+        if (_isCheckMove<PIECE_BLACK_GOLD>(src_idx, dst_idx)) {
+          legalMoves.emplace_back(Position(src_idx), Position(dst_idx), false);
+        }
+      } else {
+        legalMoves.emplace_back(Position(src_idx), Position(dst_idx), false);
+      }
+    }
+  }
+}
+
+/**
+ * Generate legal moves for kings.
+ * If the template parameter checkOnly is true, only moves that give check are generated.
+ * @param legalMoves Array object to which the list of legal king moves is added
+ * @param destinationBitBoard Bitboard representing valid destination squares for king moves
+ */
+template <bool checkOnly>
+void Board::_getLegalKingMoves(
+    std::vector<Move>& legalMoves, const BitBoard& destinationBitBoard) const {
+  int8_t my_color_idx = (_color == COLOR_BLACK) ? 0 : 1;
+  int8_t op_color_idx = 1 - my_color_idx;
+  int8_t king_pos_idx = _kingPositions[my_color_idx].getIndex();
+
+  // Generate legal moves for the king
+  // If the king's position is not set, do not generate legal moves for the king
+  // The king's destination squares are not affected by the destinationBitBoard
+  // The king's destination squares are limited to squares
+  // that do not contain the king's own pieces and are not attacked by the opponent's pieces
+  // Since the king does not give check, if only checking for check, do not include the king's moves
+  if constexpr (!checkOnly) {
+    if (king_pos_idx >= 0) {
+      BitBoard king_move_bitboard =
+          BITBOARD_KING_ATTACKS[king_pos_idx] & ~_colorBitBoards[my_color_idx];
+
+      // Generate legal moves for each destination
+      while (king_move_bitboard) {
+        int8_t dst_idx = king_move_bitboard.popRightmostBitIndex();
+
+        // Check if the move is possible (i.e., not a suicide move)
+        if (_getAttackers<true, true>(_color, dst_idx).empty()) {
+          legalMoves.emplace_back(Position(king_pos_idx), Position(dst_idx), false);
+        }
+      }
+    }
+  }
+
+  // Create bitboards for promoted bishops (horses) and promoted rooks (dragons)
+  BitBoard bishop_bitboard = _pieceBitBoards[my_color_idx][BISHOP_INDEX];
+  BitBoard other_bitboard = _pieceBitBoards[my_color_idx][KING_INDEX];
+
+  if (king_pos_idx >= 0) {
+    other_bitboard.clearBit(king_pos_idx);
+  }
+
+  // Generate legal moves for each piece
+  while (other_bitboard) {
+    int8_t src_idx = other_bitboard.popRightmostBitIndex();
+    BitBoard move_bitboard = BITBOARD_KING_ATTACKS[src_idx] & destinationBitBoard;
+
+    // Generate legal moves for each destination
+    while (move_bitboard) {
+      int8_t dst_idx = move_bitboard.popRightmostBitIndex();
+
+      // Check if the move is possible (i.e., not a discovered check)
+      if (_isDiscoveredCheckMove(src_idx, dst_idx, _color)) {
+        continue;
+      }
+
+      // If only checking for check, register the move only if it gives check
+      // Otherwise, register the move unconditionally
+      if constexpr (checkOnly) {
+        bool check = (bishop_bitboard.hasBit(src_idx))
+                         ? _isCheckMove<PIECE_BLACK_HORSE>(src_idx, dst_idx)
+                         : _isCheckMove<PIECE_BLACK_DRAGON>(src_idx, dst_idx);
+        if (check) {
+          legalMoves.emplace_back(Position(src_idx), Position(dst_idx), false);
+        }
+      } else {
+        legalMoves.emplace_back(Position(src_idx), Position(dst_idx), false);
+      }
+    }
+  }
+}
+
+/**
+ * Generate legal moves for bishops.
+ * If the template parameter removeUnpromote is true, unpromoted moves are removed.
+ * If the template parameter checkOnly is true, only moves that give check are generated.
+ * @param legalMoves Array object to which the list of legal bishop moves is added
+ * @param destinationBitBoard Bitboard representing valid destination squares for bishop moves
+ */
+template <bool removeUnpromote, bool checkOnly>
+void Board::_getLegalBishopMoves(
+    std::vector<Move>& legalMoves, const BitBoard& destinationBitBoard) const {
+  int8_t my_color_idx = (_color == COLOR_BLACK) ? 0 : 1;
+
+  // Generate legal moves for bishops
+  BitBoard bishop_bitboard = _pieceBitBoards[my_color_idx][BISHOP_INDEX];
+
+  // Generate legal moves for each bishop
+  BitBoard occ_bitboard = _colorBitBoards[0] | _colorBitBoards[1];
+
+  while (bishop_bitboard) {
+    int8_t src_idx = bishop_bitboard.popRightmostBitIndex();
+
+    // Check if the bishop is already promoted (i.e., a horse)
+    bool already_promoted =
+        _pieceBitBoards[my_color_idx][KING_INDEX].hasBit(src_idx);
+
+    // Check moves in 4 directions
+    for (int8_t direction : {1, 3, 5, 7}) {
+      BitBoard attack_bitboard = BITBOARD_LONG_ATTACKS[direction][src_idx] & occ_bitboard;
+      int8_t attack_idx = (direction < 4)
+                              ? attack_bitboard.getLeftmostBitIndex()
+                              : attack_bitboard.getRightmostBitIndex();
+      BitBoard move_bitboard = BITBOARD_LONG_ATTACKS[direction][src_idx];
+
+      if (attack_idx >= 0) {
+        move_bitboard &= BITBOARD_LONG_ATTACKS[(direction + 4) % 8][attack_idx];
+        move_bitboard.setBit(attack_idx);
+      }
+
+      move_bitboard &= destinationBitBoard;
+
+      // Generate legal moves for each destination
+      while (move_bitboard) {
+        int8_t dst_idx = move_bitboard.popRightmostBitIndex();
+
+        // Check if the move is possible (i.e., not a discovered check)
+        if (_isDiscoveredCheckMove(src_idx, dst_idx, _color)) {
+          continue;
+        }
+
+        // Check if the move can promote
+        bool promote = !already_promoted &&
+                       (BITBOARD_ENEMY_AREAS[my_color_idx].hasBit(src_idx) ||
+                        BITBOARD_ENEMY_AREAS[my_color_idx].hasBit(dst_idx));
+
+        // If only checking for check, register the move only if it gives check
+        // Otherwise, register the move unconditionally
+        if constexpr (checkOnly) {
+          bool check = (promote || already_promoted)
+                           ? _isCheckMove<PIECE_BLACK_HORSE>(src_idx, dst_idx)
+                           : _isCheckMove<PIECE_BLACK_BISHOP>(src_idx, dst_idx);
+          if (check) {
+            legalMoves.emplace_back(Position(src_idx), Position(dst_idx), promote);
+          }
+        } else {
+          legalMoves.emplace_back(Position(src_idx), Position(dst_idx), promote);
+        }
+
+        // If removeUnpromote is false, further check unpromoted moves
+        if constexpr (!removeUnpromote) {
+          // Add unpromoted moves
+          if (promote) {
+            // If only checking for check, register the move only if it gives check
+            // Otherwise, register the move unconditionally
+            if constexpr (checkOnly) {
+              if (_isCheckMove<PIECE_BLACK_BISHOP>(src_idx, dst_idx)) {
+                legalMoves.emplace_back(Position(src_idx), Position(dst_idx), false);
+              }
+            } else {
+              legalMoves.emplace_back(Position(src_idx), Position(dst_idx), false);
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+/**
+ * Generate legal moves for rooks.
+ * If the template parameter removeUnpromote is true, unpromoted moves are removed.
+ * If the template parameter checkOnly is true, only moves that give check are generated.
+ * @param legalMoves Array object to which the list of legal rook moves is added
+ * @param destinationBitBoard Bitboard representing valid destination squares for rook moves
+ */
+template <bool removeUnpromote, bool checkOnly>
+void Board::_getLegalRookMoves(
+    std::vector<Move>& legalMoves, const BitBoard& destinationBitBoard) const {
+  int8_t my_color_idx = (_color == COLOR_BLACK) ? 0 : 1;
+
+  // Generate legal moves for rooks
+  BitBoard rook_bitboard = _pieceBitBoards[my_color_idx][ROOK_INDEX];
+
+  // Generate legal moves for each rook
+  BitBoard occ_bitboard = _colorBitBoards[0] | _colorBitBoards[1];
+
+  while (rook_bitboard) {
+    int8_t src_idx = rook_bitboard.popRightmostBitIndex();
+
+    // Check if the rook is already promoted (i.e., a dragon)
+    bool already_promoted =
+        _pieceBitBoards[my_color_idx][KING_INDEX].hasBit(src_idx);
+
+    // Check moves in 4 directions
+    for (int8_t direction : {0, 2, 4, 6}) {
+      BitBoard attack_bitboard = BITBOARD_LONG_ATTACKS[direction][src_idx] & occ_bitboard;
+      int8_t attack_idx = (direction < 4)
+                              ? attack_bitboard.getLeftmostBitIndex()
+                              : attack_bitboard.getRightmostBitIndex();
+      BitBoard move_bitboard = BITBOARD_LONG_ATTACKS[direction][src_idx];
+
+      if (attack_idx >= 0) {
+        move_bitboard &= BITBOARD_LONG_ATTACKS[(direction + 4) % 8][attack_idx];
+        move_bitboard.setBit(attack_idx);
+      }
+
+      move_bitboard &= destinationBitBoard;
+
+      // Generate legal moves for each destination
+      while (move_bitboard) {
+        int8_t dst_idx = move_bitboard.popRightmostBitIndex();
+
+        // Check if the move is possible (i.e., not a discovered check)
+        if (_isDiscoveredCheckMove(src_idx, dst_idx, _color)) {
+          continue;
+        }
+
+        // Check if the move can promote
+        bool promote = !already_promoted &&
+                       (BITBOARD_ENEMY_AREAS[my_color_idx].hasBit(src_idx) ||
+                        BITBOARD_ENEMY_AREAS[my_color_idx].hasBit(dst_idx));
+
+        // If only checking for check, register the move only if it gives check
+        // Otherwise, register the move unconditionally
+        if constexpr (checkOnly) {
+          bool check = (promote || already_promoted)
+                           ? _isCheckMove<PIECE_BLACK_DRAGON>(src_idx, dst_idx)
+                           : _isCheckMove<PIECE_BLACK_ROOK>(src_idx, dst_idx);
+          if (check) {
+            legalMoves.emplace_back(Position(src_idx), Position(dst_idx), promote);
+          }
+        } else {
+          legalMoves.emplace_back(Position(src_idx), Position(dst_idx), promote);
+        }
+
+        // If removeUnpromote is false, further check unpromoted moves
+        if constexpr (!removeUnpromote) {
+          // Add unpromoted moves
+          if (promote) {
+            // If only checking for check, register the move only if it gives check
+            // Otherwise, register the move unconditionally
+            if constexpr (checkOnly) {
+              if (_isCheckMove<PIECE_BLACK_ROOK>(src_idx, dst_idx)) {
+                legalMoves.emplace_back(Position(src_idx), Position(dst_idx), false);
+              }
+            } else {
+              legalMoves.emplace_back(Position(src_idx), Position(dst_idx), false);
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+/**
+ * Generate legal moves for hand pawns.
+ * If the template parameter checkOnly is true, only moves that give check are generated.
+ * @param legalMoves Array object to which the list of legal hand pawn moves is added
+ * @param destinationBitBoard Bitboard representing valid destination squares for hand pawn moves
+ */
+template <bool checkOnly>
+void Board::_getLegalHandPawnMoves(
+    std::vector<Move>& legalMoves, const BitBoard& destinationBitBoard) const {
+  int8_t my_color_idx = (_color == COLOR_BLACK) ? 0 : 1;
+  int8_t op_color_idx = 1 - my_color_idx;
+
+  // If there are no pawns in hand, there are no legal moves
+  if (_hands[my_color_idx][PAWN_INDEX] == 0) {
+    return;
+  }
+
+  // Create a bitboard for columns that already have pawns
+  BitBoard pawn_exist_bitboard;
+  BitBoard pawn_piece_bitboard = _pieceBitBoards[my_color_idx][PAWN_INDEX];
+
+  while (pawn_piece_bitboard) {
+    constexpr uint64_t mask = (1ULL << BOARD_SIZE) - 1;
+    int8_t idx = pawn_piece_bitboard.popRightmostBitIndex();
+    int8_t shift = idx / BOARD_SIZE * BOARD_SIZE;
+
+    pawn_exist_bitboard |= BitBoard(mask, 0) << shift;
+  }
+
+  // Create a bitboard for squares where pawns can be dropped
+  BitBoard hand_pawn_bitboard =
+      BITBOARD_PAWN_DROPABLES[my_color_idx] & ~pawn_exist_bitboard & destinationBitBoard;
+
+  // Calculate the squares that could result in check (i.e., potential pawn drop checkmate)
+  int8_t op_king_idx = _kingPositions[op_color_idx].getIndex();
+  int8_t pawn_mate_idx =
+      (op_king_idx >= 0)
+          ? BITBOARD_PAWN_ATTACKS[op_color_idx][op_king_idx].getRightmostBitIndex()
+          : -1;
+
+  // Generate legal moves for each destination
+  while (hand_pawn_bitboard) {
+    int8_t dst_idx = hand_pawn_bitboard.popRightmostBitIndex();
+
+    // If the move is a pawn drop illegal checkmate, skip to the next destination
+    if (dst_idx == pawn_mate_idx && _isDropPawnCheckmateMove(dst_idx)) {
+      continue;
+    }
+
+    // If only checking for check, register the move only if it gives check
+    if constexpr (checkOnly) {
+      if (dst_idx == pawn_mate_idx) {
+        legalMoves.emplace_back(Position(BOARD_SIZE, PIECE_HAND_PAWN), Position(dst_idx), false);
+      }
+    } else {
+      legalMoves.emplace_back(Position(BOARD_SIZE, PIECE_HAND_PAWN), Position(dst_idx), false);
+    }
+  }
+}
+
+/**
+ * Generate legal moves for hand lances.
+ * If the template parameter checkOnly is true, only moves that give check are generated.
+ * @param legalMoves Array object to which the list of legal hand lance moves is added
+ * @param destinationBitBoard Bitboard representing valid destination squares for hand lance moves
+ */
+template <bool checkOnly>
+void Board::_getLegalHandLanceMoves(
+    std::vector<Move>& legalMoves, const BitBoard& destinationBitBoard) const {
+  int8_t my_color_idx = (_color == COLOR_BLACK) ? 0 : 1;
+
+  // If there are no lances in hand, there are no legal moves
+  if (_hands[my_color_idx][LANCE_INDEX] == 0) {
+    return;
+  }
+
+  // Create a bitboard for squares where lances can be dropped
+  // The squares where lances can be dropped are the same as the squares where pawns can be dropped,
+  // ignoring the two-pawn rule, so we reuse the pawn bitboard
+  BitBoard hand_lance_bitboard = BITBOARD_PAWN_DROPABLES[my_color_idx] & destinationBitBoard;
+
+  // Generate legal moves for each destination
+  while (hand_lance_bitboard) {
+    int8_t dst_idx = hand_lance_bitboard.popRightmostBitIndex();
+
+    // If only checking for check, register the move only if it gives check
+    // Otherwise, register the move unconditionally
+    if constexpr (checkOnly) {
+      if (_isDropCheckMove<PIECE_BLACK_LANCE>(dst_idx)) {
+        legalMoves.emplace_back(Position(BOARD_SIZE, PIECE_HAND_LANCE), Position(dst_idx), false);
+      }
+    } else {
+      legalMoves.emplace_back(Position(BOARD_SIZE, PIECE_HAND_LANCE), Position(dst_idx), false);
+    }
+  }
+}
+
+/**
+ * Generate legal moves for hand knights.
+ * If the template parameter checkOnly is true, only moves that give check are generated.
+ * @param legalMoves Array object to which the list of legal hand knight moves is added
+ * @param destinationBitBoard Bitboard representing valid destination squares for hand knight moves
+ */
+template <bool checkOnly>
+void Board::_getLegalHandKnightMoves(
+    std::vector<Move>& legalMoves, const BitBoard& destinationBitBoard) const {
+  int8_t my_color_idx = (_color == COLOR_BLACK) ? 0 : 1;
+
+  // If there are no knights in hand, there are no legal moves
+  if (_hands[my_color_idx][KNIGHT_INDEX] == 0) {
+    return;
+  }
+
+  // Create a bitboard for squares where knights can be dropped
+  BitBoard hand_knight_bitboard = BITBOARD_KNIGHT_DROPABLES[my_color_idx] & destinationBitBoard;
+
+  // Generate legal moves for each destination
+  while (hand_knight_bitboard) {
+    int8_t dst_idx = hand_knight_bitboard.popRightmostBitIndex();
+
+    // If only checking for check, register the move only if it gives check
+    // Otherwise, register the move unconditionally
+    if constexpr (checkOnly) {
+      if (_isDropCheckMove<PIECE_BLACK_KNIGHT>(dst_idx)) {
+        legalMoves.emplace_back(Position(BOARD_SIZE, PIECE_HAND_KNIGHT), Position(dst_idx), false);
+      }
+    } else {
+      legalMoves.emplace_back(Position(BOARD_SIZE, PIECE_HAND_KNIGHT), Position(dst_idx), false);
+    }
+  }
+}
+
+/**
+ * Generate legal moves for hand silvers.
+ * If the template parameter checkOnly is true, only moves that give check are generated.
+ * @param legalMoves Array object to which the list of legal hand silver moves is added
+ * @param destinationBitBoard Bitboard representing valid destination squares for hand silver moves
+ */
+template <bool checkOnly>
+void Board::_getLegalHandSilverMoves(
+    std::vector<Move>& legalMoves, const BitBoard& destinationBitBoard) const {
+  int8_t my_color_idx = (_color == COLOR_BLACK) ? 0 : 1;
+
+  // If there are no silvers in hand, there are no legal moves
+  if (_hands[my_color_idx][SILVER_INDEX] == 0) {
+    return;
+  }
+
+  // Create a bitboard for squares where silvers can be dropped
+  BitBoard hand_silver_bitboard = destinationBitBoard;
+
+  // Generate legal moves for each destination
+  while (hand_silver_bitboard) {
+    int8_t dst_idx = hand_silver_bitboard.popRightmostBitIndex();
+
+    // If only checking for check, register the move only if it gives check
+    // Otherwise, register the move unconditionally
+    if constexpr (checkOnly) {
+      if (_isDropCheckMove<PIECE_BLACK_SILVER>(dst_idx)) {
+        legalMoves.emplace_back(Position(BOARD_SIZE, PIECE_HAND_SILVER), Position(dst_idx), false);
+      }
+    } else {
+      legalMoves.emplace_back(Position(BOARD_SIZE, PIECE_HAND_SILVER), Position(dst_idx), false);
+    }
+  }
+}
+
+/**
+ * Generate legal moves for hand golds.
+ * If the template parameter checkOnly is true, only moves that give check are generated.
+ * @param legalMoves Array object to which the list of legal hand gold moves is added
+ * @param destinationBitBoard Bitboard representing valid destination squares for hand gold moves
+ */
+template <bool checkOnly>
+void Board::_getLegalHandGoldMoves(
+    std::vector<Move>& legalMoves, const BitBoard& destinationBitBoard) const {
+  int8_t my_color_idx = (_color == COLOR_BLACK) ? 0 : 1;
+
+  // If there are no golds in hand, there are no legal moves
+  if (_hands[my_color_idx][GOLD_INDEX] == 0) {
+    return;
+  }
+
+  // Create a bitboard for squares where golds can be dropped
+  BitBoard hand_gold_bitboard = destinationBitBoard;
+
+  // Generate legal moves for each destination
+  while (hand_gold_bitboard) {
+    int8_t dst_idx = hand_gold_bitboard.popRightmostBitIndex();
+
+    // If only checking for check, register the move only if it gives check
+    // Otherwise, register the move unconditionally
+    if constexpr (checkOnly) {
+      if (_isDropCheckMove<PIECE_BLACK_GOLD>(dst_idx)) {
+        legalMoves.emplace_back(Position(BOARD_SIZE, PIECE_HAND_GOLD), Position(dst_idx), false);
+      }
+    } else {
+      legalMoves.emplace_back(Position(BOARD_SIZE, PIECE_HAND_GOLD), Position(dst_idx), false);
+    }
+  }
+}
+
+/**
+ * Generate legal moves for hand bishops.
+ * If the template parameter checkOnly is true, only moves that give check are generated.
+ * @param legalMoves Array object to which the list of legal hand bishop moves is added
+ * @param destinationBitBoard Bitboard representing valid destination squares for hand bishop moves
+ */
+template <bool checkOnly>
+void Board::_getLegalHandBishopMoves(
+    std::vector<Move>& legalMoves, const BitBoard& destinationBitBoard) const {
+  int8_t my_color_idx = (_color == COLOR_BLACK) ? 0 : 1;
+
+  // If there are no bishops in hand, there are no legal moves
+  if (_hands[my_color_idx][BISHOP_INDEX] == 0) {
+    return;
+  }
+
+  // Create a bitboard for squares where bishops can be dropped
+  BitBoard hand_bishop_bitboard = destinationBitBoard;
+
+  // Generate legal moves for each destination
+  while (hand_bishop_bitboard) {
+    int8_t dst_idx = hand_bishop_bitboard.popRightmostBitIndex();
+
+    // If only checking for check, register the move only if it gives check
+    if constexpr (checkOnly) {
+      if (_isDropCheckMove<PIECE_BLACK_BISHOP>(dst_idx)) {
+        legalMoves.emplace_back(Position(BOARD_SIZE, PIECE_HAND_BISHOP), Position(dst_idx), false);
+      }
+    } else {
+      legalMoves.emplace_back(Position(BOARD_SIZE, PIECE_HAND_BISHOP), Position(dst_idx), false);
+    }
+  }
+}
+
+/**
+ * Generate legal moves for hand rooks.
+ * If the template parameter checkOnly is true, only moves that give check are generated.
+ * @param legalMoves Array object to which the list of legal hand rook moves is added
+ * @param destinationBitBoard Bitboard representing valid destination squares for hand rook moves
+ */
+template <bool checkOnly>
+void Board::_getLegalHandRookMoves(
+    std::vector<Move>& legalMoves, const BitBoard& destinationBitBoard) const {
+  int8_t my_color_idx = (_color == COLOR_BLACK) ? 0 : 1;
+
+  // If there are no rooks in hand, there are no legal moves
+  if (_hands[my_color_idx][ROOK_INDEX] == 0) {
+    return;
+  }
+
+  // Create a bitboard for squares where rooks can be dropped
+  BitBoard hand_rook_bitboard = destinationBitBoard;
+
+  // Generate legal moves for each destination
+  while (hand_rook_bitboard) {
+    int8_t dst_idx = hand_rook_bitboard.popRightmostBitIndex();
+
+    // If only checking for check, register the move only if it gives check
+    // Otherwise, register the move unconditionally
+    if constexpr (checkOnly) {
+      if (_isDropCheckMove<PIECE_BLACK_ROOK>(dst_idx)) {
+        legalMoves.emplace_back(Position(BOARD_SIZE, PIECE_HAND_ROOK), Position(dst_idx), false);
+      }
+    } else {
+      legalMoves.emplace_back(Position(BOARD_SIZE, PIECE_HAND_ROOK), Position(dst_idx), false);
+    }
+  }
+}
+
+/**
+ * Determine if a move from the specified source index to the specified destination index gives check.
+ * The template parameter piece specifies the type of piece being moved (use PIECE_BLACK_XXX).
+ * @param srcIndex Integer representing the source position
+ * @param dstIndex Integer representing the destination position
+ * @return True if the move from the specified source index to the specified destination index gives check
+ */
+template <uint8_t piece>
+bool Board::_isCheckMove(int8_t srcIndex, int8_t dstIndex) const {
+  return _isDropCheckMove<piece>(dstIndex) ||
+         _isDiscoveredCheckMove(srcIndex, dstIndex, OPPOSITE_COLOR(_color));
+}
+
+/**
+ * Determine if a move from the specified source index to the specified destination index gives discovered check.
+ * @param srcIndex Integer representing the source position
+ * @param dstIndex Integer representing the destination position
+ * @param color The color of the king to check for
+ * @return True if the move from the specified source index to the specified destination index gives discovered check
+ */
+bool Board::_isDiscoveredCheckMove(int8_t srcIndex, int8_t dstIndex, int8_t color) const {
+  int8_t my_color_idx = (color == COLOR_BLACK) ? 0 : 1;
+  int8_t op_color_idx = 1 - my_color_idx;
+  int8_t king_pos_idx = _kingPositions[my_color_idx].getIndex();
+
+  // If the king is not on the board, it cannot be a discovered check
+  if (king_pos_idx < 0) {
+    return false;
+  }
+
+  // Check the relationship with the king
+  int8_t direction = DIRECTION_INDICES[srcIndex][king_pos_idx];
+
+  // If the king is not on the extended line in any of the 8 directions, it cannot be a discovered check
+  if (direction == 8) {
+    return false;
+  }
+
+  // If the move direction is the same as or opposite to the king's direction, it cannot be a discovered check
+  int8_t move_direction = DIRECTION_INDICES[srcIndex][dstIndex];
+
+  if (move_direction == direction || move_direction == (direction + 4) % 8) {
+    return false;
+  }
+
+  // If there are pieces between the king and the source, it cannot be a discovered check
+  BitBoard occ_bitboard = _colorBitBoards[0] | _colorBitBoards[1];
+  BitBoard between_bitboard = BITBOARD_LONG_ATTACKS[direction][srcIndex] & occ_bitboard;
+  int8_t between_idx = (direction < 4)
+                           ? between_bitboard.getLeftmostBitIndex()
+                           : between_bitboard.getRightmostBitIndex();
+
+  if (between_idx != king_pos_idx) {
+    return false;
+  }
+
+  // Check the pieces on the opposite side
+  BitBoard opposite_bitboard =
+      BITBOARD_LONG_ATTACKS[(direction + 4) % 8][srcIndex] & occ_bitboard;
+  int8_t opposite_idx = (direction < 4)
+                            ? opposite_bitboard.getRightmostBitIndex()
+                            : opposite_bitboard.getLeftmostBitIndex();
+
+  // If there are no pieces, it cannot be a discovered check
+  if (opposite_idx < 0) {
+    return false;
+  }
+  // If the move direction is odd (diagonal) and the piece has bishop's attack, it is a discovered check
+  else if ((direction % 2 == 1) &&
+           _pieceBitBoards[op_color_idx][BISHOP_INDEX].hasBit(opposite_idx)) {
+    return true;
+  }
+  // If the move direction is even (vertical/horizontal) and the piece has rook's attack, it is a discovered check
+  else if ((direction % 2 == 0) &&
+           _pieceBitBoards[op_color_idx][ROOK_INDEX].hasBit(opposite_idx)) {
+    return true;
+  }
+  // If the move direction is down for black and the piece has lance's attack, it is a discovered check
+  else if (color == COLOR_BLACK && direction == 4 &&
+           _pieceBitBoards[op_color_idx][LANCE_INDEX].hasBit(opposite_idx)) {
+    return true;
+  }
+  // If the move direction is up for white and the piece has lance's attack, it is a discovered check
+  else if (color == COLOR_WHITE && direction == 0 &&
+           _pieceBitBoards[op_color_idx][LANCE_INDEX].hasBit(opposite_idx)) {
+    return true;
+  }
+  // In all other cases, it is not a discovered check
+  else {
+    return false;
+  }
+}
+
+/**
+ * Determine if a drop move to the specified destination index gives check.
+ * The template parameter `piece` specifies the type of piece being dropped (specified with PIECE_BLACK_XXX).
+ * @param dstIndex Integer representing the destination position
+ * @return True if the drop move to the specified destination index gives check
+ */
+template <uint8_t piece>
+bool Board::_isDropCheckMove(int8_t dstIndex) const {
+  int8_t my_color_idx = (_color == COLOR_BLACK) ? 0 : 1;
+  int8_t op_color_idx = 1 - my_color_idx;
+  int8_t op_king_idx = _kingPositions[op_color_idx].getIndex();
+
+  // If the king is not on the board, it cannot be a check
+  if (op_king_idx < 0) {
+    return false;
+  }
+
+  // If the piece is a pawn (drop pawn checkmate is checked separately, so it is not considered here)
+  if constexpr (piece == PIECE_BLACK_PAWN) {
+    return BITBOARD_PAWN_ATTACKS[my_color_idx][dstIndex].hasBit(op_king_idx);
+  }
+
+  // If the piece is a lance
+  if constexpr (piece == PIECE_BLACK_LANCE) {
+    // If the move direction is not up for black or not down for white, it cannot be a check
+    int8_t direction = DIRECTION_INDICES[dstIndex][op_king_idx];
+
+    if ((_color == COLOR_BLACK && direction != 0) ||
+        (_color == COLOR_WHITE && direction != 4)) {
+      return false;
+    }
+
+    // If there are no pieces between the lance and the opponent's king, it is a check
+    BitBoard occ_bitboard = _colorBitBoards[0] | _colorBitBoards[1];
+    BitBoard between_bitboard = BITBOARD_LONG_ATTACKS[direction][dstIndex] & occ_bitboard;
+    int8_t between_idx = (direction < 4)
+                             ? between_bitboard.getLeftmostBitIndex()
+                             : between_bitboard.getRightmostBitIndex();
+
+    return between_idx == op_king_idx;
+  }
+
+  // If the piece is a knight
+  if constexpr (piece == PIECE_BLACK_KNIGHT) {
+    return BITBOARD_KNIGHT_ATTACKS[my_color_idx][dstIndex].hasBit(op_king_idx);
+  }
+
+  // If the piece is a silver
+  if constexpr (piece == PIECE_BLACK_SILVER) {
+    return BITBOARD_SILVER_ATTACKS[my_color_idx][dstIndex].hasBit(op_king_idx);
+  }
+
+  // If the piece is a gold
+  if constexpr (piece == PIECE_BLACK_GOLD) {
+    return BITBOARD_GOLD_ATTACKS[my_color_idx][dstIndex].hasBit(op_king_idx);
+  }
+
+  // If the piece is a horse or dragon (the attacks of the flying pieces are checked later)
+  if constexpr (piece == PIECE_BLACK_HORSE || piece == PIECE_BLACK_DRAGON) {
+    if (BITBOARD_KING_ATTACKS[dstIndex].hasBit(op_king_idx)) {
+      return true;
+    }
+  }
+
+  // If the piece is a bishop (the horse's one-square move has already been checked,
+  // so we look at the diagonal direction)
+  if constexpr (piece == PIECE_BLACK_BISHOP || piece == PIECE_BLACK_HORSE) {
+    // If the direction to the opponent's king is not diagonal, it cannot be a check
+    int8_t direction = DIRECTION_INDICES[dstIndex][op_king_idx];
+
+    if (direction % 2 == 0) {
+      return false;
+    }
+
+    // If there are no pieces between the bishop/horse and the opponent's king, it is a check
+    BitBoard occ_bitboard = _colorBitBoards[0] | _colorBitBoards[1];
+    BitBoard between_bitboard = BITBOARD_LONG_ATTACKS[direction][dstIndex] & occ_bitboard;
+    int8_t between_idx = (direction < 4)
+                             ? between_bitboard.getLeftmostBitIndex()
+                             : between_bitboard.getRightmostBitIndex();
+
+    return between_idx == op_king_idx;
+  }
+
+  // If the piece is a rook (the dragon's one-square move has already been checked,
+  //  so we look at the vertical and horizontal directions)
+  if constexpr (piece == PIECE_BLACK_ROOK || piece == PIECE_BLACK_DRAGON) {
+    // If the direction to the opponent's king is not vertical or horizontal, it cannot be a check
+    int8_t direction = DIRECTION_INDICES[dstIndex][op_king_idx];
+
+    if (direction == 8 || direction % 2 == 1) {
+      return false;
+    }
+
+    // If there are no pieces between the rook/dragon and the opponent's king, it is a check
+    BitBoard occ_bitboard = _colorBitBoards[0] | _colorBitBoards[1];
+    BitBoard between_bitboard = BITBOARD_LONG_ATTACKS[direction][dstIndex] & occ_bitboard;
+    int8_t between_idx = (direction < 4)
+                             ? between_bitboard.getLeftmostBitIndex()
+                             : between_bitboard.getRightmostBitIndex();
+
+    return between_idx == op_king_idx;
+  }
+
+  return false;
+}
+
+/**
+ * Returns whether a pawn drop to the specified position results in a checkmate.
+ * @param dstIndex The index representing the destination position
+ * @return true if a pawn drop to the specified position results in a checkmate
+ */
+bool Board::_isDropPawnCheckmateMove(int8_t dstIndex) const {
+  int8_t my_color_idx = (_color == COLOR_BLACK) ? 0 : 1;
+  int8_t op_color_idx = 1 - my_color_idx;
+  int8_t op_king_idx = _kingPositions[op_color_idx].getIndex();
+
+  // If the opponent's king is not on the board, it cannot be a pawn drop checkmate
+  if (op_king_idx < 0) {
+    return false;
+  }
+
+  // If the specified position is not directly in front of the king, it cannot be a pawn drop checkmate
+  int8_t pawn_mate_idx =
+      BITBOARD_PAWN_ATTACKS[op_color_idx][op_king_idx].getRightmostBitIndex();
+
+  if (dstIndex != pawn_mate_idx) {
+    return false;
+  }
+
+  // If there are no pieces attacking any of the squares the king can move to, it cannot be a pawn drop checkmate
+  // Consider the possibility that the pawn may block the attacks of flying pieces
+  BitBoard king_move_bitboard =
+      BITBOARD_KING_ATTACKS[op_king_idx] & ~_colorBitBoards[op_color_idx];
+
+  while (king_move_bitboard) {
+    int8_t dst_idx = king_move_bitboard.popRightmostBitIndex();
+
+    if (_getAttackers<true, true>(OPPOSITE_COLOR(_color), dst_idx, pawn_mate_idx).empty()) {
+      return false;
+    }
+  }
+
+  // If any piece other than the king can move to the pawn's position, it cannot be a pawn drop checkmate
+  for (int8_t attacker_pos : _getAttackers<false, false>(_color, pawn_mate_idx)) {
+    if (attacker_pos != op_king_idx &&
+        !_isDiscoveredCheckMove(attacker_pos, pawn_mate_idx, OPPOSITE_COLOR(_color))) {
+      return false;
+    }
+  }
+
+  // If none of the above conditions are met, it is a pawn drop checkmate
+  return true;
+}
+
+/**
+ * Returns the board data to be input to the model.
+ * @param inputs The board data to be input to the model
+ * @param color The color of the player to move (COLOR_BLACK or COLOR_WHITE)
+ */
+void Board::_getBoardInputs(int32_t* inputs, int8_t color) const {
+  const static int32_t black_offset = 1;
+  const static int32_t white_offset = black_offset + 14 + 14 + 6;
+  const static int32_t other_offset = white_offset + 14 + 14 + 6;
+  const static int32_t board_square = BOARD_SIZE * BOARD_SIZE;
+
+  for (int32_t src = 0; src < board_square; src++) {
+    // Calculate the index where the value will be set
+    // If it is the opponent's turn, rotate the board 180 degrees
+    int32_t dst = (color == COLOR_BLACK) ? src : (board_square - 1 - src);
+
+    // Set the information for empty squares
+    if (_cells[src] == PIECE_EMPTY) {
+      setInputBit(inputs, 0 * board_square + dst);
+    }
+
+    // Set the values for piece placement
+    uint8_t piece = _cells[src];
+
+    if (color == COLOR_BLACK) {
+      if (PIECE_BLACK_BEGIN <= piece && piece < PIECE_BLACK_END) {
+        int32_t idx = piece - PIECE_BLACK_BEGIN;
+        setInputBit(inputs, (black_offset + idx) * board_square + dst);
+      } else if (PIECE_WHITE_BEGIN <= piece && piece < PIECE_WHITE_END) {
+        int32_t idx = piece - PIECE_WHITE_BEGIN;
+        setInputBit(inputs, (white_offset + idx) * board_square + dst);
+      }
+    } else {
+      if (PIECE_BLACK_BEGIN <= piece && piece < PIECE_BLACK_END) {
+        int32_t idx = piece - PIECE_BLACK_BEGIN;
+        setInputBit(inputs, (white_offset + idx) * board_square + dst);
+      } else if (PIECE_WHITE_BEGIN <= piece && piece < PIECE_WHITE_END) {
+        int32_t idx = piece - PIECE_WHITE_BEGIN;
+        setInputBit(inputs, (black_offset + idx) * board_square + dst);
+      }
+    }
+
+    // Set the values for piece attacks
+    int32_t black_att_count = 0;
+    int32_t white_att_count = 0;
+
+    for (Position pos : getAttackers(Position(src))) {
+      uint8_t att_piece = _cells[pos.getIndex()];
+
+      if (color == COLOR_BLACK) {
+        if (PIECE_BLACK_BEGIN <= att_piece && att_piece < PIECE_BLACK_END) {
+          int32_t idx = att_piece - PIECE_BLACK_BEGIN;
+          setInputBit(inputs, (black_offset + 14 + idx) * board_square + dst);
+          black_att_count += 1;
+        } else if (PIECE_WHITE_BEGIN <= att_piece && att_piece < PIECE_WHITE_END) {
+          int32_t idx = att_piece - PIECE_WHITE_BEGIN;
+          setInputBit(inputs, (white_offset + 14 + idx) * board_square + dst);
+          white_att_count += 1;
+        }
+      } else {
+        if (PIECE_BLACK_BEGIN <= att_piece && att_piece < PIECE_BLACK_END) {
+          int32_t idx = att_piece - PIECE_BLACK_BEGIN;
+          setInputBit(inputs, (white_offset + 14 + idx) * board_square + dst);
+          white_att_count += 1;
+        } else if (PIECE_WHITE_BEGIN <= att_piece && att_piece < PIECE_WHITE_END) {
+          int32_t idx = att_piece - PIECE_WHITE_BEGIN;
+          setInputBit(inputs, (black_offset + 14 + idx) * board_square + dst);
+          black_att_count += 1;
+        }
+      }
+    }
+
+    // Set the number of attacks on the piece
+    black_att_count = std::min(black_att_count, 5);
+    white_att_count = std::min(white_att_count, 5);
+
+    setInputBit(inputs, (black_offset + 14 + 14 + black_att_count) * board_square + dst);
+    setInputBit(inputs, (white_offset + 14 + 14 + white_att_count) * board_square + dst);
+
+    // Set the coordinates of the last moved piece
+    if (_lastMove != MOVE_INVALID && _lastMove.getDst().getIndex() == src) {
+      setInputBit(inputs, other_offset * board_square + dst);
+    }
+
+    // Set the row and column numbers
+    const int32_t row_offset = other_offset + 1;
+    const int32_t col_offset = row_offset + BOARD_SIZE;
+    int32_t x = src / BOARD_SIZE;
+    int32_t y = src % BOARD_SIZE;
+
+    if (color == COLOR_BLACK) {
+      setInputBit(inputs, (row_offset + y) * board_square + dst);
+      setInputBit(inputs, (col_offset + std::min(x, BOARD_SIZE - 1 - x)) * board_square + dst);
+    } else {
+      setInputBit(inputs, (row_offset + BOARD_SIZE - 1 - y) * board_square + dst);
+      setInputBit(inputs, (col_offset + std::min(x, BOARD_SIZE - 1 - x)) * board_square + dst);
+    }
+  }
+}
+
+/**
+ * Returns the game data to be input to the model.
+ * @param inputs The game data to be input to the model
+ * @param color The color of the player to move (COLOR_BLACK or COLOR_WHITE)
+ */
+void Board::_getInfoInputs(int32_t* inputs, int8_t color) const {
+  const static int32_t info_offset = MODEL_FEATURES * BOARD_SIZE * BOARD_SIZE;
+  const static int32_t hand_offsets[] = {0, 18, 22, 26, 30, 32, 34};
+  const static int32_t color_offset = 38;
+
+  // Set the information for hand pieces
+  int32_t black_color = (color == COLOR_BLACK) ? COLOR_BLACK : COLOR_WHITE;
+  int32_t white_color = (color == COLOR_BLACK) ? COLOR_WHITE : COLOR_BLACK;
 
   for (int32_t hp = PIECE_HAND_BEGIN; hp < PIECE_HAND_END; ++hp) {
     int32_t black_num = getHandPieceNum(black_color, hp);
@@ -1969,12 +2463,12 @@ void Board::_getInfoInputs(int32_t* inputs, int32_t color, int32_t turn) const {
     }
   }
 
-  // Set information about check
-  if (isCheckmate(_color)) {
+  // Set the information for check
+  if (isCheck(_color)) {
     setInputBit(inputs, info_offset + color_offset * 2);
   }
 
-  // Set the points required for entering king declaration
+  // Set the points required for nyugyoku declaration
   if (color == COLOR_BLACK) {
     inputs[MODEL_INPUT_PACK_SIZE - 3] = (int)((_nyugyokuScores[0] - 27.5) / 5.0 * 0xfffff);
     inputs[MODEL_INPUT_PACK_SIZE - 2] = (int)((_nyugyokuScores[1] - 27.5) / 5.0 * 0xfffff);
@@ -1983,8 +2477,8 @@ void Board::_getInfoInputs(int32_t* inputs, int32_t color, int32_t turn) const {
     inputs[MODEL_INPUT_PACK_SIZE - 2] = (int)((_nyugyokuScores[0] - 27.5) / 5.0 * 0xfffff);
   }
 
-  // Set the remaining number of moves until a draw
-  float remaining_turn = 1.0 - (_drawTurn - turn) / 50.0;
+  // Set the remaining turns until a draw
+  float remaining_turn = 1.0 - (_drawTurn - _turn) / 50.0;
 
   remaining_turn = std::min(std::max(remaining_turn, 0.0f), 1.0f);
   inputs[MODEL_INPUT_PACK_SIZE - 1] = (int)(remaining_turn * 0xfffff);

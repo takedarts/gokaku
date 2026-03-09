@@ -1,5 +1,7 @@
 #include "Candidate.h"
 
+#include <sstream>
+
 namespace deepshogi {
 
 /**
@@ -106,6 +108,37 @@ float Candidate::getMinimax() const {
  */
 std::vector<Move> Candidate::getVariations() const {
   return _variations;
+}
+
+/**
+ * Return the string representation of the candidate move.
+ * @return String representation of the candidate move.
+ */
+std::string Candidate::toString() const {
+  std::stringstream ss;
+  ss << "Move: " << _move.toString()
+     << ", Color: " << ((_color == COLOR_BLACK) ? "Black" : "White")
+     << ", Visits: " << _visits
+     << ", Playouts: " << _playouts
+     << ", Policy: " << _policy
+     << ", Value: " << _value
+     << ", Minimax: " << _minimax;
+
+  if (!_variations.empty()) {
+    ss << ", Variations: [";
+
+    for (size_t i = 0; i < _variations.size(); ++i) {
+      ss << _variations[i].toString();
+
+      if (i < _variations.size() - 1) {
+        ss << ", ";
+      }
+    }
+
+    ss << "]";
+  }
+
+  return ss.str();
 }
 
 }  // namespace deepshogi

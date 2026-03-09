@@ -32,14 +32,14 @@ include_directories( ${TORCH_INCLUDE_DIRS} )
 set( CYTHON_LIBRARIES ${CYTHON_LIBRARIES} ${TORCH_LIBRARIES} )
 
 # Set the compile options.
-set( CMAKE_CXX_STANDARD 17 )
+set( CMAKE_CXX_STANDARD 20 )
 set( CMAKE_CXX_STANDARD_REQUIRED ON )
 set( CMAKE_CXX_EXTENSIONS OFF )
 
 if(MSVC)
-    set( CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /O2 /utf-8" )
+    set( CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} %MSVC_CXX_FLAGS%" )
 else()
-    set( CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -Wno-enum-constexpr-conversion" )
+    set( CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} %UNIX_CXX_FLAGS%" )
 endif()
 
 # If the pyx file is a C++ file, we should specify that here.

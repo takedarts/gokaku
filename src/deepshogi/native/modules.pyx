@@ -1,5 +1,5 @@
 include 'pyx/board.pxi'
-include 'pyx/dfpn.pxi'
 include 'pyx/model.pxi'
 include 'pyx/player.pxi'
+include 'pyx/pnsearch.pxi'
 include 'pyx/processor.pxi'

@@ -1,17 +1,16 @@
 #pragma once
 
 #include <cstdint>
-#include <iostream>
 #include <queue>
 #include <shared_mutex>
 
 #include "Board.h"
 #include "Config.h"
-#include "DfpnEngine.h"
 #include "Evaluator.h"
 #include "Move.h"
 #include "NodeParameter.h"
 #include "NodeResult.h"
+#include "PnSearchEngine.h"
 #include "Policy.h"
 
 namespace deepshogi {
@@ -41,7 +40,7 @@ class Node {
    * @param equally If true, equalize the number of searches
    * @param width Search width (if 0, adjust automatically)
    * @param algorithm Search algorithm
-   * @param dfpnEngine Mate search engine object (nullptr if not searching for mate)
+   * @param pnSearchEngine Mate search engine object (nullptr if not searching for mate)
    * @param checkSearchDepth Search depth for checkmate moves
    * @param temperature Temperature parameter for search
    * @param noise Strength of Gumbel noise for search
@@ -49,7 +48,7 @@ class Node {
    */
   NodeResult evaluate(
       bool equally, int32_t width, int32_t algorithm,
-      DfpnEngine* dfpnEngine, int32_t checkSearchDepth,
+      PnSearchEngine* pnSearchEngine, int32_t checkSearchDepth,
       float temperature, float noise);
 
   /**

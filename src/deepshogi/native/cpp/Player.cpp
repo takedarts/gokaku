@@ -2,7 +2,6 @@
 
 #include <algorithm>
 #include <cmath>
-#include <cstring>
 #include <map>
 
 namespace deepshogi {
@@ -35,7 +34,7 @@ Player::Player(
           ucbConstant, pucbConstantInit, pucbConstantBase)),
       _threadPool(threads),
       _thread(),
-      _dfpnEnginePool(checkSearchNode, threads),
+      _pnSearchManager(checkSearchNode, threads),
       _root(_nodeManager.createNode()),
       _evalLeafOnly(evalLeafOnly),
       _maxVisits(maxVisits),
@@ -270,9 +269,7 @@ std::string Player::getDebugInfo() {
 
     Move move = current->getMove();
     output << prefix
-           << "Move: " << move.getSrcX() << "," << move.getSrcY()
-           << "->" << move.getDstX() << "," << move.getDstY()
-           << "Promote: " << (move.isPromote() ? "Y" : "N") << " "
+           << "Move: " << move
            << "Color: " << current->getColor() << " "
            << "Visits: " << current->getVisits() << " "
            << "Playouts: " << current->getPlayouts() << " "
@@ -349,12 +346,12 @@ int32_t Player::_evaluate() {
   int32_t playouts = 0;
 
   // Acquire the mate search engine object
-  DfpnEngine* dfpn_engine = _dfpnEnginePool.acquire();
+  PnSearchEngine* pn_search_engine = _pnSearchManager.acquire();
 
   while (true) {
     NodeResult result = nodes.back()->evaluate(
         search_equally, search_width, search_algorithm,
-        dfpn_engine, search_check_node_depth > 0 ? _checkSearchDepth : 0,
+        pn_search_engine, search_check_node_depth > 0 ? _checkSearchDepth : 0,
         search_temperature, search_noise);
 
     // Update the evaluation value of the node
@@ -425,7 +422,7 @@ int32_t Player::_evaluate() {
   }
 
   // Return the mate search engine object
-  _dfpnEnginePool.release(dfpn_engine);
+  _pnSearchManager.release(pn_search_engine);
 
   // Return the number of playouts
   return playouts;

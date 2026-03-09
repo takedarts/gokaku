@@ -1,14 +1,15 @@
-from libc.stdint cimport int32_t
+from libc.stdint cimport int16_t
 from libcpp cimport bool
+from pyx.position cimport Position
 
 
 cdef extern from "cpp/Move.h" namespace "deepshogi":
     cdef cppclass Move:
         Move() except +
-        Move(int32_t, int32_t, int32_t, int32_t, bool) except +
-        int32_t getSrcX() const
-        int32_t getSrcY() const
-        int32_t getDstX() const
-        int32_t getDstY() const
+        Move(const Position& src, const Position& dst, bool promote) except +
+        Move(int16_t move) except +
+        int16_t getValue() const
+        Position getSrc() const
+        Position getDst() const
         bool isPromote() const
-        int32_t getValue() const
+        bool isValid() const

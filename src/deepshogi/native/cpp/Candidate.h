@@ -94,6 +94,23 @@ class Candidate {
    */
   std::vector<Move> getVariations() const;
 
+  /**
+   * Return the string representation of the candidate move.
+   * @return String representation of the candidate move.
+   */
+  std::string toString() const;
+
+  /**
+   * Write the candidate move information to the output stream.
+   * @param os Output stream.
+   * @param candidate Candidate move object.
+   * @return Output stream.
+   */
+  friend std::ostream& operator<<(std::ostream& os, const Candidate& candidate) {
+    os << candidate.toString();
+    return os;
+  }
+
  private:
   /**
    * Move.

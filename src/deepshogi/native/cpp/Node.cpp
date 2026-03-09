@@ -24,7 +24,7 @@ Node::Node(NodeManager* manager, const NodeParameter& parameter)
           parameter.getNyugyokuScoreBlack(),
           parameter.getNyugyokuScoreWhite(),
           parameter.getDrawTurn()),
-      _move(MOVE_PASS),
+      _move(MOVE_INVALID),
       _policy(0.0f),
       _evaluator(parameter.getProcessor()),
       _ucbConstant(parameter.getUcbConstant()),
@@ -52,7 +52,7 @@ void Node::initialize(const std::string sfen) {
   std::unique_lock<std::shared_mutex> lock(_evalMutex);
 
   _board.initialize(sfen);
-  _move = MOVE_PASS;
+  _move = MOVE_INVALID;
   _reset();
 }
 
@@ -62,7 +62,7 @@ void Node::initialize(const std::string sfen) {
  * @param equally If true, equalize the number of searches
  * @param width Search width (if 0, adjust automatically)
  * @param algorithm Search algorithm
- * @param dfpnEngine Mate search engine object (nullptr if not searching for mate)
+ * @param pnSearchEngine Mate search engine object (nullptr if not searching for mate)
  * @param checkSearchDepth Search depth for checkmate moves
  * @param temperature Temperature parameter for search
  * @param noise Strength of Gumbel noise for search
@@ -70,7 +70,7 @@ void Node::initialize(const std::string sfen) {
  */
 NodeResult Node::evaluate(
     bool equally, int32_t width, int32_t algorithm,
-    DfpnEngine* dfpnEngine, int32_t checkSearchDepth,
+    PnSearchEngine* pnSearchEngine, int32_t checkSearchDepth,
     float temperature, float noise) {
   NodeResult result;
 
@@ -87,7 +87,7 @@ NodeResult Node::evaluate(
     result = _evaluateNode(equally, width, algorithm, temperature, noise);
 
     // If not searching for long checkmate sequences, return the evaluation result
-    if (dfpnEngine == nullptr ||
+    if (pnSearchEngine == nullptr ||
         checkSearchDepth < 1 ||
         _checkmateMoveDeepSearched ||
         !_checkmateMoves.empty()) {
@@ -101,7 +101,7 @@ NodeResult Node::evaluate(
   // Asynchronously execute long checkmate search
   int32_t remain_turn = _board.getDrawTurn() - _board.getTurn() + 1;
   int32_t search_depth = std::min(checkSearchDepth, remain_turn);
-  std::vector<Move> checkmate_moves = dfpnEngine->getCheckmateMoves(&_board, search_depth);
+  std::vector<Move> checkmate_moves = pnSearchEngine->getCheckmateMoves(&_board, search_depth);
 
   // Save the result of the checkmate search
   {
@@ -160,9 +160,9 @@ Move Node::getPolicyMove() {
     }
   }
 
-  // If there are no candidate moves, return pass
+  // If there are no candidate moves, return invalid move
   if (policies.empty()) {
-    return MOVE_PASS;
+    return MOVE_INVALID;
   }
 
   // Get the candidate move with the highest move probability

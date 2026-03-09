@@ -27,14 +27,14 @@ static int32_t getPolicyIndex(const Board* board, Move move) {
   int32_t move_y = 0;
   int32_t piece = 0;
 
-  if (move.getSrcX() >= BOARD_SIZE) {
+  if (move.getSrc().getX() >= BOARD_SIZE) {
     move_x = 0;
     move_y = 0;
-    piece = move.getSrcY() - PIECE_HAND_BEGIN;
+    piece = move.getSrc().getY() - PIECE_HAND_BEGIN;
   } else {
-    move_x = move.getDstX() - move.getSrcX();
-    move_y = move.getDstY() - move.getSrcY();
-    piece = board->getPiece(move.getSrcX(), move.getSrcY());
+    move_x = move.getDst().getX() - move.getSrc().getX();
+    move_y = move.getDst().getY() - move.getSrc().getY();
+    piece = board->getPiece(move.getSrc());
 
     if (move.isPromote()) {
       piece += PIECE_PROMOTE;
@@ -272,8 +272,8 @@ void Evaluator::evaluate(Board* board) {
     int32_t idx = getPolicyIndex(board, move);
 
     // Calculate destination coordinates
-    int32_t x = move.getDstX();
-    int32_t y = move.getDstY();
+    int32_t x = move.getDst().getX();
+    int32_t y = move.getDst().getY();
 
     if (board->getColor() == COLOR_WHITE) {
       x = BOARD_SIZE - 1 - x;

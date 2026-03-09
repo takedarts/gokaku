@@ -22,10 +22,10 @@ from .psfen import convert_sfen_to_psfen
 LOGGER = logging.getLogger(__name__)
 
 
-def parse_cshogi_move16(move: int) -> Tuple[Tuple[int, int], Tuple[int, int], bool]:
-    '''Parse cshogi move representation.
+def parse_move16(move: int) -> Tuple[Tuple[int, int], Tuple[int, int], bool]:
+    '''Parse move representation.
     Args:
-        move (int): cshogi move representation
+        move (int): move representation
     Returns:
         Tuple[Tuple[int,int], Tuple[int,int], bool]: Source, destination, True if promote
     '''
@@ -64,7 +64,7 @@ class Candidate(object):
             policy (float): Expected move probability
             value (float): Predicted win rate
             minimax (float): Minimax value
-            variations (List[int]): Expected sequence (cshogi move representation)
+            variations (List[int]): Expected sequence (move representation)
         '''
         self.src = src
         self.dst = dst
@@ -75,7 +75,7 @@ class Candidate(object):
         self.policy = policy
         self.value = value
         self.minimax = minimax
-        self.variations = [parse_cshogi_move16(v) for v in variations]
+        self.variations = [parse_move16(v) for v in variations]
 
         if math.isnan(self.policy):
             raise ShogiException('policy is NaN')
@@ -90,11 +90,11 @@ class Candidate(object):
         self.minimax_lcb = minimax - color * 1.96 * 0.5 / (visits + 1)**0.5
 
     def get_win_chance(self, criterion: str) -> float:
-        '''勝率を取得する。
+        '''Get the win rate.
         Args:
-            criterion (str): 基準（'value', 'minimax', 'visits'のいずれか）
+            criterion (str): Criterion ('value', 'minimax', 'visits')
         Returns:
-            float: 勝率
+            float: Win rate
         '''
         if criterion == 'value' or criterion == 'visits':
             return self.value * self.color * 0.5 + 0.5
@@ -104,11 +104,11 @@ class Candidate(object):
             raise ValueError(f'Unknown criterion: {criterion}')
 
     def get_win_chance_lcb(self, criterion: str) -> float:
-        '''勝率の下限値を取得する。
+        '''Get the lower confidence bound of the win rate.
         Args:
-            criterion (str): 基準（'value', 'minimax', 'visits'のいずれか）
+            criterion (str): Criterion ('value', 'minimax', 'visits')
         Returns:
-            float: 勝率の下限値
+            float: Lower confidence bound of the win rate
         '''
         if criterion == 'value' or criterion == 'visits':
             return self.value_lcb * self.color * 0.5 + 0.5
@@ -165,7 +165,7 @@ class Referee(object):
         # If in check, count consecutive checks
         color_index = 0 if board.get_color() == COLOR_WHITE else 1
 
-        if board.is_checkmate():
+        if board.is_check():
             self.check_counts[color_index] += 1
         else:
             self.check_counts[color_index] = 0

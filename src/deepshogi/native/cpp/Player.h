@@ -11,9 +11,9 @@
 #include "Board.h"
 #include "Candidate.h"
 #include "Config.h"
-#include "DfpnEnginePool.h"
 #include "Node.h"
 #include "NodeManager.h"
+#include "PnSearchManager.h"
 #include "Processor.h"
 #include "ThreadPool.h"
 
@@ -137,9 +137,9 @@ class Player {
   std::unique_ptr<std::thread> _thread;
 
   /**
-   * Pool of mate search engines.
+   * Object that manages the mate search engine.
    */
-  DfpnEnginePool _dfpnEnginePool;
+  PnSearchManager _pnSearchManager;
 
   /**
    * Root node.

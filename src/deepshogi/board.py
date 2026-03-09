@@ -2,9 +2,9 @@ from typing import List, Tuple
 
 import numpy as np
 
-from .config import (BOARD_SIZE, COLOR_NONE, DEFAULT_DRAW_TURN,
-                     DEFAULT_INITIAL_SFEN, DEFAULT_NYUGYOKU_SCORES)
-from .exception import ShogiException
+from .config import (BOARD_SIZE, COLOR_BLACK, COLOR_NONE, DEFAULT_DRAW_TURN,
+                     DEFAULT_INITIAL_SFEN, DEFAULT_NYUGYOKU_SCORES,
+                     PIECE_BLACK_BEGIN, PIECE_PROMOTE, PIECE_WHITE_BEGIN)
 from .native import NativeBoard
 
 
@@ -19,6 +19,8 @@ def is_hand_position(pos: Tuple[int, int]) -> bool:
 
 
 class Board(object):
+    '''Class that manages the state of the board.'''
+
     def __init__(
         self,
         initial_sfen: str = DEFAULT_INITIAL_SFEN,
@@ -44,19 +46,38 @@ class Board(object):
         dst: Tuple[int, int],
         promote: bool = False,
         piece: int | None = None,
-    ) -> None:
+    ) -> Tuple[Tuple[int, int], Tuple[int, int], bool, int]:
         '''Move a piece.
+        Returns the result of moving a piece:
+        (source coordinates, destination coordinates, promotion flag, captured piece type).
         Args:
-            src (int): Source coordinates
-            dst (int): Destination coordinates
+            src (Tuple[int, int]): Source coordinates
+            dst (Tuple[int, int]): Destination coordinates
             promote (bool): Whether to promote
-            piece (int): Type of piece after moving
+            piece (int): Piece type after the move
+        Returns:
+            Tuple[Tuple[int, int], Tuple[int, int], bool, int]: Result of moving the piece
         '''
         if piece is not None and not is_hand_position(src):
             promote = (self.get_piece(src) != piece)
 
-        if not self.native.play(src, dst, promote):
-            raise ShogiException(f'Illegal move: {src} -> {dst} (promote={promote})')
+        return self.native.play(src, dst, promote)
+
+    def undo(
+        self,
+        src: Tuple[int, int],
+        dst: Tuple[int, int],
+        promote: bool,
+        captured: int,
+    ) -> None:
+        '''Revert the board to the state before the move.
+        Args:
+            src (Tuple[int, int]): Source coordinates
+            dst (Tuple[int, int]): Destination coordinates
+            promote (bool): True if the move was a promotion
+            captured (int): Type of captured piece
+        '''
+        self.native.undo(src, dst, promote, captured)
 
     def get_color(self) -> int:
         '''Get the side to move.
@@ -71,6 +92,13 @@ class Board(object):
             int: Number of moves
         '''
         return self.native.get_turn()
+
+    def get_hash(self) -> int:
+        '''Get the hash value of the board.
+        Returns:
+            int: Hash value of the board
+        '''
+        return self.native.get_hash()
 
     def get_piece(self, pos: Tuple[int, int]) -> int:
         '''Get the piece at the specified coordinates.
@@ -95,7 +123,20 @@ class Board(object):
         Returns:
             int: Type of piece
         '''
-        return self.native.get_moved_piece(src, dst, promote)
+        # If the piece is dropped from hand
+        if src[0] == BOARD_SIZE:
+            if self.get_color() == COLOR_BLACK:
+                return src[1] + PIECE_BLACK_BEGIN
+            else:
+                return src[1] + PIECE_WHITE_BEGIN
+
+        # If the piece is moved on the board
+        piece = self.get_piece(src)
+
+        if promote:
+            piece += PIECE_PROMOTE
+
+        return piece
 
     def get_hand_piece_num(self, color: int, piece: int) -> int:
         '''Get the number of pieces of the specified type and color.
@@ -126,16 +167,16 @@ class Board(object):
     def get_legal_moves(
         self,
         remove_unpromote: bool = True,
-        checkmate_only: bool = False,
+        check_only: bool = False,
     ) -> List[Tuple[Tuple[int, int], Tuple[int, int], bool]]:
         '''Get legal moves.
         Args:
             remove_unpromote (bool): True to remove non-promotion moves for pawns, bishops, and rooks
-            checkmate_only (bool): True to get only checking moves
+            check_only (bool): True to get only checking moves
         Returns:
             List[Tuple[Tuple[int, int], Tuple[int, int], bool]]: List of legal moves
         '''
-        return self.native.get_legal_moves(remove_unpromote, checkmate_only)
+        return self.native.get_legal_moves(remove_unpromote, check_only)
 
     def get_checkmate_moves(
         self,
@@ -161,17 +202,17 @@ class Board(object):
 
         return self.native.is_nyugyoku(color)
 
-    def is_checkmate(self, color: int | None = None) -> bool:
-        '''Determine checkmate.
+    def is_check(self, color: int | None = None) -> bool:
+        '''Determine check.
         Args:
             color (int | None): Side to move (if None, use current side)
         Returns:
-            bool: True if checkmate
+            bool: True if in check
         '''
         if color is None:
             color = self.get_color()
 
-        return self.native.is_checkmate(color)
+        return self.native.is_check(color)
 
     def get_sfen(self) -> str:
         '''Return the current position in SFEN format.
@@ -180,25 +221,17 @@ class Board(object):
         '''
         return self.native.get_sfen()
 
-    def get_inputs(
-        self,
-        color: int = COLOR_NONE,
-        turn: int | None = None,
-    ) -> np.ndarray:
+    def get_inputs(self, color: int = COLOR_NONE) -> np.ndarray:
         '''Get the data to input to the inference model.
         Args:
             color (int): Side to move (if COLOR_NONE, use current side)
-            turn (int | None): Number of moves (if None, use current number of moves)
         Returns:
             np.ndarray: Input data
         '''
         if color == COLOR_NONE:
             color = self.get_color()
 
-        if turn is None:
-            turn = self.get_turn()
-
-        return self.native.get_inputs(color, turn)
+        return self.native.get_inputs(color)
 
     def copy_from(self, board: 'Board') -> None:
         '''Copy the board.

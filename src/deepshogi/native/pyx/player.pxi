@@ -5,11 +5,14 @@ from libcpp cimport bool
 from libcpp.vector cimport vector
 from pyx.candidate cimport Candidate
 from pyx.move cimport Move
+from pyx.position cimport Position
 from pyx.player cimport Player
 
 
 cdef class NativePlayer:
+    '''Class for managing game state and deciding moves as a player.'''
     cdef Player* player
+
     def __cinit__(
         self,
         processor: NativeProcessor,  # type: ignore
@@ -69,7 +72,10 @@ cdef class NativePlayer:
             dst (Tuple[int, int]): Destination coordinates
             promote (bool): True if promote
         '''
-        self.player.play(Move(src[0], src[1], dst[0], dst[1], promote))
+        cdef Position src_pos = Position(src[0], src[1])
+        cdef Position dst_pos = Position(dst[0], dst[1])
+        cdef Move move = Move(src_pos, dst_pos, promote)
+        self.player.play(move)
 
     def start_evaluation(
         self,
@@ -120,8 +126,8 @@ cdef class NativePlayer:
         results: List[Tuple[Tuple[int, int], Tuple[int, int], int, int, float, float, float, List[int]]] = []
 
         for i in range(candidates.size()):
-            src = (candidates[i].getMove().getSrcX(), candidates[i].getMove().getSrcY())
-            dst = (candidates[i].getMove().getDstX(), candidates[i].getMove().getDstY())
+            src = (candidates[i].getMove().getSrc().getX(), candidates[i].getMove().getSrc().getY())
+            dst = (candidates[i].getMove().getDst().getX(), candidates[i].getMove().getDst().getY())
             promote = candidates[i].getMove().isPromote()
             color = candidates[i].getColor()
             visits = candidates[i].getVisits()
