@@ -745,7 +745,7 @@ void Board::copyFrom(const Board* board) {
  * @return A string representation of the board
  */
 std::string Board::toString() const {
-  // CSA形式の文字列を作成するための駒情報の配列
+  // Array of piece information for creating a string in CSA format
   const char piece_names[][3] = {
       "FU", "KY", "KE", "GI", "KA", "HI", "KI", "OU",
       "TO", "NY", "NK", "NG", "UM", "RY"};

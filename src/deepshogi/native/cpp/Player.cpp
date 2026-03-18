@@ -249,16 +249,16 @@ void Player::copyBoardTo(Board* board) {
 }
 
 /**
- * 探索木のデバッグ情報を出力する。
+ * Get the search tree debug information.
  */
 std::string Player::getDebugInfo() {
   std::unique_lock<std::mutex> lock(_mutex);
 
-  // スレッドを一時停止する
+  // Pause the thread
   _paused = true;
   _condition.wait(lock, [this]() { return _runnings == 0; });
 
-  // 探索木を深さ優先で辿りながらデバッグ情報を作成する
+  // Create debug information by traversing the search tree in depth-first order
   std::vector<std::pair<Node*, std::string>> stack = {{_root, ""}};
   std::ostringstream output;
 
@@ -284,7 +284,7 @@ std::string Player::getDebugInfo() {
     }
   }
 
-  // スレッドを再開する
+  // Resume the thread
   _paused = false;
   _condition.notify_all();
 
