@@ -62,10 +62,10 @@ def make_files(
     cmake_text = cmake_text.replace('%CPP_FILES%', cpp_files)
 
     if debug:
-        cmake_text = cmake_text.replace('%MSVC_CXX_FLAGS%', '/Zi /Od /utf8')
+        cmake_text = cmake_text.replace('%MSVC_CXX_FLAGS%', '/Zi /Od /utf-8')
         cmake_text = cmake_text.replace('%UNIX_CXX_FLAGS%', '-g -Og -fno-omit-frame-pointer')
     else:
-        cmake_text = cmake_text.replace('%MSVC_CXX_FLAGS%', '/O2 /utf8')
+        cmake_text = cmake_text.replace('%MSVC_CXX_FLAGS%', '/O2 /utf-8')
         cmake_text = cmake_text.replace('%UNIX_CXX_FLAGS%', '-O3')
 
     if not cmake_path.exists() or cmake_path.read_text() != cmake_text:
