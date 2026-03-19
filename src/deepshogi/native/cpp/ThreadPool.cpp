@@ -73,7 +73,7 @@ void ThreadPool::_run() {
  * @return Number of threads
  */
 int32_t ThreadPool::getSize() {
-  return _threads.size();
+  return (int32_t)_threads.size();
 }
 
 }  // namespace deepshogi

@@ -2478,7 +2478,7 @@ void Board::_getInfoInputs(int32_t* inputs, int8_t color) const {
   }
 
   // Set the remaining turns until a draw
-  float remaining_turn = 1.0 - (_drawTurn - _turn) / 50.0;
+  float remaining_turn = 1.0f - (_drawTurn - _turn) / 50.0f;
 
   remaining_turn = std::min(std::max(remaining_turn, 0.0f), 1.0f);
   inputs[MODEL_INPUT_PACK_SIZE - 1] = (int)(remaining_turn * 0xfffff);

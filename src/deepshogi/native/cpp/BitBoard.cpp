@@ -144,13 +144,13 @@ BitBoard BitBoard::operator~() const {
  */
 BitBoard& BitBoard::operator<<=(int32_t shift) {
   if (shift < UPPER_SIZE) {
-    _upper = (_lower >> (LOWER_SIZE - shift)) | (_upper << shift);
+    _upper = (uint32_t)(_lower >> (LOWER_SIZE - shift)) | (_upper << shift);
     _lower <<= shift;
   } else if (shift < LOWER_SIZE) {
-    _upper = (_lower >> (LOWER_SIZE - shift));
+    _upper = (uint32_t)(_lower >> (LOWER_SIZE - shift));
     _lower <<= shift;
   } else {
-    _upper = (_lower << (shift - LOWER_SIZE));
+    _upper = (uint32_t)(_lower << (shift - LOWER_SIZE));
     _lower = 0;
   }
 

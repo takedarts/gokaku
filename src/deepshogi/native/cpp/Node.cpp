@@ -319,7 +319,7 @@ float Node::getValueLCB() {
     return 0.0f;
   } else {
     float value = _value / _count;
-    float lower = 1.96 * 0.5 / std::sqrt(_visits + 1);
+    float lower = 1.96f * 0.5f / std::sqrtf((float)(_visits + 1));
     return value - (lower * OPPOSITE_COLOR(_board.getColor()));
   }
 }
@@ -335,7 +335,7 @@ float Node::getPriorityByUCB(int32_t totalVisits) {
     return -99.0f;
   } else {
     float value = (_value / _count) * OPPOSITE_COLOR(_board.getColor());
-    float ucb = std::sqrt(std::log(totalVisits) / (_visits + 1));
+    float ucb = std::sqrtf(std::logf((float)totalVisits) / (_visits + 1));
     return value + _ucbConstant * ucb;
   }
 }
@@ -350,10 +350,10 @@ float Node::getPriorityByPUCB(int32_t totalVisits) {
   if (_count == 0) {
     return -99.0f;
   } else {
-    float c_pucb_inc = std::log((1 + totalVisits + _pucbConstantBase) / _pucbConstantBase);
+    float c_pucb_inc = std::logf((1 + totalVisits + _pucbConstantBase) / _pucbConstantBase);
     float c_pucb = _pucbConstantInit * (1.0f + c_pucb_inc);
     float value = (_value / _count) * OPPOSITE_COLOR(_board.getColor());
-    float ucb = _policy * std::sqrt(totalVisits) / (1 + _visits);
+    float ucb = _policy * std::sqrtf((float)totalVisits) / (1 + _visits);
     return value + c_pucb * ucb;
   }
 }
@@ -460,7 +460,7 @@ NodeResult Node::_evaluateNode(
   }
 
   // Get the candidate move to add to the evaluation from the queue
-  int32_t children_size = _children.size() + _waitingSet.size();
+  int32_t children_size = (int32_t)(_children.size() + _waitingSet.size());
 
   if (children_size < _childPolicies.size() && (width < 1 || children_size < width)) {
     int32_t max_index = 0;
@@ -468,8 +468,8 @@ NodeResult Node::_evaluateNode(
     float max_priority = 0.0f;
 
     // Calculate the temperature parameter
-    float win_chance = getValue() * _board.getColor() * 0.5 + 0.5;
-    float temperature_power = win_chance + (1.0 / temperature) * (1 - win_chance);
+    float win_chance = getValue() * _board.getColor() * 0.5f + 0.5f;
+    float temperature_power = win_chance + (1.0f / temperature) * (1 - win_chance);
 
     // Create the Gumbel noise generator object
     // If the number of child nodes is 4 or less, do not add noise
@@ -582,9 +582,9 @@ NodeResult Node::_evaluateNode(
 
     // Calculate the priority
     if (equally) {
-      float visits = child.first->getVisits();
+      float visits = (float)child.first->getVisits();
       float value = child.first->getValue() * getColor();
-      priority = 1.0 / (visits + 1 - value * 0.5);
+      priority = 1.0f / (visits + 1 - value * 0.5f);
     } else if (algorithm == SEARCH_UCB) {
       priority = child.first->getPriorityByUCB(_visits);
     } else {

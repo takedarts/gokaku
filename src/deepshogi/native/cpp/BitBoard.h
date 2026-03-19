@@ -2,6 +2,7 @@
 
 #include <bit>
 #include <cstdint>
+#include <ostream>
 #include <string>
 
 namespace deepshogi {

@@ -106,7 +106,7 @@ Model::Model(std::string filename, int32_t gpu, bool fp16, bool deterministic)
  * @param outputs Output data
  * @param size Number of evaluation data
  */
-void Model::forward(int32_t* inputs, float* outputs, uint32_t size) {
+void Model::forward(int32_t* inputs, float* outputs, int32_t size) {
   torch::NoGradGuard no_grad;
 
   torch::Tensor in_values = torch::from_blob(

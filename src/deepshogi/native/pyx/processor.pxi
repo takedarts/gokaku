@@ -45,7 +45,7 @@ cdef class NativeProcessor:
         cdef numpy.ndarray[numpy.float32_t, ndim=2, mode="c"] outputs = numpy.zeros(
             (inputs.shape[0], MODEL_OUTPUT_SIZE), dtype=numpy.float32)
 
-        cdef int size = inputs.shape[0]
+        cdef int32_t size = <int32_t>inputs.shape[0]
         cdef int32_t* in_data = <int32_t*> inputs.data
         cdef float* out_data = <float*> outputs.data
 

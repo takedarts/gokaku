@@ -360,7 +360,7 @@ int32_t Player::_evaluate() {
     if (result.getPlayouts() == 1) {
       bool minimax_update = true;
 
-      for (int32_t i = nodes.size() - 1; i >= 0; i--) {
+      for (int32_t i = (int32_t)nodes.size() - 1; i >= 0; i--) {
         std::vector<Node*> children = nodes[i]->getChildren();
         int32_t color = nodes[i]->getColor();
         float minimax_value = result.getValue();

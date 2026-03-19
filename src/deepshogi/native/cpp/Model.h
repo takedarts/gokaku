@@ -39,7 +39,7 @@ class Model {
    * @param outputs Output data
    * @param size Number of evaluation data
    */
-  virtual void forward(int32_t* inputs, float* outputs, uint32_t size);
+  virtual void forward(int32_t* inputs, float* outputs, int32_t size);
 
   /**
    * Return True if using GPU.

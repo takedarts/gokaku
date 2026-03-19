@@ -54,7 +54,7 @@ void PnSearchNode::initialize(const Board* board, int32_t depth) {
 
     if (!legal_moves.empty()) {
       _pn = 1;
-      _dn = legal_moves.size();
+      _dn = (int32_t)legal_moves.size();
       _step = MAX_VALUE;
     } else {
       _pn = MAX_VALUE;
@@ -68,7 +68,7 @@ void PnSearchNode::initialize(const Board* board, int32_t depth) {
     std::vector<Move> legal_moves = _board.getLegalMoves(false, false);
 
     if (!legal_moves.empty()) {
-      _pn = legal_moves.size();
+      _pn = (int32_t)legal_moves.size();
       _dn = 1;
       _step = MAX_VALUE;
     } else {
@@ -216,7 +216,7 @@ PnSearchNode* PnSearchNode::getNextNode() {
         continue;
       }
 
-      float priority = 1.0f / (child->_pn + std::log(child->_size));
+      float priority = 1.0f / (child->_pn + std::logf((float)child->_size));
 
       if (priority > max_priority) {
         max_priority = priority;
@@ -235,7 +235,7 @@ PnSearchNode* PnSearchNode::getNextNode() {
         continue;
       }
 
-      float priority = 1.0f / (child->_dn + std::log(child->_size));
+      float priority = 1.0f / (child->_dn + std::logf((float)child->_size));
 
       if (priority > max_priority) {
         max_priority = priority;
