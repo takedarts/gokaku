@@ -153,10 +153,36 @@ class Board {
    */
   inline uint64_t getHash() const {
     if (_color == COLOR_BLACK) {
-      return _hash;
+      return _boardHash ^ _handHash;
     } else {
-      return _hash ^ 0xffffffffffffffffULL;
+      return (_boardHash ^ _handHash) ^ 0xffffffffffffffffULL;
     }
+  }
+
+  /**
+   * Returns true if this board is a subordinate board of the specified board.
+   * A subordinate board is one where the piece placement on the board is the same,
+   * and the number of hand pieces of all types is the equal or less.
+   * The same piece placement on the board is confirmed by checking the hash values.
+   * (Hash collisions are considered extremely rare in practice, so they are ignored here)
+   * To confirm this hand piece condition, it is sufficient to check that
+   * the set of bit positions of hand pieces representation is a subset of the other set.
+   * @param other The board to compare against
+   * @param color The side to evaluate
+   * @return True if this is a subordinate board
+   */
+  inline bool isLesserThan(const Board& other, int8_t color) const {
+    // If the hash values of the boards are different,
+    // the piece placement is determined to be different
+    if (_boardHash != other._boardHash) {
+      return false;
+    }
+
+    // Check that the set of bit positions of hand pieces representation
+    // is a subset of the other set
+    int8_t color_idx = (color == COLOR_BLACK) ? 0 : 1;
+
+    return (_handBits[color_idx] & other._handBits[color_idx]) == _handBits[color_idx];
   }
 
   /**
@@ -216,6 +242,17 @@ class Board {
   uint8_t _hands[2][PIECE_HAND_END - PIECE_HAND_BEGIN];
 
   /**
+   * Array representing the number of hand pieces for each player using bits.
+   * Sets bits in the following ranges according to the number of pieces.
+   * Pawn: 0-17, Lance: 18-21, Knight: 22-25, Silver: 26-29, Bishop: 30-31, Rook: 32-33, Gold: 34-37
+   *
+   * This bit representation is used for the following purposes:
+   * - To confirm the hand piece conditions when determining subordinate board states
+   * - To create hand piece information when generating input data for the model
+   */
+  uint64_t _handBits[2];
+
+  /**
    * Position of the king (0: black, 1: white).
    */
   Position _kingPositions[2];
@@ -241,10 +278,14 @@ class Board {
   int16_t _drawTurn;
 
   /**
-   * Hash value.
+   * Hash value of the board.
    */
-  uint64_t _hash;
+  uint64_t _boardHash;
 
+  /**
+   * Hash value of hand pieces.
+   */
+  uint64_t _handHash;
   /**
    * Object storing the last move.
    */

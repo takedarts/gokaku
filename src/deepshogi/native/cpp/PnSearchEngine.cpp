@@ -54,16 +54,17 @@ std::vector<Move> PnSearchEngine::getCheckmateMoves(const Board* board, int32_t 
       // Add current node to parent list to detect loops
       parents.push_back(node);
 
+      // If the next search node is a subordinate node of any parent node,
+      // replace the next search node with a non-checkmate node
+      if (std::any_of(parents.begin(), parents.end(), [next_node](PnSearchNode* parent) {
+            return next_node->isLesserThan(parent);
+          })) {
+        node->replaceChildNode(next_node, const_cast<PnSearchNode*>(&END_NODE));
+      }
+
       // Move to next node
       node = next_node;
       next_node = node->getNextNode();
-
-      // If a loop is detected, terminate search
-      // If loop occurs, replace leaf node with non-checkmate node
-      if (std::find(parents.begin(), parents.end(), node) != parents.end()) {
-        parents.back()->replaceChildNode(node, const_cast<PnSearchNode*>(&END_NODE));
-        break;
-      }
     }
 
     // Expand node if next search node is not checkmate/non-checkmate

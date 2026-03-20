@@ -120,6 +120,27 @@ class PnSearchNode {
     return _size;
   }
 
+  /**
+   * Returns true if this node is a subordinate node of the specified node.
+   * A subordinate node means a node with the same piece placement on the board,
+   * and the same or fewer pieces in hand for all types.
+   * The turn of the side giving check becomes the evaluation target turn.
+   * @param node the node to compare against
+   * @return true if this is a subordinate node
+   */
+  inline bool isLesserThan(const PnSearchNode* node) const {
+    // Turn of the attacking side: verify board piece placement is the same
+    // and own hand pieces are the same or fewer
+    if (_depth % 2 == 1) {
+      return _board.isLesserThan(node->_board, _board.getColor());
+    }
+    // Turn of the defending side: verify board piece placement is the same
+    // and opponent's hand pieces are the same or fewer
+    else {
+      return _board.isLesserThan(node->_board, OPPOSITE_COLOR(_board.getColor()));
+    }
+  }
+
  private:
   /**
    * The board object.

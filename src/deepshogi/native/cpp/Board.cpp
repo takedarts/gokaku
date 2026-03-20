@@ -103,7 +103,7 @@ static const std::map<char, std::pair<uint8_t, uint8_t>> SFEN_HAND_PIECE_TYPES =
 
 // Array of hand piece types in SFEN format
 // Used to determine the display order in SFEN format
-static const uint8_t SFEN_HAND_PIECES[] = {
+static constexpr uint8_t SFEN_HAND_PIECES[] = {
     PIECE_HAND_ROOK, PIECE_HAND_BISHOP, PIECE_HAND_GOLD,
     PIECE_HAND_SILVER, PIECE_HAND_KNIGHT, PIECE_HAND_LANCE, PIECE_HAND_PAWN};
 
@@ -116,6 +116,10 @@ static constexpr int8_t GOLD_INDEX = PIECE_BLACK_GOLD - PIECE_BLACK_BEGIN;
 static constexpr int8_t KING_INDEX = PIECE_BLACK_KING - PIECE_BLACK_BEGIN;
 static constexpr int8_t BISHOP_INDEX = PIECE_BLACK_BISHOP - PIECE_BLACK_BEGIN;
 static constexpr int8_t ROOK_INDEX = PIECE_BLACK_ROOK - PIECE_BLACK_BEGIN;
+
+// Bit representation offsets for hand pieces
+static constexpr int8_t HAND_BIT_OFFSETS[PIECE_HAND_END - PIECE_HAND_BEGIN] = {
+    0, 18, 22, 26, 30, 32, 34};
 
 /**
  * Sets the specified bit.
@@ -220,12 +224,14 @@ static std::vector<Move> searchCheckmateMoves(Board& board, int32_t depth) {
 Board::Board()
     : _cells{0},
       _hands{{0}},
+      _handBits{0},
       _kingPositions{POSITION_INVALID, POSITION_INVALID},
       _nyugyokuScores{28, 27},
       _color(COLOR_BLACK),
       _turn(0),
       _drawTurn(0x7fff),
-      _hash(0),
+      _boardHash(0),
+      _handHash(0),
       _lastMove(MOVE_INVALID) {
 }
 
@@ -252,10 +258,13 @@ void Board::initialize(const std::string& sfen) {
   std::fill(std::begin(_cells), std::end(_cells), 0);
   std::fill(_hands[0], _hands[0] + (sizeof(_hands[0]) / sizeof(_hands[0][0])), 0);
   std::fill(_hands[1], _hands[1] + (sizeof(_hands[1]) / sizeof(_hands[1][0])), 0);
+  _handBits[0] = 0;
+  _handBits[1] = 0;
 
   _kingPositions[0] = POSITION_INVALID;
   _kingPositions[1] = POSITION_INVALID;
-  _hash = 0;
+  _boardHash = 0;
+  _handHash = 0;
 
   _colorBitBoards[0].clearAll();
   _colorBitBoards[1].clearAll();
@@ -805,7 +814,7 @@ void Board::_putPiece(const Position& pos, uint8_t piece) {
   int8_t pos_idx = pos.getIndex();
 
   // Update the hash value
-  _hash ^= BOARD_HASH_VALUES[pos_idx][piece];
+  _boardHash ^= BOARD_HASH_VALUES[pos_idx][piece];
 
   // Place the piece at the specified position
   _cells[pos_idx] = piece;
@@ -847,7 +856,7 @@ void Board::_removePiece(const Position& pos) {
   uint8_t piece = _cells[pos_idx];
 
   // Update the hash value
-  _hash ^= BOARD_HASH_VALUES[pos_idx][piece];
+  _boardHash ^= BOARD_HASH_VALUES[pos_idx][piece];
 
   // Remove the piece from the specified position
   _cells[pos_idx] = PIECE_EMPTY;
@@ -894,13 +903,20 @@ void Board::_addHand(int8_t color, uint8_t piece, int32_t num) {
   int32_t piece_idx = piece - PIECE_HAND_BEGIN;
 
   // Update the hash value
-  _hash ^= HAND_HASH_VALUES[color_idx][piece_idx][_hands[color_idx][piece_idx]];
+  _handHash ^= HAND_HASH_VALUES[color_idx][piece_idx][_hands[color_idx][piece_idx]];
+
+  // Update the bit representation of hand pieces
+  int8_t offset = HAND_BIT_OFFSETS[piece_idx] + _hands[color_idx][piece_idx];
+
+  for (int8_t i = 0; i < num; i++) {
+    _handBits[color_idx] |= (1ULL << (offset + i));
+  }
 
   // Add the specified piece to the hand
   _hands[color_idx][piece_idx] += num;
 
   // Update the hash value
-  _hash ^= HAND_HASH_VALUES[color_idx][piece_idx][_hands[color_idx][piece_idx]];
+  _handHash ^= HAND_HASH_VALUES[color_idx][piece_idx][_hands[color_idx][piece_idx]];
 }
 
 /**
@@ -923,13 +939,18 @@ void Board::_removeHand(int8_t color, uint8_t piece) {
   int32_t piece_idx = piece - PIECE_HAND_BEGIN;
 
   // Update the hash value
-  _hash ^= HAND_HASH_VALUES[color_idx][piece_idx][_hands[color_idx][piece_idx]];
+  _handHash ^= HAND_HASH_VALUES[color_idx][piece_idx][_hands[color_idx][piece_idx]];
+
+  // Update the bit representation of hand pieces
+  int8_t offset = HAND_BIT_OFFSETS[piece_idx] + _hands[color_idx][piece_idx];
+
+  _handBits[color_idx] &= ~(1ULL << (offset - 1));
 
   // Remove the specified piece from the hand
   _hands[color_idx][piece_idx] -= 1;
 
   // Update the hash value
-  _hash ^= HAND_HASH_VALUES[color_idx][piece_idx][_hands[color_idx][piece_idx]];
+  _handHash ^= HAND_HASH_VALUES[color_idx][piece_idx][_hands[color_idx][piece_idx]];
 }
 
 /**
@@ -2342,10 +2363,10 @@ bool Board::_isDropPawnCheckmateMove(int8_t dstIndex) const {
  * @param color The color of the player to move (COLOR_BLACK or COLOR_WHITE)
  */
 void Board::_getBoardInputs(int32_t* inputs, int8_t color) const {
-  const static int32_t black_offset = 1;
-  const static int32_t white_offset = black_offset + 14 + 14 + 6;
-  const static int32_t other_offset = white_offset + 14 + 14 + 6;
-  const static int32_t board_square = BOARD_SIZE * BOARD_SIZE;
+  constexpr int32_t black_offset = 1;
+  constexpr int32_t white_offset = black_offset + 14 + 14 + 6;
+  constexpr int32_t other_offset = white_offset + 14 + 14 + 6;
+  constexpr int32_t board_square = BOARD_SIZE * BOARD_SIZE;
 
   for (int32_t src = 0; src < board_square; src++) {
     // Calculate the index where the value will be set
@@ -2421,8 +2442,8 @@ void Board::_getBoardInputs(int32_t* inputs, int8_t color) const {
     }
 
     // Set the row and column numbers
-    const int32_t row_offset = other_offset + 1;
-    const int32_t col_offset = row_offset + BOARD_SIZE;
+    constexpr int32_t row_offset = other_offset + 1;
+    constexpr int32_t col_offset = row_offset + BOARD_SIZE;
     int32_t x = src / BOARD_SIZE;
     int32_t y = src % BOARD_SIZE;
 
@@ -2442,30 +2463,32 @@ void Board::_getBoardInputs(int32_t* inputs, int8_t color) const {
  * @param color The color of the player to move (COLOR_BLACK or COLOR_WHITE)
  */
 void Board::_getInfoInputs(int32_t* inputs, int8_t color) const {
-  const static int32_t info_offset = MODEL_FEATURES * BOARD_SIZE * BOARD_SIZE;
-  const static int32_t hand_offsets[] = {0, 18, 22, 26, 30, 32, 34};
-  const static int32_t color_offset = 38;
+  constexpr int32_t info_offset = MODEL_FEATURES * BOARD_SIZE * BOARD_SIZE;
+  constexpr int32_t hand_offsets[] = {0, 18, 22, 26, 30, 32, 34};
+  constexpr int32_t hand_length = 38;
 
   // Set the information for hand pieces
-  int32_t black_color = (color == COLOR_BLACK) ? COLOR_BLACK : COLOR_WHITE;
-  int32_t white_color = (color == COLOR_BLACK) ? COLOR_WHITE : COLOR_BLACK;
+  // Use the bit representation of hand pieces as is
+  for (int side = 0; side < 2; side++) {
+    int32_t offset = info_offset + (side * hand_length);
+    int32_t input_index = offset / 32;
+    int32_t bit_index = offset % 32;
 
-  for (int32_t hp = PIECE_HAND_BEGIN; hp < PIECE_HAND_END; ++hp) {
-    int32_t black_num = getHandPieceNum(black_color, hp);
-    int32_t white_num = getHandPieceNum(white_color, hp);
+    int8_t color_idx = (color == COLOR_BLACK) ? side : (1 - side);
+    uint64_t hand_bits = _handBits[color_idx];
+    int8_t bit_shift = 0;
 
-    for (int32_t i = 0; i < black_num; i++) {
-      setInputBit(inputs, info_offset + hand_offsets[hp - PIECE_HAND_BEGIN] + i);
-    }
-
-    for (int32_t i = 0; i < white_num; i++) {
-      setInputBit(inputs, info_offset + color_offset + hand_offsets[hp - PIECE_HAND_BEGIN] + i);
+    while (bit_shift < hand_length) {
+      inputs[input_index] |= (int32_t)((hand_bits >> bit_shift) << bit_index) & 0xffffffff;
+      bit_shift += 32 - bit_index;
+      input_index += 1;
+      bit_index = 0;
     }
   }
 
   // Set the information for check
   if (isCheck(_color)) {
-    setInputBit(inputs, info_offset + color_offset * 2);
+    setInputBit(inputs, info_offset + hand_length * 2);
   }
 
   // Set the points required for nyugyoku declaration
