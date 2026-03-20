@@ -319,7 +319,7 @@ float Node::getValueLCB() {
     return 0.0f;
   } else {
     float value = _value / _count;
-    float lower = 1.96f * 0.5f / std::sqrtf((float)(_visits + 1));
+    float lower = 1.96f * 0.5f / std::sqrt((float)(_visits + 1));
     return value - (lower * OPPOSITE_COLOR(_board.getColor()));
   }
 }
@@ -335,7 +335,7 @@ float Node::getPriorityByUCB(int32_t totalVisits) {
     return -99.0f;
   } else {
     float value = (_value / _count) * OPPOSITE_COLOR(_board.getColor());
-    float ucb = std::sqrtf(std::logf((float)totalVisits) / (_visits + 1));
+    float ucb = std::sqrt(std::log((float)totalVisits) / (_visits + 1));
     return value + _ucbConstant * ucb;
   }
 }
@@ -350,10 +350,10 @@ float Node::getPriorityByPUCB(int32_t totalVisits) {
   if (_count == 0) {
     return -99.0f;
   } else {
-    float c_pucb_inc = std::logf((1 + totalVisits + _pucbConstantBase) / _pucbConstantBase);
+    float c_pucb_inc = std::log((1 + totalVisits + _pucbConstantBase) / _pucbConstantBase);
     float c_pucb = _pucbConstantInit * (1.0f + c_pucb_inc);
     float value = (_value / _count) * OPPOSITE_COLOR(_board.getColor());
-    float ucb = _policy * std::sqrtf((float)totalVisits) / (1 + _visits);
+    float ucb = _policy * std::sqrt((float)totalVisits) / (1 + _visits);
     return value + c_pucb * ucb;
   }
 }

@@ -216,7 +216,7 @@ PnSearchNode* PnSearchNode::getNextNode() {
         continue;
       }
 
-      float priority = 1.0f / (child->_pn + std::logf((float)child->_size));
+      float priority = 1.0f / (child->_pn + std::log((float)child->_size));
 
       if (priority > max_priority) {
         max_priority = priority;
@@ -235,7 +235,7 @@ PnSearchNode* PnSearchNode::getNextNode() {
         continue;
       }
 
-      float priority = 1.0f / (child->_dn + std::logf((float)child->_size));
+      float priority = 1.0f / (child->_dn + std::log((float)child->_size));
 
       if (priority > max_priority) {
         max_priority = priority;
