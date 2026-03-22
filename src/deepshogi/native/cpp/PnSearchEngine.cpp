@@ -60,6 +60,7 @@ std::vector<Move> PnSearchEngine::getCheckmateMoves(const Board* board, int32_t 
             return next_node->isLesserThan(parent);
           })) {
         node->replaceChildNode(next_node, const_cast<PnSearchNode*>(&END_NODE));
+        next_node = const_cast<PnSearchNode*>(&END_NODE);
       }
 
       // Move to next node

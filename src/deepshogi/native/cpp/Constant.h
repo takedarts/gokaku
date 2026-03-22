@@ -43,7 +43,7 @@ extern const int DIRECTION_INDICES[81][81];
 
 // Constants for calculating board hash values
 // Random 64-bit integers for each combination of turn, position, and piece type
-extern const uint64_t BOARD_HASH_VALUES[81][30];
+extern const uint64_t BOARD_HASH_VALUES[81][31];
 
 // Constants for calculating hand hash values
 // Random 64-bit integers for each combination of turn, piece type, and piece count
