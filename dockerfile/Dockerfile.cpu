@@ -1,9 +1,9 @@
 # syntax=docker/dockerfile:1
 
 ############################
-# 1. Build stage
+# 1. Base stage
 ############################
-FROM ubuntu:24.04 AS builder
+FROM ubuntu:24.04 AS base
 
 LABEL maintainer="Atsushi TAKEDA @takedarts"
 
@@ -24,14 +24,20 @@ RUN pip3 install --no-cache-dir --break-system-packages \
     && pip3 install --no-cache-dir --break-system-packages \
         torch --index-url https://download.pytorch.org/whl/cpu
 
+############################
+# 2. Build stage
+############################
+FROM base AS builder
+
 # Clone the repository and build the project
-RUN git clone --depth=1 https://github.com/takedarts/gokaku . \
+ARG BRANCH=main
+RUN git clone --branch ${BRANCH} --depth=1 https://github.com/takedarts/gokaku . \
     && python3 src/build.py \
     && rm -rf src/deepshogi/native/build
 
-# ############################
-# # 2. Runtime stage
-# ############################
+############################
+# 3. Runtime stage
+############################
 FROM ubuntu:24.04 AS runtime
 
 WORKDIR /opt/gokaku

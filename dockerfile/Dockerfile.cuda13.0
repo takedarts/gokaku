@@ -1,9 +1,9 @@
 # syntax=docker/dockerfile:1
 
 ############################
-# 1. Build stage
+# 1. Base stage
 ############################
-FROM pytorch/pytorch:2.10.0-cuda13.0-cudnn9-runtime AS builder
+FROM pytorch/pytorch:2.10.0-cuda13.0-cudnn9-runtime AS base
 
 LABEL maintainer="Atsushi TAKEDA @takedarts"
 
@@ -29,13 +29,19 @@ RUN wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
+############################
+# 2. Build stage
+############################
+FROM base AS builder
+
 # Clone the repository and build the project
-RUN git clone --depth=1 https://github.com/takedarts/gokaku . \
+ARG BRANCH=main
+RUN git clone --branch ${BRANCH} --depth=1 https://github.com/takedarts/gokaku . \
     && python3 src/build.py \
     && rm -rf src/deepshogi/native/build
 
 ############################
-# 2. Runtime stage
+# 3. Runtime stage
 ############################
 FROM pytorch/pytorch:2.10.0-cuda13.0-cudnn9-runtime AS runtime
 
