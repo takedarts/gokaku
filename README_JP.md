@@ -14,6 +14,10 @@ Gokakuは以下のいずれかの方法で実行できます。
 - [ソースファイルからの実行](#ソースファイルからの実行)
 - [Dockerを使用した実行](#dockerを使用した実行)
 
+バイナリファイルは提供していないため、ソースファイルをコンパイルして実行するか、Dockerイメージを使用して実行してください。
+Dockerイメージを使用する方が簡単に実行できるため、特に理由がない限りはDockerイメージを使用することをおすすめします。
+Ubuntu Linux（AMD64）, Windows 11（AMD64）, MacOS 14.4（ARM64）で実行できることを確認しています。
+
 ## ソースファイルからの実行
 ### ビルド方法
 このプログラムの大部分はCythonとC++によって記述されているため、プログラムを動作させるためにはプログラムコードをコンパイルする必要があります。
@@ -92,20 +96,20 @@ python src/run.py --help
 
 ## Dockerを使用した実行
 Gokakuを実行できるDockerイメージが用意されており、これを使用することで簡単にGokakuを実行できます。
-CUDAを使用できる環境で以下のコマンドを実行することで、GokakuのDockerイメージを取得して実行できます（モデルファイルは[こちら](https://github.com/takedarts/gokaku/releases/tag/v2.2)からダウンロードできます）。
+
+最初に実行する際にはDockerイメージをダウンロードする必要があります。
+CUDAの使用することを想定したDockerイメージ `takedarts/gokaku:v2.2-cuda12.6` は、イメージサイズが約4GBとなっているため、ダウンロードに時間がかかる場合があります。
+以下のコマンドを実行して、あらかじめDockerイメージをダウンロードしておくことをおすすめします。
+```
+docker pull takedarts/gokaku:v2.2-cuda12.6
+```
+
+CUDAを使用できる環境で以下のコマンドを実行することで、GokakuのDockerイメージを実行できます（モデルファイルは[こちら](https://github.com/takedarts/gokaku/releases/tag/v2.2)からダウンロードできます）。
 ```
 docker run -i --rm --gpus all -v .:/workspace -q takedarts/gokaku:v2.2-cuda12.6 /opt/run.sh <model_file>
 ```
 オプション`--gpus`で使用するGPUを指定し、`-v .:/workspace`でカレントディレクトリをコンテナ内の`/workspace`にマウントします。
 モデルファイルをカレントディレクトリ以下に置き、`<model_file>`にそのファイルパスを指定してください。
-
-Dockerのイメージは、CUDAやPyTorchの実行環境がインストールされているため、約4GBのサイズとなっています。
-最初に実行する際にはDockerイメージのダウンロードが必要となるため、インターネット接続が必要となり、ダウンロードには時間がかかる場合があります。
-
-もし実行前にDockerイメージをダウンロードしておきたい場合は、以下のコマンドを実行してください。
-```
-docker pull takedarts/gokaku:v2.2-cuda12.6
-```
 
 実行コマンドに続けてオプションを指定することもできます。
 実行コマンドに`--help`を指定すると、指定可能なオプションの一覧が表示されます。
@@ -113,10 +117,15 @@ docker pull takedarts/gokaku:v2.2-cuda12.6
 docker run -i --rm --gpus all -v .:/workspace -q takedarts/gokaku:v2.2-cuda12.6 /opt/run.sh --help
 ```
 
-CPUでの実行を想定したDockerイメージも用意されています（イメージサイズはCUDA版よりも小さくなっています）。
+CPU（AMD64）での実行を想定したDockerイメージ `takedarts/gokaku:v2.2-cpu` も用意されています（イメージサイズはCUDA版よりも小さくなっています）。
 CPUで計算を実行する場合は以下のコマンドを実行してください。
 ```
 docker run -i --rm -v .:/workspace -q takedarts/gokaku:v2.2-cpu /opt/run.sh <model_file>
+```
+
+ARM64アーキテクチャのCPUで実行する場合は `takedarts/gokaku:v2.2-arm` のDockerイメージを使用してください。
+```
+docker run -i --rm -v .:/workspace -q takedarts/gokaku:v2.2-arm /opt/run.sh <model_file>
 ```
 
 ## 実行オプション

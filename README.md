@@ -15,6 +15,10 @@ Gokaku can be run using one of the following methods:
 - [Running from Source Files](#running-from-source-files)
 - [Running with Docker](#running-with-docker)
 
+Since no binary files are provided, please either compile and run the source code yourself or run it using the Docker image.
+Using the Docker image is the easier option, so we recommend it unless you have a specific reason not to do so.
+I have confirmed that it runs on Ubuntu Linux (AMD64), Windows 11 (AMD64), and macOS 14.4 (ARM64).
+
 ## Running from Source Files
 ### Build Instructions
 Since most parts of this program are written in Cython and C++, the program code must be compiled before it can be run.
@@ -92,21 +96,22 @@ python src/run.py --help
 ```
 
 ## Running with Docker
-A Docker image is available for running Gokaku easily.
-You can pull and run the Gokaku Docker image by executing the following command in an environment where CUDA is available.  (You can download the model file from [here](https://github.com/takedarts/gokaku/releases/tag/v2.2)):
+A Docker image for running Gokaku is available, which makes it easy to use Gokaku.
+
+When running it for the first time, you need to download the Docker image.
+The Docker image intended for use with CUDA, `takedarts/gokaku:v2.2-cuda12.6`, is about 4 GB in size, so the download may take some time.
+I recommend downloading the Docker image in advance by running the following command:
+
+```
+docker pull takedarts/gokaku:v2.2-cuda12.6
+```
+
+You can run the Gokaku Docker image by executing the following command in an environment where CUDA is available.  (You can download the model file from [here](https://github.com/takedarts/gokaku/releases/tag/v2.2)):
 ```
 docker run -i --rm --gpus all -v .:/workspace -q takedarts/gokaku:v2.2-cuda12.6 /opt/run.sh <model_file>
 ```
 Use the `--gpus` option to specify the GPUs to use, and mount the current directory to the container's `/workspace` using `-v .:/workspace`.
 Place the model file in the current directory and specify its path as `<model_file>`.
-
-The Docker image is about 4 GB in size because it includes the CUDA and PyTorch runtime environments.
-When running it for the first time, an internet connection is required to download the image, and the download may take some time.
-
-If you want to download the Docker image before running it, execute the following command.
-```
-docker pull takedarts/gokaku:v2.2-cuda12.6
-```
 
 You can also specify options after the execution command.
 If you add `--help` to the execution command, a list of available options will be displayed.
@@ -114,10 +119,15 @@ If you add `--help` to the execution command, a list of available options will b
 docker run -i --rm --gpus all -v .:/workspace -q takedarts/gokaku:v2.2-cuda12.6 /opt/run.sh --help
 ```
 
-A Docker image intended for CPU execution is also available (its image size is smaller than that of the CUDA version).
+A Docker image intended for CPU execution on AMD64, `takedarts/gokaku:v2.2-cpu`, is also available (its image size is smaller than the CUDA version).
 If you want to run computations on the CPU, execute the following command:
 ```
 docker run -i --rm -v .:/workspace -q takedarts/gokaku:v2.2-cpu /opt/run.sh <model_file>
+```
+
+If you want to run on an ARM64 CPU architecture, use the Docker image `takedarts/gokaku:v2.2-arm`:
+```
+docker run -i --rm -v .:/workspace -q takedarts/gokaku:v2.2-arm /opt/run.sh <model_file>
 ```
 
 ## Execution Options
