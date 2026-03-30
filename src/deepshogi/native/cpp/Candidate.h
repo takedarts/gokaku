@@ -20,11 +20,12 @@ class Candidate {
    * @param playouts Number of playouts
    * @param policy Predicted move probability
    * @param value Predicted win rate
+   * @param minimax Minimax value
    * @param variations Predicted sequence
    */
   Candidate(
       Move move, int32_t color, int32_t visits, int32_t playouts,
-      float policy, float value, std::vector<Move> variations);
+      float policy, float value, float minimax, std::vector<Move> variations);
 
   /**
    * Create candidate move data.
@@ -34,10 +35,11 @@ class Candidate {
    * @param playouts Number of playouts
    * @param policy Predicted move probability
    * @param value Predicted win rate
+   * @param minimax Minimax value
    */
   Candidate(
       Move move, int32_t color, int32_t visits, int32_t playouts,
-      float policy, float value);
+      float policy, float value, float minimax);
 
   /**
    * Destroy the instance.
@@ -81,10 +83,33 @@ class Candidate {
   float getValue() const;
 
   /**
+   * Get the minimax value.
+   * @return Minimax value
+   */
+  float getMinimax() const;
+
+  /**
    * Get the predicted sequence.
    * @return Predicted sequence
    */
   std::vector<Move> getVariations() const;
+
+  /**
+   * Return the string representation of the candidate move.
+   * @return String representation of the candidate move.
+   */
+  std::string toString() const;
+
+  /**
+   * Write the candidate move information to the output stream.
+   * @param os Output stream.
+   * @param candidate Candidate move object.
+   * @return Output stream.
+   */
+  friend std::ostream& operator<<(std::ostream& os, const Candidate& candidate) {
+    os << candidate.toString();
+    return os;
+  }
 
  private:
   /**
@@ -116,6 +141,11 @@ class Candidate {
    * Predicted win rate.
    */
   float _value;
+
+  /**
+   * Minimax value.
+   */
+  float _minimax;
 
   /**
    * Predicted sequence.

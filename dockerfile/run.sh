@@ -1,7 +1,6 @@
 #!/bin/bash
 set -e
 ulimit -n 10240
-ulimit -c unlimited
+ulimit -c 0
 
-. /opt/venv/bin/activate
-python /opt/gokaku/src/run.py $@
+python3 /opt/gokaku/src/run.py "$@"

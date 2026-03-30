@@ -18,11 +18,11 @@ class Processor {
    * @param batchSize Maximum batch size
    * @param fp16 True to compute with 16-bit precision
    * @param deterministic True for reproducible computation results
-   * @param threadsParGpu Number of threads per GPU
+   * @param threadsPerGpu Number of threads per GPU
    */
   Processor(
       std::string model, std::vector<int32_t> gpus, int32_t batchSize,
-      bool fp16, bool deterministic, int32_t threadsParGpu);
+      bool fp16, bool deterministic, int32_t threadsPerGpu);
 
   /**
    * Execute inference.
@@ -30,7 +30,7 @@ class Processor {
    * @param outputs Output data
    * @param size Number of input/output data
    */
-  void execute(float* inputs, float* outputs, int32_t size);
+  void execute(int32_t* inputs, float* outputs, int32_t size);
 
  private:
   /**

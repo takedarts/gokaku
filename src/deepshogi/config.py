@@ -4,7 +4,7 @@
 # Program name
 NAME = 'Gokaku'
 # Version number
-VERSION = '2.1'
+VERSION = '2.2'
 # Author name
 AUTHOR = 'Atsushi Takeda'
 
@@ -164,8 +164,18 @@ MODEL_VALUES = 8
 
 # Size of data input to the model
 MODEL_INPUT_SIZE = MODEL_FEATURES * BOARD_SIZE * BOARD_SIZE + MODEL_INFOS
+# Size of data input to the model when embedded as int32
+MODEL_INPUT_PACK_SIZE = (MODEL_INPUT_SIZE + 31) // 32 + 3
 # Size of data output by the model
 MODEL_OUTPUT_SIZE = MODEL_PREDICTIONS * BOARD_SIZE * BOARD_SIZE + MODEL_VALUES
+
+################################################################
+# Search algorithm settings
+################################################################
+# Search algorithm: UCB
+SEARCH_UCB = 0
+# Search algorithm: PUCB
+SEARCH_PUCB = 1
 
 ################################################################
 # Default values
@@ -173,15 +183,25 @@ MODEL_OUTPUT_SIZE = MODEL_PREDICTIONS * BOARD_SIZE * BOARD_SIZE + MODEL_VALUES
 # Default initial board
 DEFAULT_INITIAL_SFEN = 'lnsgkgsnl/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL b - 1'
 # Default depth for checkmate search
-DEFAULT_CHECK_SEARCH_DEPTH = 31
+DEFAULT_CHECK_SEARCH_DEPTH = 21
 # Default number of nodes for checkmate search
-DEFAULT_CHECK_SEARCH_NODE = 10_000
+DEFAULT_CHECK_SEARCH_NODE = 20_000
+# Default node depth for checkmate search
+DEFAULT_CHECK_NODE_DEPTH = 2
 # Default number of allowed repeats of the same position
 DEFAULT_ALLOWED_REPEATS = 3
 # Default points required for nyugyoku declaration
 DEFAULT_NYUGYOKU_SCORES = (28, 27)
 # Default number of moves for a draw
-DEFAULT_DRAW_STEPS = 512
+DEFAULT_DRAW_TURN = 512
+# Default maximum number of visits for search
+DEFAULT_MAX_VISITS = 1_000_000
+# Constant multiplied to UCB upper confidence bound
+DEFAULT_UCB_CONSTANT = 1.4
+# Initial value applied to PUCB upper confidence bound
+DEFAULT_PUCB_CONSTANT_INIT = 1.2
+# Base value applied to PUCB upper confidence bound
+DEFAULT_PUCB_CONSTANT_BASE = 18200.0
 
 ################################################################
 # Logging settings

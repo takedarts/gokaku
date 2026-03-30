@@ -24,8 +24,7 @@ class Executor {
    * @param fp16 True to compute with 16-bit precision
    * @param deterministic True to make computation results reproducible
    */
-  Executor(
-      std::string model, int32_t gpu, int32_t batchSize, bool fp16, bool deterministic);
+  Executor(std::string model, int32_t gpu, int32_t batchSize, bool fp16, bool deterministic);
 
   /**
    * Destructor.
@@ -38,7 +37,7 @@ class Executor {
    * @param outputs Output data
    * @param size Number of input/output data
    */
-  void execute(float* inputs, float* outputs, int32_t size);
+  void execute(int32_t* inputs, float* outputs, int32_t size);
 
   /**
    * Return the number of pending computation tasks.

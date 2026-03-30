@@ -1,34 +1,44 @@
 #pragma once
 
-#include "cshogi/cshogi.h"
+#include <cstdint>
+#include <ostream>
+#include <string>
+
+#include "Position.h"
 
 namespace deepshogi {
 
 /**
  * Class to manage move information.
+ *
+ * A move is represented as a 16-bit integer with the following bit allocation:
+ * - Bits 0-6: Destination coordinate number (0-80)
+ * - Bits 7-13: Source coordinate number (0-80)
+ * - Bit 14: Promotion flag (0: no promotion, 1: promotion)
+ * - Bit 15: Always 0 (1 for invalid moves)
+ *
+ * For invalid moves, a negative value (typically -1) is used.
  */
 class Move {
  public:
   /**
-   * Create a move object.
+   * Creates an invalid move object.
    */
   Move();
 
   /**
-   * Create a move object.
-   * @param srcX Source X coordinate
-   * @param srcY Source Y coordinate
-   * @param dstX Destination X coordinate
-   * @param dstY Destination Y coordinate
-   * @param promote True if promotion
+   * Creates an object by specifying the source and destination coordinate numbers and promotion flag.
+   * @param src Source coordinate number
+   * @param dst Destination coordinate number
+   * @param promote Promotion flag
    */
-  Move(int32_t srcX, int32_t srcY, int32_t dstX, int32_t dstY, bool promote);
+  Move(const Position& src, const Position& dst, bool promote);
 
   /**
-   * Create a move object from cshogi's move representation.
-   * @param cshogiMove cshogi move representation
+   * Creates an object by specifying a move number.
+   * @param move Move number
    */
-  Move(int32_t cshogiMove);
+  Move(int16_t move);
 
   /**
    * Copy constructor.
@@ -36,96 +46,96 @@ class Move {
   Move(const Move& move) = default;
 
   /**
-   * Destroy the object.
+   * Destructs the object.
    */
   virtual ~Move() = default;
 
   /**
-   * Get the source X coordinate.
-   * @return X coordinate
+   * Returns the string representation of the move.
+   * @return String representation of the move.
    */
-  int32_t getSrcX() const;
+  std::string toString() const;
 
   /**
-   * Get the source Y coordinate.
-   * @return Y coordinate
+   * Gets the source coordinate.
+   * @return Source coordinate
    */
-  int32_t getSrcY() const;
+  inline Position getSrc() const {
+    return Position((_move >> 7) & 0x7F);
+  }
 
   /**
-   * Get the destination X coordinate.
-   * @return X coordinate
+   * Gets the destination coordinate.
+   * @return Destination coordinate
    */
-  int32_t getDstX() const;
+  inline Position getDst() const {
+    return Position((_move >> 0) & 0x7F);
+  }
 
   /**
-   * Get the destination Y coordinate.
-   * @return Y coordinate
+   * Returns true if the move includes promotion.
+   * @return true if the move includes promotion
    */
-  int32_t getDstY() const;
+  inline bool isPromote() const {
+    return (_move >> 14) & 0x1;
+  }
 
   /**
-   * Return true if promotion.
-   * @return True if promotion
+   * Returns the move number.
+   * @return Move number
    */
-  bool isPromote() const;
+  inline int16_t getValue() const {
+    return _move;
+  }
 
   /**
-   * Return true if this is a pass move.
-   * @return True if this is a pass move
+   * Returns true if the move is valid.
+   * @return true if the move is valid
    */
-  bool isPass() const;
+  inline bool isValid() const {
+    return _move >= 0;
+  }
 
   /**
-   * Return the value representing this move.
-   * This value is the same as cshogi's move representation `move16`.
-   * @return Value representing the move
+   * Returns true if the moves are the same.
    */
-  int32_t getValue() const;
+  inline bool operator==(const Move& move) const {
+    return _move == move._move;
+  }
 
   /**
-   * Return true if the moves are the same.
+   * Returns true if the moves are different.
    */
-  bool operator==(const Move& move) const;
+  inline bool operator!=(const Move& move) const {
+    return _move != move._move;
+  }
 
   /**
-   * Return true if the moves are different.
+   * Returns true if this move is less than the specified move.
    */
-  bool operator!=(const Move& move) const;
+  inline bool operator<(const Move& move) const {
+    return _move < move._move;
+  }
 
   /**
-   * Return true if this move is less than the specified move.
+   * Writes the string representation of the move object to the output stream.
+   * @param os Output stream.
+   * @param move Move object.
+   * @return Output stream.
    */
-  bool operator<(const Move& move) const;
+  friend std::ostream& operator<<(std::ostream& os, const Move& move) {
+    os << move.toString();
+    return os;
+  }
 
  private:
   /**
-   * Source X coordinate.
+   * The move number representing this move.
    */
-  int32_t _srcX;
-
-  /**
-   * Source Y coordinate.
-   */
-  int32_t _srcY;
-
-  /**
-   * Destination X coordinate.
-   */
-  int32_t _dstX;
-
-  /**
-   * Destination Y coordinate.
-   */
-  int32_t _dstY;
-
-  /**
-   * True if promotion.
-   */
-  bool _promote;
+  int16_t _move;
 };
 
-// Pass move object.
-const Move MOVE_PASS = Move(-1, -1, -1, -1, false);
+// Constant representing an invalid move
+const Move MOVE_INVALID(-1);
 
 }  // namespace deepshogi

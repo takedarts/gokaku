@@ -6,11 +6,18 @@
 
 #include <cstdint>
 #include <string>
+#include <vector>
 
 namespace deepshogi {
 
 class Model {
  public:
+  /**
+   * Get the list of available GPU numbers.
+   * @return List of GPU numbers
+   */
+  static std::vector<std::int32_t> getAvailableGPUs();
+
   /**
    * Create a model object.
    * If -1 is specified for the GPU number, create an object that computes using the CPU.
@@ -32,7 +39,7 @@ class Model {
    * @param outputs Output data
    * @param size Number of evaluation data
    */
-  virtual void forward(float* inputs, float* outputs, uint32_t size);
+  virtual void forward(int32_t* inputs, float* outputs, int32_t size);
 
   /**
    * Return True if using GPU.
@@ -55,6 +62,11 @@ class Model {
    * Data type used for computation.
    */
   at::ScalarType _dtype;
+
+  /**
+   * Tensor for bit shifting.
+   */
+  torch::Tensor _bitShift;
 };
 
 }  // namespace deepshogi

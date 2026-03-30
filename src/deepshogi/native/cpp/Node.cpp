@@ -11,9 +11,6 @@ namespace deepshogi {
 static std::random_device random_seed_gen;
 static std::default_random_engine random_engine(random_seed_gen());
 
-// Move value when no checkmate move is found
-static const Move CHECK_MOVE_NOT_FOUND = Move(-1, -1, -1, -1, false);
-
 /**
  * Create a search node object.
  * @param manager Node manager object
@@ -26,23 +23,25 @@ Node::Node(NodeManager* manager, const NodeParameter& parameter)
       _board(
           parameter.getNyugyokuScoreBlack(),
           parameter.getNyugyokuScoreWhite(),
-          parameter.getDrawSteps()),
-      _move(MOVE_PASS),
+          parameter.getDrawTurn()),
+      _move(MOVE_INVALID),
       _policy(0.0f),
       _evaluator(parameter.getProcessor()),
-      _checkSearchDepth(parameter.getCheckSearchDepth()),
-      _checkSearchNode(parameter.getCheckSearchNode()),
+      _ucbConstant(parameter.getUcbConstant()),
+      _pucbConstantInit(parameter.getPucbConstantInit()),
+      _pucbConstantBase(parameter.getPucbConstantBase()),
       _children(),
       _childPolicies(),
       _waitingQueue(),
       _waitingSet(),
-      _checkMove(CHECK_MOVE_NOT_FOUND),
-      _checkMoveShallowSearched(false),
-      _checkMoveDeepSearched(false),
+      _checkmateMoves(),
+      _checkmateMoveShallowSearched(false),
+      _checkmateMoveDeepSearched(false),
       _visits(0),
       _playouts(0),
       _value(0.0f),
-      _count(0) {
+      _count(0),
+      _minimax(0.0f) {
 }
 
 /**
@@ -52,65 +51,62 @@ Node::Node(NodeManager* manager, const NodeParameter& parameter)
 void Node::initialize(const std::string sfen) {
   std::unique_lock<std::shared_mutex> lock(_evalMutex);
 
-  _board.initializeWithSfen(sfen);
-  _move = MOVE_PASS;
+  _board.initialize(sfen);
+  _move = MOVE_INVALID;
   _reset();
 }
 
 /**
  * Evaluate the search node and get the next node object to evaluate.
- * If the next node object does not exist, return nullptr.
+ * If the next node object to evaluate does not exist, return nullptr.
  * @param equally If true, equalize the number of searches
  * @param width Search width (if 0, adjust automatically)
- * @param useUcb1 If true, use UCB1; if false, use PUCB
- * @param searchCheckMove If true, search for checkmate moves
+ * @param algorithm Search algorithm
+ * @param pnSearchEngine Mate search engine object (nullptr if not searching for mate)
+ * @param checkSearchDepth Search depth for checkmate moves
  * @param temperature Temperature parameter for search
  * @param noise Strength of Gumbel noise for search
- * @return Next node object to evaluate
+ * @return Evaluation result
  */
 NodeResult Node::evaluate(
-    bool equally, int32_t width, bool useUcb1, bool searchCheckMove,
+    bool equally, int32_t width, int32_t algorithm,
+    PnSearchEngine* pnSearchEngine, int32_t checkSearchDepth,
     float temperature, float noise) {
   NodeResult result;
-  Board search_board;
 
   {
     std::unique_lock<std::shared_mutex> lock(_evalMutex);
 
     // Execute board evaluation for the node
-    _evaluateBoard(searchCheckMove);
+    _evaluateBoard();
 
     // Increase the number of visits
     _visits += 1;
 
     // Evaluate the state of this node
-    result = _evaluateNode(equally, width, useUcb1, temperature, noise);
+    result = _evaluateNode(equally, width, algorithm, temperature, noise);
 
     // If not searching for long checkmate sequences, return the evaluation result
-    if (!searchCheckMove || _checkMoveDeepSearched || _checkMove != CHECK_MOVE_NOT_FOUND) {
+    if (pnSearchEngine == nullptr ||
+        checkSearchDepth < 1 ||
+        _checkmateMoveDeepSearched ||
+        !_checkmateMoves.empty()) {
       return result;
     }
 
     // Mark that long checkmate search has been executed
-    _checkMoveDeepSearched = true;
-
-    // Duplicate the board for checkmate search
-    // Duplicate via SFEN for complete separation
-    search_board.initializeWithSfen(_board.getSfen());
+    _checkmateMoveDeepSearched = true;
   }
 
   // Asynchronously execute long checkmate search
-  Move move = search_board.searchCheckMove(_checkSearchDepth, _checkSearchNode);
+  int32_t remain_turn = _board.getDrawTurn() - _board.getTurn() + 1;
+  int32_t search_depth = std::min(checkSearchDepth, remain_turn);
+  std::vector<Move> checkmate_moves = pnSearchEngine->getCheckmateMoves(&_board, search_depth);
 
   // Save the result of the checkmate search
   {
     std::unique_lock<std::shared_mutex> lock(_evalMutex);
-
-    if (move != MOVE_PASS) {
-      _checkMove = move;
-    } else {
-      _checkMove = CHECK_MOVE_NOT_FOUND;
-    }
+    _checkmateMoves = checkmate_moves;
   }
 
   return result;
@@ -119,11 +115,13 @@ NodeResult Node::evaluate(
 /**
  * Update the evaluation value of the search node.
  * @param value Evaluation value
+ * @param minimax Minimax value
  */
-void Node::updateValue(float value) {
+void Node::updateValue(float value, float minimax) {
   std::unique_lock<std::shared_mutex> lock(_valueMutex);
   _count += 1;
   _value += value;
+  _minimax = minimax;
 }
 
 /**
@@ -144,12 +142,12 @@ Move Node::getPolicyMove() {
   {
     // Execute board evaluation for this node
     std::unique_lock<std::shared_mutex> lock(_evalMutex);
-    _evaluateBoard(false);
+    _evaluateBoard();
   }
 
   // If a checkmate move has been found, return that move
-  if (_checkMove != CHECK_MOVE_NOT_FOUND) {
-    return _checkMove;
+  if (!_checkmateMoves.empty()) {
+    return _checkmateMoves[0];
   }
 
   // Get the list of candidate moves
@@ -162,9 +160,9 @@ Move Node::getPolicyMove() {
     }
   }
 
-  // If there are no candidate moves, return pass
+  // If there are no candidate moves, return invalid move
   if (policies.empty()) {
-    return MOVE_PASS;
+    return MOVE_INVALID;
   }
 
   // Get the candidate move with the highest move probability
@@ -245,16 +243,13 @@ Node* Node::getChild(const Move& move) {
 }
 
 /**
- * Get the checkmate move of this node.
- * If no checkmate move is found, return MOVE_PASS.
- * @return Checkmate move
+ * Get the checkmate moves of this node.
+ * If no checkmate moves are found, return an empty array.
+ * @return Checkmate moves
  */
-Move Node::getCheckMove() const {
-  if (_checkMove == CHECK_MOVE_NOT_FOUND) {
-    return MOVE_PASS;
-  } else {
-    return _checkMove;
-  }
+std::vector<Move> Node::getCheckmateMoves() {
+  std::shared_lock<std::shared_mutex> lock(_evalMutex);
+  return _checkmateMoves;
 }
 
 /**
@@ -290,12 +285,27 @@ void Node::setPlayouts(int32_t playouts) {
  */
 float Node::getValue() {
   std::shared_lock<std::shared_mutex> lock(_valueMutex);
-  if (_checkMove != CHECK_MOVE_NOT_FOUND) {
+  if (!_checkmateMoves.empty()) {
     return _board.getColor();
   } else if (_count == 0) {
     return 0.0f;
   } else {
     return _value / _count;
+  }
+}
+
+/**
+ * Get the minimax evaluation value of this node.
+ * @return Minimax evaluation value
+ */
+float Node::getMinimax() {
+  std::shared_lock<std::shared_mutex> lock(_valueMutex);
+  if (!_checkmateMoves.empty()) {
+    return _board.getColor();
+  } else if (_count == 0) {
+    return 0.0f;
+  } else {
+    return _minimax;
   }
 }
 
@@ -309,8 +319,24 @@ float Node::getValueLCB() {
     return 0.0f;
   } else {
     float value = _value / _count;
-    float lower = 1.96 * 0.5 / std::sqrt(_visits + 1);
+    float lower = 1.96f * 0.5f / std::sqrt((float)(_visits + 1));
     return value - (lower * OPPOSITE_COLOR(_board.getColor()));
+  }
+}
+
+/**
+ * Get the priority of this node based on UCB.
+ * @param totalVisits Total number of searches
+ * @return Priority
+ */
+float Node::getPriorityByUCB(int32_t totalVisits) {
+  std::shared_lock<std::shared_mutex> lock(_valueMutex);
+  if (_count == 0) {
+    return -99.0f;
+  } else {
+    float value = (_value / _count) * OPPOSITE_COLOR(_board.getColor());
+    float ucb = std::sqrt(std::log((float)totalVisits) / (_visits + 1));
+    return value + _ucbConstant * ucb;
   }
 }
 
@@ -324,26 +350,11 @@ float Node::getPriorityByPUCB(int32_t totalVisits) {
   if (_count == 0) {
     return -99.0f;
   } else {
-    float c_puct = std::log((1 + totalVisits + 19652.0) / 19652.0) + 1.25;
+    float c_pucb_inc = std::log((1 + totalVisits + _pucbConstantBase) / _pucbConstantBase);
+    float c_pucb = _pucbConstantInit * (1.0f + c_pucb_inc);
     float value = (_value / _count) * OPPOSITE_COLOR(_board.getColor());
-    float upper = c_puct * _policy * std::sqrt(totalVisits) / (1 + _visits);
-    return value + 2 * upper;
-  }
-}
-
-/**
- * Get the priority of this node based on UCB1.
- * @param totalVisits Total number of searches
- * @return Priority
- */
-float Node::getPriorityByUCB1(int32_t totalVisits) {
-  std::shared_lock<std::shared_mutex> lock(_valueMutex);
-  if (_count == 0) {
-    return -99.0f;
-  } else {
-    float value = (_value / _count) * OPPOSITE_COLOR(_board.getColor());
-    float upper = 0.5 * std::sqrt(std::log(totalVisits) / (_visits + 1));
-    return value + upper;
+    float ucb = _policy * std::sqrt((float)totalVisits) / (1 + _visits);
+    return value + c_pucb * ucb;
   }
 }
 
@@ -385,37 +396,21 @@ void Node::copyBoardTo(Board* board) {
 }
 
 /**
- * Output the information of this node.
- * @param os Output destination
- */
-void Node::print(std::ostream& os) {
-  _board.print(os);
-  os << "visits:" << _visits << std::endl;
-  os << "value:" << getValue() << std::endl;
-}
-
-/**
  * Execute board evaluation for this node.
- * @param searchCheckMove If true, search for checkmate moves
  */
-void Node::_evaluateBoard(bool searchCheckMove) {
+void Node::_evaluateBoard() {
   // If a checkmate move has not been found and not yet searched, execute 5-move checkmate search
   // Use a duplicated board object because the board object is changed during search
-  if (!_checkMoveShallowSearched && _checkMove == CHECK_MOVE_NOT_FOUND) {
-    _checkMoveShallowSearched = true;
+  if (!_checkmateMoveShallowSearched && _checkmateMoves.empty()) {
+    int32_t remain_turn = _board.getDrawTurn() - _board.getTurn() + 1;
+    int32_t search_depth = std::min(5, remain_turn);
 
-    Board board = _board;
-    Move move = board.searchCheckMove(5, 0);
-
-    if (move != MOVE_PASS) {
-      _checkMove = move;
-    } else {
-      _checkMove = CHECK_MOVE_NOT_FOUND;
-    }
+    _checkmateMoveShallowSearched = true;
+    _checkmateMoves = _board.getCheckmateMoves(search_depth);
   }
 
   // If a checkmate move has been found, do nothing
-  if (_checkMove != CHECK_MOVE_NOT_FOUND) {
+  if (!_checkmateMoves.empty()) {
     return;
   }
 
@@ -436,21 +431,21 @@ void Node::_evaluateBoard(bool searchCheckMove) {
  * Evaluate the state of this node and return the evaluation result.
  * @param equally If true, equalize the number of searches
  * @param width Search width (if 0, adjust automatically)
- * @param useUcb1 If true, use UCB1; if false, use PUCB
+ * @param algorithm Search algorithm
  * @param temperature Temperature parameter for search
  * @param noise Strength of Gumbel noise for search
  * @return Evaluation result
  */
 NodeResult Node::_evaluateNode(
-    bool equally, int32_t width, bool useUcb1, float temperature, float noise) {
+    bool equally, int32_t width, int32_t algorithm, float temperature, float noise) {
   // If entering king declaration is possible,
   // return the evaluation result as a win for the side to move
-  if (_board.isNyugyoku()) {
+  if (_board.isNyugyoku(_board.getColor())) {
     return NodeResult(nullptr, _board.getColor(), 1);
   }
 
   // If a checkmate move has been found, return the evaluation result as a win for the side to move
-  if (_checkMove != CHECK_MOVE_NOT_FOUND) {
+  if (!_checkmateMoves.empty()) {
     return NodeResult(nullptr, _board.getColor(), 1);
   }
 
@@ -465,7 +460,7 @@ NodeResult Node::_evaluateNode(
   }
 
   // Get the candidate move to add to the evaluation from the queue
-  int32_t children_size = _children.size() + _waitingSet.size();
+  int32_t children_size = (int32_t)(_children.size() + _waitingSet.size());
 
   if (children_size < _childPolicies.size() && (width < 1 || children_size < width)) {
     int32_t max_index = 0;
@@ -473,8 +468,8 @@ NodeResult Node::_evaluateNode(
     float max_priority = 0.0f;
 
     // Calculate the temperature parameter
-    float win_chance = getValue() * _board.getColor() * 0.5 + 0.5;
-    float temperature_power = win_chance + (1.0 / temperature) * (1 - win_chance);
+    float win_chance = getValue() * _board.getColor() * 0.5f + 0.5f;
+    float temperature_power = win_chance + (1.0f / temperature) * (1 - win_chance);
 
     // Create the Gumbel noise generator object
     // If the number of child nodes is 4 or less, do not add noise
@@ -587,19 +582,19 @@ NodeResult Node::_evaluateNode(
 
     // Calculate the priority
     if (equally) {
-      float visits = child.first->getVisits();
+      float visits = (float)child.first->getVisits();
       float value = child.first->getValue() * getColor();
-      priority = 1.0 / (visits + 1 - value * 0.5);
-    } else if (useUcb1) {
-      priority = child.first->getPriorityByUCB1(_visits);
+      priority = 1.0f / (visits + 1 - value * 0.5f);
+    } else if (algorithm == SEARCH_UCB) {
+      priority = child.first->getPriorityByUCB(_visits);
     } else {
       priority = child.first->getPriorityByPUCB(_visits);
     }
 
     // If there is a node where deep checkmate search has not been executed,
     // prioritize searching that node
-    if (!child.first->_checkMoveDeepSearched &&
-        child.first->_checkMove == CHECK_MOVE_NOT_FOUND) {
+    if (!child.first->_checkmateMoveDeepSearched &&
+        child.first->_checkmateMoves.empty()) {
       priority += 100.0;
     }
 
@@ -621,13 +616,14 @@ void Node::_reset() {
   _childPolicies.clear();
   _waitingQueue = std::queue<Policy>();
   _waitingSet.clear();
-  _checkMove = CHECK_MOVE_NOT_FOUND;
-  _checkMoveShallowSearched = false;
-  _checkMoveDeepSearched = false;
+  _checkmateMoves.clear();
+  _checkmateMoveShallowSearched = false;
+  _checkmateMoveDeepSearched = false;
   _visits = 0;
   _playouts = 0;
   _value = 0.0f;
   _count = 0;
+  _minimax = 0.0f;
 }
 
 /**

@@ -3,14 +3,17 @@ import sys
 from threading import Thread
 from typing import Any, Callable, Dict, List, TextIO, Tuple
 
-from deepshogi.board import Board
-
+from .board import Board
 from .config import (AUTHOR, BOARD_SIZE, COLOR_BLACK, COLOR_WHITE,
-                     DEFAULT_INITIAL_SFEN, DEFAULT_NYUGYOKU_SCORES, NAME,
-                     PIECE_HAND_BISHOP, PIECE_HAND_GOLD, PIECE_HAND_KNIGHT,
-                     PIECE_HAND_LANCE, PIECE_HAND_PAWN, PIECE_HAND_ROOK,
-                     PIECE_HAND_SILVER, VERSION, get_color_name,
-                     get_opposite_color, get_shogi_score)
+                     DEFAULT_CHECK_NODE_DEPTH, DEFAULT_CHECK_SEARCH_DEPTH,
+                     DEFAULT_CHECK_SEARCH_NODE, DEFAULT_DRAW_TURN,
+                     DEFAULT_INITIAL_SFEN, DEFAULT_NYUGYOKU_SCORES,
+                     DEFAULT_PUCB_CONSTANT_BASE, DEFAULT_PUCB_CONSTANT_INIT,
+                     DEFAULT_UCB_CONSTANT, NAME, PIECE_HAND_BISHOP,
+                     PIECE_HAND_GOLD, PIECE_HAND_KNIGHT, PIECE_HAND_LANCE,
+                     PIECE_HAND_PAWN, PIECE_HAND_ROOK, PIECE_HAND_SILVER,
+                     VERSION, get_color_name, get_opposite_color,
+                     get_shogi_score)
 from .exception import ShogiException
 from .player import Candidate, Player
 from .processor import Processor
@@ -81,16 +84,17 @@ def usi_move_to_string(src: Tuple[int, int], dst: Tuple[int, int], promote: bool
     return f'{src_str}{dst_str}{promote_str}'
 
 
-def usi_candidate_to_string(candidate: Candidate, index: int) -> str:
+def usi_candidate_to_string(candidate: Candidate, criterion: str, index: int) -> str:
     '''Convert candidate move information to a USI analysis result string.
     Args:
         candidate (Candidate): Candidate move information
+        criterion (str): Criterion ('value', 'minimax', or 'visits')
         index (int): Priority
     Returns:
         str: USI analysis result string
     '''
     nodes = candidate.visits
-    score = get_shogi_score(candidate.win_chance)
+    score = get_shogi_score(candidate.get_win_chance(criterion))
     text = f'info multipv {index} nodes {nodes} score cp {score}'
 
     if len(candidate.variations) > 0:
@@ -110,16 +114,21 @@ class USIEngine(object):
         visits: int,
         playouts: int = 0,
         timelimit: float = 0,
-        use_ucb1: bool = False,
+        algorithm: str = 'pucb',
+        criterion: str = 'value',
         ponder: bool = False,
         resign_threshold: float = 0.0,
         resign_turn: int = 0,
         initial_turn: int = 4,
         initial_width: int = 16,
         nyugyoku_scores: Tuple[int, int] = DEFAULT_NYUGYOKU_SCORES,
-        check_search_depth: int = 31,
-        check_search_node: int = 10_000,
-        check_node_depth: int = 2,
+        draw_turn: int = DEFAULT_DRAW_TURN,
+        check_search_depth: int = DEFAULT_CHECK_SEARCH_DEPTH,
+        check_search_node: int = DEFAULT_CHECK_SEARCH_NODE,
+        check_node_depth: int = DEFAULT_CHECK_NODE_DEPTH,
+        ucb_constant: float = DEFAULT_UCB_CONSTANT,
+        pucb_constant_init: float = DEFAULT_PUCB_CONSTANT_INIT,
+        pucb_constant_base: float = DEFAULT_PUCB_CONSTANT_BASE,
         client_name: str = NAME,
         client_version: str = VERSION,
         client_author: str = AUTHOR,
@@ -133,16 +142,21 @@ class USIEngine(object):
             visits (int): Number of search visits
             playouts (int): Number of search playouts
             timelimit (float): Thinking time limit (seconds)
-            use_ucb1 (bool): True to use UCB1, False to use PUCB
+            algorithm (str): Search algorithm ('ucb' or 'pucb')
+            criterion (str): Criterion for prioritizing candidate moves ('value', 'minimax', or 'visits')
             ponder (bool): True to continue analysis during opponent's thinking
-            resign_threshold (float): Win rate for resignation
+            resign_threshold (float): Win rate threshold for resignation
             resign_turn (int): Minimum number of turns before resignation
             initial_turn (int): Number of initial turns for random moves
             initial_width (int): Number of candidate moves for random moves
             nyugyoku_scores (Tuple[int,int]): Points required for nyugyoku declaration
+            draw_turn (int): Number of turns for a draw
             check_search_depth (int): Depth for checkmate search
             check_search_node (int): Number of nodes for checkmate search
             check_node_depth (int): Depth of nodes for checkmate search
+            ucb_constant (float): Constant multiplied to UCB upper confidence bound
+            pucb_constant_init (float): Initial value applied to PUCB upper confidence bound
+            pucb_constant_base (float): Base value applied to PUCB upper confidence bound
             max_visits (int): Maximum number of search visits
             client_name (str): Client display name
             client_version (str): Client display version
@@ -154,14 +168,19 @@ class USIEngine(object):
         self.processor = processor
         self.threads = threads
         self.nyugyoku_scores = nyugyoku_scores
+        self.draw_turn = draw_turn
         self.check_search_depth = check_search_depth
         self.check_search_node = check_search_node
         self.check_node_depth = check_node_depth
+        self.ucb_constant = ucb_constant
+        self.pucb_constant_init = pucb_constant_init
+        self.pucb_constant_base = pucb_constant_base
 
         self.visits = visits
         self.playouts = playouts
         self.timelimit = timelimit
-        self.use_ucb1 = use_ucb1
+        self.algorithm = algorithm
+        self.criterion = criterion
         self.ponder = ponder
 
         self.resign_threshold = resign_threshold
@@ -187,18 +206,26 @@ class USIEngine(object):
             'Threads': ('spin default {} min 1', 'threads', str, int),
             'CheckSearchDepth': ('spin default {} min 1', 'check_search_depth', str, int),
             'CheckSearchNode': ('spin default {} min 1', 'check_search_node', str, int),
-            'CheckNodeDepth': ('spin default {} min 1', 'check_node_depth', str, int),
+            'CheckNodeDepth': ('spin default {} min 0', 'check_node_depth', str, int),
+            'UcbConstant': ('spin default {} min 0', 'ucb_constant',
+                            lambda v: str(round(v * 100)), lambda s: float(s) / 100),
+            'PucbConstantInit': ('spin default {} min 0', 'pucb_constant_init',
+                                 lambda v: str(round(v * 100)), lambda s: float(s) / 100),
+            'PucbConstantBase': ('spin default {} min 0', 'pucb_constant_base',
+                                 lambda v: str(round(v)), lambda s: float(s)),
             'NyugyokuRule': ('combo default {} var 27 var 24', 'nyugyoku_scores',
                              lambda v: '24' if v == (31, 31) else '27',
                              lambda s: (31, 31) if s == '24' else DEFAULT_NYUGYOKU_SCORES),
+            'DrawTurn': ('spin default {} min 1', 'draw_turn', str, int),
             'Visits': ('spin default {} min 1', 'visits', str, int),
             'Playouts': ('spin default {} min 0', 'playouts', str, int),
             'Timelimit': ('spin default {} min 0', 'timelimit',
                           lambda v: str(int(v * 1000)), lambda s: float(s) / 1000),
-            'UseUCB1': ('check default {}', 'use_ucb1',
-                        lambda v: str(v).lower(), lambda s: s.lower() == 'true'),
             'Ponder': ('check default {}', 'ponder',
                        lambda v: str(v).lower(), lambda s: s.lower() == 'true'),
+            'Algorithm': ('combo default {} var ucb var pucb', 'algorithm', str, str),
+            'Criterion': ('combo default {} var value var minimax var visits',
+                          'criterion', str, str),
             'ResignThreshold': ('spin default {} min 0 max 100', 'resign_threshold',
                                 lambda v: str(int(v * 100)), lambda s: float(s) / 100),
             'ResignTurn': ('spin default {} min 0', 'resign_turn', str, int),
@@ -363,8 +390,12 @@ class USIEngine(object):
                 processor=self.processor,
                 threads=self.threads,
                 nyugyoku_scores=self.nyugyoku_scores,
+                draw_turn=self.draw_turn,
                 check_search_depth=self.check_search_depth,
-                check_search_node=self.check_search_node)
+                check_search_node=self.check_search_node,
+                ucb_constant=self.ucb_constant,
+                pucb_constant_init=self.pucb_constant_init,
+                pucb_constant_base=self.pucb_constant_base)
 
         return (True, 'readyok', False)
 
@@ -537,7 +568,8 @@ class USIEngine(object):
                 visits=visits,
                 playouts=self.playouts,
                 timelimit=timelimit,
-                use_ucb1=self.use_ucb1,
+                algorithm=self.algorithm,
+                criterion=self.criterion,
                 check_node_depth=self.check_node_depth,
                 ponder=self.ponder)
 
@@ -552,7 +584,7 @@ class USIEngine(object):
         # Create analysis result string
         if analyze:
             results.extend(
-                usi_candidate_to_string(candidate, i + 1)
+                usi_candidate_to_string(candidate, self.criterion, i + 1)
                 for i, candidate in enumerate(candidates))
 
         # If ponder, do not return bestmove
@@ -560,10 +592,12 @@ class USIEngine(object):
             return (True, '\n'.join(results), True)
 
         # If win rate is below threshold, judge as resignation
+        win_chance = candidates[0].get_win_chance(self.criterion)
+
         if (not ponder
                 and len(self.moves) > self.resign_turn
-                and candidates[0].win_chance < self.resign_threshold):
-            LOGGER.debug('Resign: win_chance=%.2f', candidates[0].win_chance)
+                and win_chance < self.resign_threshold):
+            LOGGER.debug('Resign: win_chance=%.2f', win_chance)
             return (True, 'bestmove resign', False)
 
         # Add move

@@ -1,7 +1,5 @@
 #include "Model.h"
 
-#include <iostream>
-
 #include "Config.h"
 
 namespace deepshogi {
@@ -46,6 +44,32 @@ static at::ScalarType getScalarType(int32_t gpu, bool fp16) {
 }
 
 /**
+ * Get the list of available GPU numbers.
+ * @return List of GPU numbers
+ */
+std::vector<std::int32_t> Model::getAvailableGPUs() {
+  // Return all GPU numbers if CUDA is available
+  if (torch::cuda::is_available()) {
+    int32_t gpuCount = torch::cuda::device_count();
+    std::vector<std::int32_t> gpus;
+
+    for (int32_t i = 0; i < gpuCount; ++i) {
+      gpus.push_back(i);
+    }
+
+    return gpus;
+  }
+
+  // Return GPU number 0 if MPS is available
+  if (torch::mps::is_available()) {
+    return {0};
+  }
+
+  // Return -1 to indicate no GPU is available
+  return {-1};
+}
+
+/**
  * Create a model object.
  * If -1 is specified for the GPU number, create an object that computes using the CPU.
  * @param filename Model file
@@ -71,6 +95,9 @@ Model::Model(std::string filename, int32_t gpu, bool fp16, bool deterministic)
   _model = torch::jit::load(filename);
   _model.to(_device, _dtype);
   _model.eval();
+
+  _bitShift = torch::arange(0, 32, torch::TensorOptions().dtype(torch::kInt32));
+  _bitShift = _bitShift.to(_device);
 }
 
 /**
@@ -79,13 +106,26 @@ Model::Model(std::string filename, int32_t gpu, bool fp16, bool deterministic)
  * @param outputs Output data
  * @param size Number of evaluation data
  */
-void Model::forward(float* inputs, float* outputs, uint32_t size) {
+void Model::forward(int32_t* inputs, float* outputs, int32_t size) {
   torch::NoGradGuard no_grad;
-  torch::Tensor in_data = torch::from_blob(
-      inputs, size * MODEL_INPUT_SIZE,
-      torch::TensorOptions().dtype(torch::kFloat32));
-  in_data = in_data.reshape({size, MODEL_INPUT_SIZE});
-  in_data = in_data.to(_device, _dtype);
+
+  torch::Tensor in_values = torch::from_blob(
+      inputs, size * MODEL_INPUT_PACK_SIZE,
+      torch::TensorOptions().dtype(torch::kInt32));
+  in_values = in_values.reshape({size, MODEL_INPUT_PACK_SIZE});
+  in_values = in_values.to(_device);
+
+  torch::Tensor in_data = torch::bitwise_right_shift(
+      in_values.narrow(1, 0, MODEL_INPUT_PACK_SIZE - 3).unsqueeze(2), _bitShift);
+  in_data = torch::bitwise_and(in_data, 1);
+  in_data = in_data.reshape({size, -1});
+  in_data = in_data.narrow(1, 0, MODEL_INPUT_SIZE);
+  in_data = in_data.to(_dtype);
+
+  in_values = in_values.narrow(1, MODEL_INPUT_PACK_SIZE - 3, 3);
+  in_values = in_values.to(torch::kFloat32) / 0xfffff;
+  in_values = in_values.to(_dtype);
+  in_data.slice(1, MODEL_INPUT_SIZE - 3, MODEL_INPUT_SIZE).copy_(in_values);
 
   torch::Tensor out_data = _model.forward({in_data}).toTensor();
   out_data = out_data.reshape({-1});

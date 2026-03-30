@@ -1,7 +1,6 @@
 #pragma once
 
 #include <cstdint>
-#include <iostream>
 #include <queue>
 #include <shared_mutex>
 
@@ -11,6 +10,7 @@
 #include "Move.h"
 #include "NodeParameter.h"
 #include "NodeResult.h"
+#include "PnSearchEngine.h"
 #include "Policy.h"
 
 namespace deepshogi {
@@ -35,24 +35,28 @@ class Node {
   void initialize(const std::string sfen);
 
   /**
-   * Evaluate the search node.
+   * Evaluate the search node and get the next node object to evaluate.
+   * If the next node object to evaluate does not exist, return nullptr.
    * @param equally If true, equalize the number of searches
    * @param width Search width (if 0, adjust automatically)
-   * @param useUcb1 If true, use UCB1; if false, use PUCB
-   * @param searchCheckMove If true, search for checkmate moves
+   * @param algorithm Search algorithm
+   * @param pnSearchEngine Mate search engine object (nullptr if not searching for mate)
+   * @param checkSearchDepth Search depth for checkmate moves
    * @param temperature Temperature parameter for search
    * @param noise Strength of Gumbel noise for search
    * @return Evaluation result
    */
   NodeResult evaluate(
-      bool equally, int32_t width, bool useUcb1, bool searchCheckMove,
+      bool equally, int32_t width, int32_t algorithm,
+      PnSearchEngine* pnSearchEngine, int32_t checkSearchDepth,
       float temperature, float noise);
 
   /**
    * Update the evaluation value of the search node.
    * @param value Evaluation value
+   * @param minimax Minimax value
    */
-  void updateValue(float value);
+  void updateValue(float value, float minimax);
 
   /**
    * Cancel the evaluation value of the search node.
@@ -100,11 +104,11 @@ class Node {
   Node* getChild(const Move& move);
 
   /**
-   * Get the checkmate move of this node.
-   * If no checkmate move is found, return MOVE_PASS.
-   * @return Checkmate move
+   * Get the checkmate moves of this node.
+   * If no checkmate moves are found, return an empty array.
+   * @return Checkmate moves
    */
-  Move getCheckMove() const;
+  std::vector<Move> getCheckmateMoves();
 
   /**
    * Get the number of searches for this node.
@@ -131,10 +135,23 @@ class Node {
   float getValue();
 
   /**
+   * Get the minimax evaluation value of this node.
+   * @return Minimax evaluation value
+   */
+  float getMinimax();
+
+  /**
    * Get the lower bound of the confidence interval for the evaluation value of this node.
    * @return Lower bound of confidence interval
    */
   float getValueLCB();
+
+  /**
+   * Get the priority of this node based on UCB.
+   * @param totalVisits Total number of searches
+   * @return Priority
+   */
+  float getPriorityByUCB(int32_t totalVisits);
 
   /**
    * Get the priority of this node based on PUCB.
@@ -142,13 +159,6 @@ class Node {
    * @return Priority
    */
   float getPriorityByPUCB(int32_t totalVisits);
-
-  /**
-   * Get the priority of this node based on UCB1.
-   * @param totalVisits Total number of searches
-   * @return Priority
-   */
-  float getPriorityByUCB1(int32_t totalVisits);
 
   /**
    * Get the predicted sequence of this node.
@@ -161,12 +171,6 @@ class Node {
    * @param board Board object
    */
   void copyBoardTo(Board* board);
-
-  /**
-   * Output the information of this node.
-   * @param os Output destination
-   */
-  void print(std::ostream& os = std::cout);
 
  private:
   /**
@@ -205,14 +209,19 @@ class Node {
   Evaluator _evaluator;
 
   /**
-   * Search depth for checkmate moves.
+   * Constant multiplied to UCB upper confidence bound.
    */
-  int32_t _checkSearchDepth;
+  float _ucbConstant;
 
   /**
-   * Number of nodes searched for checkmate moves.
+   * Initial value applied to PUCB upper confidence bound.
    */
-  int32_t _checkSearchNode;
+  float _pucbConstantInit;
+
+  /**
+   * Base value applied to PUCB upper confidence bound.
+   */
+  float _pucbConstantBase;
 
   /**
    * List of child nodes.
@@ -235,19 +244,19 @@ class Node {
   std::set<int32_t> _waitingSet;
 
   /**
-   * Checkmate move.
+   * Checkmate moves found in this node.
    */
-  Move _checkMove;
+  std::vector<Move> _checkmateMoves;
 
   /**
-   * True if shallow (3-move) checkmate search has been executed.
+   * True if shallow (5-move) checkmate search has been executed.
    */
-  bool _checkMoveShallowSearched;
+  bool _checkmateMoveShallowSearched;
 
   /**
    * True if deep (DfPn) checkmate search has been executed.
    */
-  bool _checkMoveDeepSearched;
+  bool _checkmateMoveDeepSearched;
 
   /**
    * Number of searches.
@@ -270,22 +279,26 @@ class Node {
   int32_t _count;
 
   /**
-   * Execute board evaluation for this node.
-   * @param searchCheckMove If true, search for checkmate moves
+   * Minimax evaluation value.
    */
-  void _evaluateBoard(bool searchCheckMove);
+  float _minimax;
+
+  /**
+   * Execute board evaluation for this node.
+   */
+  void _evaluateBoard();
 
   /**
    * Evaluate the state of this node and return the evaluation result.
    * @param equally If true, equalize the number of searches
    * @param width Search width (if 0, adjust automatically)
-   * @param useUcb1 If true, use UCB1; if false, use PUCB
+   * @param algorithm Search algorithm
    * @param temperature Temperature parameter for search
    * @param noise Strength of Gumbel noise for search
    * @return Evaluation result
    */
   NodeResult _evaluateNode(
-      bool equally, int32_t width, bool useUcb1, float temperature, float noise);
+      bool equally, int32_t width, int32_t algorithm, float temperature, float noise);
 
   /**
    * Initialize the evaluation information of the node.

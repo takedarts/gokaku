@@ -4,7 +4,6 @@
 #include <cstdint>
 #include <functional>
 #include <mutex>
-#include <queue>
 #include <thread>
 #include <tuple>
 #include <vector>
@@ -14,6 +13,7 @@
 #include "Config.h"
 #include "Node.h"
 #include "NodeManager.h"
+#include "PnSearchManager.h"
 #include "Processor.h"
 #include "ThreadPool.h"
 
@@ -30,15 +30,21 @@ class Player {
    * @param threads Number of threads
    * @param nyugyokuScoreBlack Points required for black's entering king declaration
    * @param nyugyokuScoreWhite Points required for white's entering king declaration
-   * @param drawSteps Number of moves until a draw
+   * @param drawTurn Number of moves until a draw
    * @param checkSearchDepth Depth for mate search
    * @param checkSearchNode Number of nodes for mate search
+   * @param ucbConstant Constant multiplied to UCB upper confidence bound
+   * @param pucbConstantInit Initial value applied to PUCB upper confidence bound
+   * @param pucbConstantBase Base value applied to PUCB upper confidence bound
    * @param evalLeafOnly True if only leaf nodes are evaluated
+   * @param maxVisits Maximum number of visits for search
    */
   Player(
       Processor* processor, int32_t threads,
-      int32_t nyugyokuScoreBlack, int32_t nyugyokuScoreWhite, int32_t drawSteps,
-      int32_t checkSearchDepth, int32_t checkSearchNode, bool evalLeafOnly);
+      int32_t nyugyokuScoreBlack, int32_t nyugyokuScoreWhite, int32_t drawTurn,
+      int32_t checkSearchDepth, int32_t checkSearchNode,
+      float ucbConstant, float pucbConstantInit, float pucbConstantBase,
+      bool evalLeafOnly, int32_t maxVisits);
 
   /**
    * Destroy the player object.
@@ -66,15 +72,15 @@ class Player {
   /**
    * Start board evaluation.
    * The search process is executed in a separate thread.
-   * @param equally True to make the number of searches equal, false to use UCB1 or PUCB
-   * @param useUcb1 True to use UCB1 as the search criterion, false to use PUCB
+   * @param equally True to make the number of searches equal, false to use UCB or PUCB
+   * @param algorithm Search algorithm
    * @param candidateWidth Search width for candidate moves (if 0, the width is automatically adjusted)
    * @param checkNodeDepth Maximum depth of nodes for mate search
    * @param temperature Temperature parameter for search
    * @param noise Strength of Gumbel noise for search
    */
   void startEvaluation(
-      bool equally, bool useUcb1, int32_t candidateWidth, int32_t checkNodeDepth,
+      bool equally, int32_t algorithm, int32_t candidateWidth, int32_t checkNodeDepth,
       float temperature, float noise);
 
   /**
@@ -97,6 +103,12 @@ class Player {
    * @param board Board object
    */
   void copyBoardTo(Board* board);
+
+  /**
+   * Get the debug information string of the search tree.
+   * @return Debug information string
+   */
+  std::string getDebugInfo();
 
  private:
   /**
@@ -125,6 +137,11 @@ class Player {
   std::unique_ptr<std::thread> _thread;
 
   /**
+   * Object that manages the mate search engine.
+   */
+  PnSearchManager _pnSearchManager;
+
+  /**
    * Root node.
    */
   Node* _root;
@@ -133,6 +150,16 @@ class Player {
    * True if only leaf nodes are evaluated.
    */
   bool _evalLeafOnly;
+
+  /**
+   * Maximum number of visits for search.
+   */
+  int32_t _maxVisits;
+
+  /**
+   * Depth of long mate sequences.
+   */
+  int32_t _checkSearchDepth;
 
   /**
    * Number of search visits.
@@ -150,9 +177,9 @@ class Player {
   bool _searchEqually;
 
   /**
-   * True if UCB1 is used as the search criterion.
+   * Search algorithm.
    */
-  bool _searchUseUcb1;
+  int32_t _searchAlgorithm;
 
   /**
    * Search width for candidate moves.

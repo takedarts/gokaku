@@ -54,13 +54,19 @@
 #define PIECE_HAND_LANCE        (${PIECE_HAND_LANCE})
 #define PIECE_HAND_KNIGHT       (${PIECE_HAND_KNIGHT})
 #define PIECE_HAND_SILVER       (${PIECE_HAND_SILVER})
-#define PIECE_HAND_GOLD         (${PIECE_HAND_GOLD})
 #define PIECE_HAND_BISHOP       (${PIECE_HAND_BISHOP})
 #define PIECE_HAND_ROOK         (${PIECE_HAND_ROOK})
+#define PIECE_HAND_GOLD         (${PIECE_HAND_GOLD})
 #define PIECE_HAND_END          (${PIECE_HAND_END})
 
 // Model configuration values
-#define MODEL_FEATURES     (${MODEL_FEATURES})
-#define MODEL_PREDICTIONS  (${MODEL_PREDICTIONS})
-#define MODEL_INPUT_SIZE   (${MODEL_INPUT_SIZE})
-#define MODEL_OUTPUT_SIZE  (${MODEL_OUTPUT_SIZE})
+#define MODEL_FEATURES          (${MODEL_FEATURES})
+#define MODEL_PREDICTIONS       (${MODEL_PREDICTIONS})
+#define MODEL_INPUT_SIZE        (${MODEL_INPUT_SIZE})
+#define MODEL_INPUT_PACK_SIZE   (${MODEL_INPUT_PACK_SIZE})
+#define MODEL_OUTPUT_SIZE       (${MODEL_OUTPUT_SIZE})
+
+// Search algorithm: UCB
+#define SEARCH_UCB   (${SEARCH_UCB})
+// Search algorithm: PUCB
+#define SEARCH_PUCB  (${SEARCH_PUCB})
