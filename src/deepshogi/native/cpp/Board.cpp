@@ -1608,25 +1608,34 @@ void Board::_getLegalKingMoves(
   int8_t op_color_idx = 1 - my_color_idx;
   int8_t king_pos_idx = _kingPositions[my_color_idx].getIndex();
 
-  // Generate legal moves for the king
-  // If the king's position is not set, do not generate legal moves for the king
-  // The king's destination squares are not affected by the destinationBitBoard
-  // The king's destination squares are limited to squares
-  // that do not contain the king's own pieces and are not attacked by the opponent's pieces
-  // Since the king does not give check, if only checking for check, do not include the king's moves
-  if constexpr (!checkOnly) {
-    if (king_pos_idx >= 0) {
-      BitBoard king_move_bitboard =
-          BITBOARD_KING_ATTACKS[king_pos_idx] & ~_colorBitBoards[my_color_idx];
+  // Generate legal moves for the king.
+  // If the king position is not set, do not generate any legal king moves.
+  // The king's destinations are not affected by destinationBitBoard.
+  // The king may move only to squares that are not occupied by friendly pieces
+  // and are not attacked by opponent pieces.
+  // Since the king itself cannot give direct check here, when considering only checks,
+  // register only discovered-check moves as legal.
+  if (king_pos_idx >= 0) {
+    BitBoard king_move_bitboard =
+        BITBOARD_KING_ATTACKS[king_pos_idx] & ~_colorBitBoards[my_color_idx];
 
-      // Generate legal moves for each destination
-      while (king_move_bitboard) {
-        int8_t dst_idx = king_move_bitboard.popRightmostBitIndex();
+    // Generate a legal move for each destination.
+    while (king_move_bitboard) {
+      int8_t dst_idx = king_move_bitboard.popRightmostBitIndex();
 
-        // Check if the move is possible (i.e., not a suicide move)
-        if (_getAttackers<true, true>(_color, dst_idx).empty()) {
+      // Do not register moves that would leave the king in check.
+      if (!_getAttackers<true, true>(_color, dst_idx).empty()) {
+        continue;
+      }
+
+      // When limited to checking moves, register only discovered checks.
+      // Otherwise, register the move unconditionally.
+      if constexpr (checkOnly) {
+        if (_isDiscoveredCheckMove(king_pos_idx, dst_idx, OPPOSITE_COLOR(_color))) {
           legalMoves.emplace_back(Position(king_pos_idx), Position(dst_idx), false);
         }
+      } else {
+        legalMoves.emplace_back(Position(king_pos_idx), Position(dst_idx), false);
       }
     }
   }
