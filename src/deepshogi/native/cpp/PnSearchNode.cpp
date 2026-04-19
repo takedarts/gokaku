@@ -2,6 +2,8 @@
 
 #include <algorithm>
 #include <cmath>
+#include <map>
+#include <set>
 #include <sstream>
 
 #include "PnSearchEngine.h"
@@ -65,10 +67,22 @@ void PnSearchNode::initialize(const Board* board, int32_t depth) {
     // For the turn to escape from check
     // If escape is possible: PN=number of legal moves, DN=1, step=max value
     // If escape is impossible: PN=0, DN=max value, step=1
+    // Count drops to the same square as a single move even if the piece types differ.
     std::vector<Move> legal_moves = _board.getLegalMoves(false, false);
 
     if (!legal_moves.empty()) {
-      _pn = (int32_t)legal_moves.size();
+      std::set<Position> unique_hand_moves;
+      int32_t board_move_count = 0;
+
+      for (Move& move : legal_moves) {
+        if (move.getSrc().getX() == BOARD_SIZE) {
+          unique_hand_moves.insert(move.getDst());
+        } else {
+          board_move_count++;
+        }
+      }
+
+      _pn = board_move_count + (int32_t)unique_hand_moves.size();
       _dn = 1;
       _step = MAX_VALUE;
     } else {
@@ -170,25 +184,44 @@ void PnSearchNode::update(int32_t depth_limit) {
   // DN value is the minimum of the DN values of the child nodes,
   // The number of moves to checkmate is the maximum of the number of moves
   // to checkmate of the child nodes + 1
+  // When summing child PN values, if multiple drop moves target the same square,
+  // add only the maximum PN value among those child nodes to the total.
   else {
+    std::map<Position, int32_t> hand_move_pns;
     _pn = 0;
     _dn = MAX_VALUE;
     _step = 1;
     _size = 1;
 
-    for (auto& child_pair : _children) {
-      PnSearchNode* child = child_pair.second;
+    for (auto& [move, child] : _children) {
+      // If multiple drop moves target the same square, add only the largest PN value to the total.
+      if (move.getSrc().getX() == BOARD_SIZE) {
+        Position dst = move.getDst();
 
-      _pn = std::min(_pn + child->_pn, MAX_VALUE);
+        if (hand_move_pns.find(dst) == hand_move_pns.end()) {
+          _pn = std::min(_pn + child->_pn, MAX_VALUE);
+          hand_move_pns[dst] = child->_pn;
+        } else if (child->_pn > hand_move_pns[dst]) {
+          _pn = std::min(_pn + child->_pn - hand_move_pns[dst], MAX_VALUE);
+          hand_move_pns[dst] = child->_pn;
+        }
+      }
+      // For board moves, add the PN value directly to the total.
+      else {
+        _pn = std::min(_pn + child->_pn, MAX_VALUE);
+      }
 
+      // Set DN to the minimum DN value among child nodes.
       if (child->_dn < _dn) {
         _dn = child->_dn;
       }
 
+      // Set the mate distance to max(child mate distance) + 1.
       if (_step < child->_step + 1) {
         _step = child->_step + 1;
       }
 
+      // Set node size to the sum of child node sizes.
       _size = std::min(_size + child->_size, MAX_VALUE);
     }
   }
