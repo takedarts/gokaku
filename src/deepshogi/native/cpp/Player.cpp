@@ -10,6 +10,7 @@ namespace deepshogi {
  * Create a player object.
  * @param processor Object that performs inference
  * @param threads Number of threads
+ * @param cacheSize Cache size for evaluation results
  * @param nyugyokuScoreBlack Points required for black's entering king declaration
  * @param nyugyokuScoreWhite Points required for white's entering king declaration
  * @param drawTurn Number of moves until a draw
@@ -22,7 +23,7 @@ namespace deepshogi {
  * @param maxVisits Maximum number of visits for search
  */
 Player::Player(
-    Processor* processor, int32_t threads,
+    Processor* processor, int32_t threads, int32_t cacheSize,
     int32_t nyugyokuScoreBlack, int32_t nyugyokuScoreWhite, int32_t drawTurn,
     int32_t checkSearchDepth, int32_t checkSearchNode,
     float ucbConstant, float pucbConstantInit, float pucbConstantBase,
@@ -30,7 +31,8 @@ Player::Player(
     : _mutex(),
       _condition(),
       _nodeManager(NodeParameter(
-          processor, nyugyokuScoreBlack, nyugyokuScoreWhite, drawTurn,
+          processor, cacheSize,
+          nyugyokuScoreBlack, nyugyokuScoreWhite, drawTurn,
           ucbConstant, pucbConstantInit, pucbConstantBase)),
       _threadPool(threads),
       _thread(),

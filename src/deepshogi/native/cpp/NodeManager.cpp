@@ -9,6 +9,7 @@ namespace deepshogi {
 NodeManager::NodeManager(NodeParameter parameter)
     : _mutex(),
       _parameter(parameter),
+      _evaluator(parameter.getProcessor(), parameter.getCacheSize()),
       _nodes(),
       _poolNodes(),
       _usedNodes() {
@@ -27,7 +28,7 @@ Node* NodeManager::createNode() {
   Node* node;
 
   if (_poolNodes.empty()) {
-    _nodes.emplace_back(std::make_unique<Node>(this, _parameter));
+    _nodes.emplace_back(std::make_unique<Node>(this, &_evaluator, _parameter));
     node = _nodes.back().get();
   } else {
     node = _poolNodes.back();

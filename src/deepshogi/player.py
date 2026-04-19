@@ -226,6 +226,7 @@ class Player(object):
         self,
         processor: Processor,
         threads: int = 1,
+        cache_size: int = 0,
         initial_sfen: str = DEFAULT_INITIAL_SFEN,
         nyugyoku_scores: Tuple[int, int] = DEFAULT_NYUGYOKU_SCORES,
         draw_turn: int = DEFAULT_DRAW_TURN,
@@ -243,6 +244,7 @@ class Player(object):
         Args:
             processor (Processor): Processor management object
             threads (int): Number of threads to use
+            cache_size (int): Cache size for evaluation results (if 0, caching is disabled)
             initial_sfen (str): Initial board in SFEN format
             nyugyoku_scores (Tuple[int, int]): Points required for nyugyoku declaration
             draw_turn (int): Number of turns for a draw
@@ -261,8 +263,8 @@ class Player(object):
 
         # Create native object
         self.native = NativePlayer(
-            processor.native, threads, nyugyoku_scores, draw_turn,
-            check_search_depth, check_search_node,
+            processor.native, threads, cache_size,
+            nyugyoku_scores, draw_turn, check_search_depth, check_search_node,
             ucb_constant, pucb_constant_init, pucb_constant_base,
             eval_leaf_only, max_visits)
 

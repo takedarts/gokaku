@@ -17,6 +17,7 @@ cdef class NativePlayer:
         self,
         processor: NativeProcessor,  # type: ignore
         threads: int,
+        cache_size: int,
         nyugyoku_scores: Tuple[int, int],
         draw_turn: int,
         check_search_depth: int,
@@ -31,6 +32,7 @@ cdef class NativePlayer:
         Args:
             processor (NativeProcessor): Processor object
             threads (int): Number of threads
+            cache_size (int): Cache size for evaluation results
             nyugyoku_scores (Tuple[int, int]): Score required for nyugyoku declaration
             draw_turn (int): Number of moves for a draw
             check_search_depth (int): Depth for checkmate search
@@ -42,7 +44,7 @@ cdef class NativePlayer:
             max_visits (int): Maximum number of visits for search
         '''
         self.player = new Player(
-            processor.processor, threads,
+            processor.processor, threads, cache_size,
             nyugyoku_scores[0], nyugyoku_scores[1], draw_turn,
             check_search_depth, check_search_node,
             ucb_constant, pucb_constant_init, pucb_constant_base,

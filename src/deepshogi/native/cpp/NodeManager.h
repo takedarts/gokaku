@@ -50,6 +50,11 @@ class NodeManager {
   NodeParameter _parameter;
 
   /**
+   * Object that performs board evaluation.
+   */
+  Evaluator _evaluator;
+
+  /**
    * List of node objects.
    */
   std::vector<std::unique_ptr<Node>> _nodes;

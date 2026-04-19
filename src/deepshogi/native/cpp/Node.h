@@ -6,6 +6,7 @@
 
 #include "Board.h"
 #include "Config.h"
+#include "Evaluation.h"
 #include "Evaluator.h"
 #include "Move.h"
 #include "NodeParameter.h"
@@ -24,9 +25,10 @@ class Node {
   /**
    * Create a search node object.
    * @param manager Node manager object
+   * @param evaluator Object that performs board evaluation
    * @param parameter Node creation parameters
    */
-  Node(NodeManager* manager, const NodeParameter& parameter);
+  Node(NodeManager* manager, Evaluator* evaluator, const NodeParameter& parameter);
 
   /**
    * Set as the initial board node specified in SFEN format.
@@ -206,7 +208,17 @@ class Node {
   /**
    * Object to evaluate the board.
    */
-  Evaluator _evaluator;
+  Evaluator* _evaluator;
+
+  /**
+   * Evaluation result.
+   */
+  Evaluation _evaluation;
+
+  /**
+   * True if evaluation results from the model are set.
+   */
+  bool _evaluated;
 
   /**
    * Constant multiplied to UCB upper confidence bound.

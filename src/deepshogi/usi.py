@@ -389,6 +389,7 @@ class USIEngine(object):
             self.player = Player(
                 processor=self.processor,
                 threads=self.threads,
+                cache_size=max(self.visits, self.playouts * 2) * 2,
                 nyugyoku_scores=self.nyugyoku_scores,
                 draw_turn=self.draw_turn,
                 check_search_depth=self.check_search_depth,

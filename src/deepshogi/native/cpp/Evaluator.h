@@ -1,8 +1,13 @@
 #pragma once
 
+#include <cstdint>
+#include <map>
+#include <queue>
+#include <shared_mutex>
+
 #include "Board.h"
 #include "Config.h"
-#include "Policy.h"
+#include "Evaluation.h"
 #include "Processor.h"
 
 namespace deepshogi {
@@ -15,58 +20,51 @@ class Evaluator {
   /**
    * Create evaluation result object.
    * @param processor Object to execute inference
+   * @param cacheSize Size of the cache for evaluation results
    */
-  Evaluator(Processor* processor);
-
-  /**
-   * Clear evaluation results from the model.
-   */
-  void clear();
+  Evaluator(Processor* processor, int32_t cacheSize);
 
   /**
    * Execute evaluation by the model.
    * @param board Board to be evaluated
+   * @return Evaluation result
    */
-  void evaluate(Board* board);
-
-  /**
-   * Return true if evaluation results from the model are set.
-   * @return True if evaluation results from the model are set
-   */
-  bool isEvaluated();
-
-  /**
-   * Get list of predicted candidate moves from model inference results.
-   * @return List of predicted candidate moves
-   */
-  std::vector<Policy> getPolicies();
-
-  /**
-   * Get predicted win rate from model inference results.
-   * @return Predicted win rate from model inference results
-   */
-  float getValue();
+  Evaluation evaluate(const Board* board);
 
  private:
+  /**
+   * Mutex for synchronization.
+   */
+  std::shared_mutex _mutex;
+
   /**
    * Object to execute inference.
    */
   Processor* _processor;
 
   /**
-   * List of candidate moves from model inference results
+   * Size of the cache for evaluation results.
    */
-  std::vector<Policy> _policies;
+  int32_t _cacheSize;
 
   /**
-   * Predicted win rate from model inference results.
+   * Queue of keys for the cache.
+   * Used to remove keys from the cache when the cache size exceeds the specified size.
    */
-  float _value;
+  std::queue<uint64_t> _cacheKeys;
 
   /**
-   * True if evaluation results from the model are set.
+   * Cache for evaluation results.
+   * The key is the hash value of the board, and the value is the evaluation result.
    */
-  bool _evaluated;
+  std::map<uint64_t, Evaluation> _cache;
+
+  /**
+   * Execute evaluation by the model.
+   * @param board Board to be evaluated
+   * @return Evaluation result
+   */
+  Evaluation _evaluate(const Board* board);
 };
 
 }  // namespace deepshogi

@@ -230,33 +230,62 @@ static int32_t getPolicyIndex(const Board* board, Move move) {
 /**
  * Create evaluation result object.
  * @param processor Object to execute inference
+ * @param cacheSize Cache size for evaluation results
  */
-Evaluator::Evaluator(Processor* processor)
-    : _processor(processor),
-      _policies(),
-      _value(0.0),
-      _evaluated(false) {
-}
-
-/**
- * Clear evaluation results from the model.
- */
-void Evaluator::clear() {
-  _policies.clear();
-  _value = 0.0;
-  _evaluated = false;
+Evaluator::Evaluator(Processor* processor, int32_t cacheSize)
+    : _mutex(),
+      _processor(processor),
+      _cacheSize(cacheSize),
+      _cacheKeys(),
+      _cache() {
 }
 
 /**
  * Execute evaluation by the model.
  * @param board Board to be evaluated
+ * @return Evaluation result
  */
-void Evaluator::evaluate(Board* board) {
-  // Do nothing if already evaluated.
-  if (_evaluated) {
-    return;
+Evaluation Evaluator::evaluate(const Board* board) {
+  uint64_t hash = board->getHash();
+
+  {
+    // Check if the evaluation result exists in the cache.
+    std::shared_lock lock(_mutex);
+
+    auto it = _cache.find(hash);
+
+    if (it != _cache.end()) {
+      return it->second;
+    }
   }
 
+  // If not found in the cache, run evaluation by the model.
+  Evaluation evaluation = _evaluate(board);
+
+  {
+    // Add the evaluation result to the cache.
+    std::unique_lock lock(_mutex);
+
+    while (!_cacheKeys.empty() && _cacheKeys.size() >= static_cast<size_t>(_cacheSize)) {
+      _cache.erase(_cacheKeys.front());
+      _cacheKeys.pop();
+    }
+
+    if (_cache.find(hash) == _cache.end()) {
+      _cacheKeys.push(hash);
+      _cache.emplace(hash, evaluation);
+    }
+  }
+
+  return evaluation;
+}
+
+/**
+ * Execute evaluation by the model.
+ * @param board Board to be evaluated
+ * @return Evaluation result
+ */
+Evaluation Evaluator::_evaluate(const Board* board) {
   // Execute evaluation for the current board.
   int32_t inputs[MODEL_INPUT_PACK_SIZE];
   float outputs[MODEL_OUTPUT_SIZE];
@@ -266,6 +295,7 @@ void Evaluator::evaluate(Board* board) {
 
   // Create list of candidate moves
   std::vector<Move> legal_moves = board->getLegalMoves(true, false);
+  std::vector<Policy> policies;
 
   for (Move move : legal_moves) {
     // Calculate Policy index
@@ -283,43 +313,19 @@ void Evaluator::evaluate(Board* board) {
     // Add Policy
     int32_t index = ((idx * BOARD_SIZE * BOARD_SIZE) + (x * BOARD_SIZE + y));
 
-    _policies.emplace_back(move, outputs[index], 0);
+    policies.emplace_back(move, outputs[index], 0);
   }
 
   // Get predicted win rate.
-  _value = outputs[MODEL_PREDICTIONS * BOARD_SIZE * BOARD_SIZE + 0] * 2 - 1;
+  float value = outputs[MODEL_PREDICTIONS * BOARD_SIZE * BOARD_SIZE + 0] * 2 - 1;
 
   // Reverse evaluation value for white's turn.
   if (board->getColor() == COLOR_WHITE) {
-    _value = -_value;
+    value = -value;
   }
 
-  // Set evaluated flag.
-  _evaluated = true;
-}
-
-/**
- * Return true if evaluation results from the model are set.
- * @return True if evaluation results from the model are set
- */
-bool Evaluator::isEvaluated() {
-  return _evaluated;
-}
-
-/**
- * Get list of predicted candidate moves from model inference results.
- * @return List of predicted candidate moves
- */
-std::vector<Policy> Evaluator::getPolicies() {
-  return _policies;
-}
-
-/**
- * Get predicted win rate from model inference results.
- * @return Predicted win rate from model inference results
- */
-float Evaluator::getValue() {
-  return _value;
+  // Return evaluation result.
+  return Evaluation(value, policies);
 }
 
 }  // namespace deepshogi

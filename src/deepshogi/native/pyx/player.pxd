@@ -11,13 +11,19 @@ from pyx.processor cimport Processor
 cdef extern from "cpp/Player.h" namespace "deepshogi":
     cdef cppclass Player:
         Player(
-            Processor*, int32_t, int32_t, int32_t, int32_t, int32_t, int32_t,
-            float, float, float, bool, int32_t) except +
-        void initialize(const string)
+            Processor* processor, int32_t threads, int32_t cacheSize,
+            int32_t nyugyokuScoreBlack, int32_t nyugyokuScoreWhite, int32_t drawTurn,
+            int32_t checkSearchDepth, int32_t checkSearchNode,
+            float ucbConstant, float pucbConstantInit, float pucbConstantBase,
+            bool evalLeafOnly, int32_t maxVisits) except +
+        void initialize(const string& sfen)
         int32_t getColor()
-        void play(const Move&)
-        void startEvaluation(bool, int32_t, int32_t, int32_t, float, float)
-        void waitEvaluation(int32_t, int32_t, float, bool) nogil
+        void play(const Move& move)
+        void startEvaluation(
+            bool equally, int32_t algorithm, int32_t candidateWidth, int32_t checkNodeDepth,
+            float temperature, float noise)
+        void waitEvaluation(
+            int32_t visits, int32_t playouts, float timelimit, bool stop) nogil
         vector[Candidate] getCandidates()
-        void copyBoardTo(Board*)
+        void copyBoardTo(Board* board)
         string getDebugInfo()
