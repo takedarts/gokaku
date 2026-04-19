@@ -336,26 +336,31 @@ void Board::initialize(const std::string& sfen) {
   }
 
   // Reflect the SFEN information of the hands
-  int32_t hand_piece_num = 1;
+  int32_t hand_piece_num = 0;
 
   for (int32_t i = 0; i < hand_sfen_length; i++) {
     char c = c_sfen[board_sfen_length + 3 + i];
 
     // If it's a number, set the number of pieces
-    if ('1' <= c && c <= '9') {
-      hand_piece_num = c - '0';
+    if ('0' <= c && c <= '9') {
+      hand_piece_num = hand_piece_num * 10 + (c - '0');
       continue;
     }
 
     // If it's a piece symbol, set the hand pieces
+    // If the number of pieces is not specified, it is considered to be 1
     if (SFEN_HAND_PIECE_TYPES.count(c) > 0) {
       auto [color, piece] = SFEN_HAND_PIECE_TYPES.at(c);
+
+      if (hand_piece_num == 0) {
+        hand_piece_num = 1;
+      }
 
       _addHand(color, piece, hand_piece_num);
     }
 
-    // If it's not a number, reset the number of pieces to 1
-    hand_piece_num = 1;
+    // If it's not a number, reset the number of pieces to 0
+    hand_piece_num = 0;
   }
 
   // Set the turn
