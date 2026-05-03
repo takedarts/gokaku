@@ -76,6 +76,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         '--fp16', default=False, action='store_true', help='Use FP16')
     parser.add_argument(
+        '--threads-per-gpu', type=int, default=1, help='Number of threads per GPU (default: 1)')
+    parser.add_argument(
         '--verbose', action='store_true', help='Verbose mode')
 
     args = parser.parse_args()
@@ -91,7 +93,9 @@ def main() -> None:
     start_logging(debug=args.verbose, console=sys.stderr)
 
     # Create inference object
-    processor = Processor(args.model, args.gpus, args.batch_size, args.fp16)
+    processor = Processor(
+        args.model, args.gpus, args.batch_size, args.fp16,
+        threads_per_gpu=args.threads_per_gpu)
 
     # Create GPT object
     engine = USIEngine(
