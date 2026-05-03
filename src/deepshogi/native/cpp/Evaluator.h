@@ -6,6 +6,7 @@
 #include <shared_mutex>
 
 #include "Board.h"
+#include "BoardHash.h"
 #include "Config.h"
 #include "Evaluation.h"
 #include "Processor.h"
@@ -51,13 +52,13 @@ class Evaluator {
    * Queue of keys for the cache.
    * Used to remove keys from the cache when the cache size exceeds the specified size.
    */
-  std::queue<uint64_t> _cacheKeys;
+  std::queue<BoardHash> _cacheKeys;
 
   /**
    * Cache for evaluation results.
    * The key is the hash value of the board, and the value is the evaluation result.
    */
-  std::map<uint64_t, Evaluation> _cache;
+  std::map<BoardHash, Evaluation> _cache;
 
   /**
    * Execute evaluation by the model.

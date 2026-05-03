@@ -95,13 +95,6 @@ cdef class NativeBoard:
         '''
         return self.board.getTurn()
 
-    def get_hash(self) -> int:
-        '''Get hash value of the board.
-        Returns:
-            int: Hash value of the board
-        '''
-        return self.board.getHash()
-
     def get_piece(self, pos: Tuple[int, int]) -> int:
         '''Get piece at specified coordinates.
         Args:

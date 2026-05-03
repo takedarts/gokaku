@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <map>
+#include <sstream>
 
 namespace deepshogi {
 
@@ -388,6 +389,30 @@ int32_t Player::_evaluate() {
         }
 
         nodes[i]->updateValue(result.getValue(), minimax_value);
+      }
+    }
+
+    // When a new leaf node is created:
+    // Check if that node is a lesser node of the parent node
+    // If it is a lesser node of the parent node, delete the leaf node
+    Node* child_node = result.getNode();
+
+    if (child_node != nullptr && child_node->getVisits() == 0) {
+      bool lesser_node_found = false;
+
+      // Check if the new leaf node is a lesser node of the parent node
+      for (int32_t i = (int32_t)nodes.size() - 2; i >= 0; i -= 2) {
+        if (child_node->isLesserThan(nodes[i], OPPOSITE_COLOR(child_node->getColor()))) {
+          lesser_node_found = true;
+          break;
+        }
+      }
+
+      // If the new leaf node is a lesser node of the parent node, delete the leaf node
+      // If a lesser node is found, consider the leaf node reached and terminate the search
+      if (lesser_node_found) {
+        nodes.back()->removeChild(child_node->getMove());
+        break;
       }
     }
 

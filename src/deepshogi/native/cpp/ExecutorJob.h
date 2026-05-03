@@ -1,8 +1,8 @@
 #pragma once
 
-#include <condition_variable>
+#include <atomic>
 #include <cstdint>
-#include <mutex>
+#include <exception>
 
 namespace deepshogi {
 
@@ -20,8 +20,9 @@ class ExecutorJob {
 
   /**
    * Notify that computation is complete.
+   * @param exception Exception pointer if an exception occurred during computation
    */
-  void notify();
+  void notify(std::exception_ptr exception = nullptr);
 
   /**
    * Return input data.
@@ -40,16 +41,6 @@ class ExecutorJob {
 
  private:
   /**
-   * Mutex for synchronization.
-   */
-  std::mutex _mutex;
-
-  /**
-   * Condition variable for synchronization.
-   */
-  std::condition_variable _condition;
-
-  /**
    * Input data.
    */
   int32_t* _inputs;
@@ -67,7 +58,12 @@ class ExecutorJob {
   /**
    * True if computation is complete.
    */
-  bool _terminated;
+  std::atomic<bool> _terminated;
+
+  /**
+   * Exception that occurred during computation.
+   */
+  std::exception_ptr _exception;
 };
 
 }  // namespace deepshogi

@@ -15,6 +15,13 @@ namespace deepshogi {
  * A class that holds board state information.
  */
 class Board {
+ private:
+  /**
+   * A class for calculating the hash value of the board.
+   * Set as a friend class of the Board class to access the private members of the Board class.
+   */
+  friend class BoardHash;
+
  public:
   /**
    * Creates a board object.
@@ -148,19 +155,7 @@ class Board {
   }
 
   /**
-   * Gets the hash value of the board.
-   * @return The hash value of the board
-   */
-  inline uint64_t getHash() const {
-    if (_color == COLOR_BLACK) {
-      return _boardHash ^ _handHash;
-    } else {
-      return (_boardHash ^ _handHash) ^ 0xffffffffffffffffULL;
-    }
-  }
-
-  /**
-   * Returns true if this board is a subordinate board of the specified board.
+   * Returns true if this board is the same as or subordinate to the specified board.
    * A subordinate board is one where the piece placement on the board is the same,
    * and the number of hand pieces of all types is the equal or less.
    * The same piece placement on the board is confirmed by checking the hash values.
@@ -171,10 +166,48 @@ class Board {
    * @param color The side to evaluate
    * @return True if this is a subordinate board
    */
+  inline bool isLesserThanOrEqual(const Board& other, int8_t color) const {
+    // If the hash values of the boards are different,
+    // the piece placement is determined to be different
+    if (_cellHash != other._cellHash) {
+      return false;
+    }
+
+    // Return false if the piece placement on the board is different
+    if (_colorBitBoards[0] != other._colorBitBoards[0] ||
+        _colorBitBoards[1] != other._colorBitBoards[1]) {
+      return false;
+    }
+
+    // Check that the set of bit positions of hand pieces representation
+    // is a subset of the other set
+    int8_t color_idx = (color == COLOR_BLACK) ? 0 : 1;
+
+    return (_handBits[color_idx] & other._handBits[color_idx]) == _handBits[color_idx];
+  }
+
+  /**
+   * Returns true if this board is a subordinate board of the specified board.
+   * @param other The board to compare against
+   * @param color The side to evaluate
+   * @return True if this is a subordinate board
+   */
   inline bool isLesserThan(const Board& other, int8_t color) const {
     // If the hash values of the boards are different,
     // the piece placement is determined to be different
-    if (_boardHash != other._boardHash) {
+    if (_cellHash != other._cellHash) {
+      return false;
+    }
+
+    // Return false if the piece placement on the board is different
+    if (_colorBitBoards[0] != other._colorBitBoards[0] ||
+        _colorBitBoards[1] != other._colorBitBoards[1]) {
+      return false;
+    }
+
+    // If the bit representation of hand pieces is the same,
+    // the number of hand pieces is also considered to be the same
+    if (_handBits[0] == other._handBits[0] && _handBits[1] == other._handBits[1]) {
       return false;
     }
 
@@ -237,6 +270,11 @@ class Board {
   uint8_t _cells[BOARD_SIZE * BOARD_SIZE];
 
   /**
+   * Hash value representing the piece placement on the board.
+   */
+  uint64_t _cellHash;
+
+  /**
    * Array representing the number of hand pieces for each player.
    */
   uint8_t _hands[2][PIECE_HAND_END - PIECE_HAND_BEGIN];
@@ -277,15 +315,6 @@ class Board {
    */
   int16_t _drawTurn;
 
-  /**
-   * Hash value of the board.
-   */
-  uint64_t _boardHash;
-
-  /**
-   * Hash value of hand pieces.
-   */
-  uint64_t _handHash;
   /**
    * Object storing the last move.
    */

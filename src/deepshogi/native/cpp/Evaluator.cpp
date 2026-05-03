@@ -246,7 +246,7 @@ Evaluator::Evaluator(Processor* processor, int32_t cacheSize)
  * @return Evaluation result
  */
 Evaluation Evaluator::evaluate(const Board* board) {
-  uint64_t hash = board->getHash();
+  BoardHash hash(board);
 
   {
     // Check if the evaluation result exists in the cache.

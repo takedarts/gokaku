@@ -13,7 +13,7 @@ cdef extern from "cpp/Board.h" namespace "deepshogi":
         Board() except +
         Board(int8_t nyugyokuScoreBlack, int8_t nyugyokuScoreWhite, int16_t drawTurn)
         void initialize(const string& sfen)
-        Result play(const Move& move)
+        Result play(const Move& move) except +
         void undo(const Result& result)
         vector[Position] getAttackers(const Position& position) const
         vector[Move] getLegalMoves(cpp_bool removeUnpromote, cpp_bool checkOnly) const
@@ -27,7 +27,6 @@ cdef extern from "cpp/Board.h" namespace "deepshogi":
         int8_t getColor() const
         int16_t getTurn() const
         int16_t getDrawTurn() const
-        uint64_t getHash() const
         uint8_t getPiece(const Position& position) const
         int8_t getHandPieceNum(int8_t color, uint8_t piece) const
         Move getLastMove() const

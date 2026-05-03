@@ -6,33 +6,34 @@ namespace deepshogi {
  * Create a computation object.
  */
 ExecutorJob::ExecutorJob(int32_t* inputs, float* outputs, int32_t size)
-    : _mutex(),
-      _condition(),
-      _inputs(inputs),
+    : _inputs(inputs),
       _outputs(outputs),
       _size(size),
-      _terminated(false) {
+      _terminated(false),
+      _exception(nullptr) {
 }
 
 /**
  * Wait until computation is complete.
  */
 void ExecutorJob::wait() {
-  {  // synchronize
-    std::unique_lock<std::mutex> lock(_mutex);
-    _condition.wait(lock, [this] { return _terminated; });
+  while (!_terminated.load(std::memory_order_acquire)) {
+    _terminated.wait(false, std::memory_order_acquire);
+  }
+
+  if (_exception != nullptr) {
+    std::rethrow_exception(_exception);
   }
 }
 
 /**
  * Notify that computation is complete.
+ * @param exception Exception pointer if an exception occurred during computation
  */
-void ExecutorJob::notify() {
-  {  // synchronize
-    std::unique_lock<std::mutex> lock(_mutex);
-    _terminated = true;
-    _condition.notify_all();
-  }
+void ExecutorJob::notify(std::exception_ptr exception) {
+  _exception = exception;
+  _terminated.store(true, std::memory_order_release);
+  _terminated.notify_all();
 }
 
 /**

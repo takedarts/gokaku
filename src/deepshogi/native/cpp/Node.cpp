@@ -246,6 +246,23 @@ Node* Node::getChild(const Move& move) {
 }
 
 /**
+ * Delete the node object when the specified move is made.
+ * @param move Move
+ */
+void Node::removeChild(const Move& move) {
+  std::unique_lock<std::shared_mutex> lock(_evalMutex);
+
+  // If a child node exists, delete that node
+  int32_t index = move.getValue();
+
+  if (_children.find(index) != _children.end()) {
+    Node* node = _children[index];
+    _manager->releaseNode(node);
+    _children.erase(index);
+  }
+}
+
+/**
  * Get the checkmate moves of this node.
  * If no checkmate moves are found, return an empty array.
  * @return Checkmate moves

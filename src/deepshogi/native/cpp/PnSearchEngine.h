@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "Board.h"
+#include "BoardHash.h"
 #include "Move.h"
 #include "PnSearchNode.h"
 
@@ -60,7 +61,7 @@ class PnSearchEngine {
   /**
    * Cache of search nodes.
    */
-  std::map<uint64_t, PnSearchNode*> _nodeCache;
+  std::map<BoardHash, PnSearchNode*> _nodeCache;
 
   /**
    * Retrieves a new search node.

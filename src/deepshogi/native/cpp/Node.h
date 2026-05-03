@@ -106,6 +106,12 @@ class Node {
   Node* getChild(const Move& move);
 
   /**
+   * Delete the node object when the specified move is made.
+   * @param move Move
+   */
+  void removeChild(const Move& move);
+
+  /**
    * Get the checkmate moves of this node.
    * If no checkmate moves are found, return an empty array.
    * @return Checkmate moves
@@ -173,6 +179,16 @@ class Node {
    * @param board Board object
    */
   void copyBoardTo(Board* board);
+
+  /**
+   * Check if the board of this node is a lesser board of the specified node.
+   * @param other Node to compare
+   * @param color Color to evaluate
+   * @return True if the board of this node is a lesser board of the specified node
+   */
+  inline bool isLesserThan(const Node* other, int8_t color) {
+    return _board.isLesserThan(other->_board, color);
+  }
 
  private:
   /**

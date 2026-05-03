@@ -249,6 +249,20 @@ class BitBoard {
   }
 
   /**
+   * Compares the magnitude relationship of bit sequences.
+   * Compares the upper bits with priority; if the upper bits are equal, compares the lower bits.
+   * @param other BitBoard object to compare with.
+   * @return true if this bit sequence is less than the other bit sequence.
+   */
+  inline bool operator<(const BitBoard& other) const {
+    if (_upper != other._upper) {
+      return _upper < other._upper;
+    } else {
+      return _lower < other._lower;
+    }
+  }
+
+  /**
    * Writes the string representation of the bit sequence to an output stream.
    * @param os Output stream.
    * @param board BitBoard object.

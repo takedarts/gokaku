@@ -223,6 +223,7 @@ static std::vector<Move> searchCheckmateMoves(Board& board, int32_t depth) {
  */
 Board::Board()
     : _cells{0},
+      _cellHash(0),
       _hands{{0}},
       _handBits{0},
       _kingPositions{POSITION_INVALID, POSITION_INVALID},
@@ -230,8 +231,6 @@ Board::Board()
       _color(COLOR_BLACK),
       _turn(0),
       _drawTurn(0x7fff),
-      _boardHash(0),
-      _handHash(0),
       _lastMove(MOVE_INVALID) {
 }
 
@@ -256,6 +255,8 @@ Board::Board(int8_t nyugyokuScoreBlack, int8_t nyugyokuScoreWhite, int16_t drawT
 void Board::initialize(const std::string& sfen) {
   // Initialize the board
   std::fill(std::begin(_cells), std::end(_cells), 0);
+  _cellHash = 0;
+
   std::fill(_hands[0], _hands[0] + (sizeof(_hands[0]) / sizeof(_hands[0][0])), 0);
   std::fill(_hands[1], _hands[1] + (sizeof(_hands[1]) / sizeof(_hands[1][0])), 0);
   _handBits[0] = 0;
@@ -263,8 +264,6 @@ void Board::initialize(const std::string& sfen) {
 
   _kingPositions[0] = POSITION_INVALID;
   _kingPositions[1] = POSITION_INVALID;
-  _boardHash = 0;
-  _handHash = 0;
 
   _colorBitBoards[0].clearAll();
   _colorBitBoards[1].clearAll();
@@ -818,8 +817,13 @@ std::string Board::toString() const {
 void Board::_putPiece(const Position& pos, uint8_t piece) {
   int8_t pos_idx = pos.getIndex();
 
+  // Throw an exception if there is already a piece at the specified position
+  if (_cells[pos_idx] != PIECE_EMPTY) {
+    throw std::invalid_argument("Position already has a piece");
+  }
+
   // Update the hash value
-  _boardHash ^= BOARD_HASH_VALUES[pos_idx][piece];
+  _cellHash ^= BOARD_HASH_VALUES[pos_idx][piece];
 
   // Place the piece at the specified position
   _cells[pos_idx] = piece;
@@ -860,8 +864,13 @@ void Board::_removePiece(const Position& pos) {
   int8_t pos_idx = pos.getIndex();
   uint8_t piece = _cells[pos_idx];
 
+  // Throw an exception if there is no piece at the specified position
+  if (piece == PIECE_EMPTY) {
+    throw std::invalid_argument("Position does not have a piece");
+  }
+
   // Update the hash value
-  _boardHash ^= BOARD_HASH_VALUES[pos_idx][piece];
+  _cellHash ^= BOARD_HASH_VALUES[pos_idx][piece];
 
   // Remove the piece from the specified position
   _cells[pos_idx] = PIECE_EMPTY;
@@ -907,9 +916,6 @@ void Board::_addHand(int8_t color, uint8_t piece, int32_t num) {
   int32_t color_idx = (color == COLOR_BLACK) ? 0 : 1;
   int32_t piece_idx = piece - PIECE_HAND_BEGIN;
 
-  // Update the hash value
-  _handHash ^= HAND_HASH_VALUES[color_idx][piece_idx][_hands[color_idx][piece_idx]];
-
   // Update the bit representation of hand pieces
   int8_t offset = HAND_BIT_OFFSETS[piece_idx] + _hands[color_idx][piece_idx];
 
@@ -919,9 +925,6 @@ void Board::_addHand(int8_t color, uint8_t piece, int32_t num) {
 
   // Add the specified piece to the hand
   _hands[color_idx][piece_idx] += num;
-
-  // Update the hash value
-  _handHash ^= HAND_HASH_VALUES[color_idx][piece_idx][_hands[color_idx][piece_idx]];
 }
 
 /**
@@ -943,8 +946,10 @@ void Board::_removeHand(int8_t color, uint8_t piece) {
   int32_t color_idx = (color == COLOR_BLACK) ? 0 : 1;
   int32_t piece_idx = piece - PIECE_HAND_BEGIN;
 
-  // Update the hash value
-  _handHash ^= HAND_HASH_VALUES[color_idx][piece_idx][_hands[color_idx][piece_idx]];
+  // Throw an exception if the specified piece does not exist in the hand
+  if (_hands[color_idx][piece_idx] <= 0) {
+    throw std::invalid_argument("Hand does not have the specified piece");
+  }
 
   // Update the bit representation of hand pieces
   int8_t offset = HAND_BIT_OFFSETS[piece_idx] + _hands[color_idx][piece_idx];
@@ -953,9 +958,6 @@ void Board::_removeHand(int8_t color, uint8_t piece) {
 
   // Remove the specified piece from the hand
   _hands[color_idx][piece_idx] -= 1;
-
-  // Update the hash value
-  _handHash ^= HAND_HASH_VALUES[color_idx][piece_idx][_hands[color_idx][piece_idx]];
 }
 
 /**
