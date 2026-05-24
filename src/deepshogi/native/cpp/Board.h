@@ -1,255 +1,264 @@
 #pragma once
 
 #include <cstdint>
+#include <ostream>
 #include <string>
 #include <vector>
 
 #include "BitBoard.h"
 #include "Move.h"
+#include "MoveResult.h"
 #include "Position.h"
-#include "Result.h"
 
 namespace deepshogi {
 
 /**
- * A class that holds board state information.
+ * 盤面の情報を保持するクラス。
  */
 class Board {
  private:
   /**
-   * A class for calculating the hash value of the board.
-   * Set as a friend class of the Board class to access the private members of the Board class.
+   * 盤面のハッシュ値を計算するためのクラス。
+   * Boardクラスのprivateメンバにアクセスできるようにするため、Boardクラスのfriendクラスとする。
    */
   friend class BoardHash;
 
  public:
   /**
-   * Creates a board object.
-   * Pieces are not placed on the board.
+   * 盤面オブジェクトを生成する。
+   * 盤面への駒の配置は行わない。
    */
   Board();
 
   /**
-   * Creates a board object.
-   * Pieces are not placed on the board.
-   * @param nyugyokuScoreBlack Points required for black's declaration of victory
-   * @param nyugyokuScoreWhite Points required for white's declaration of victory
-   * @param drawTurn Number of moves until a draw occurs
+   * 盤面オブジェクトを生成する。
+   * 盤面への駒の配置は行わない。
+   * @param nyugyokuScoreBlack 先手番の入玉宣言に必要な点数
+   * @param nyugyokuScoreWhite 後手番の入玉宣言に必要な点数
+   * @param drawTurn 引き分けとなるまでの手数
    */
   Board(int8_t nyugyokuScoreBlack, int8_t nyugyokuScoreWhite, int16_t drawTurn);
 
   /**
-   * Destroys the board object.
+   * 盤面オブジェクトを破棄する。
    */
   virtual ~Board() = default;
 
   /**
-   * Initializes the board from a SFEN format string.
-   * @param sfen SFEN format string
+   * SFEN形式の文字列で盤面を初期化する。
+   * @param sfen SFEN形式の文字列
    */
   void initialize(const std::string& sfen);
 
   /**
-   * Moves a piece.
-   * @param move The move to play
-   * @return The result of the move
+   * 駒を動かす。
+   * @param move 着手
+   * @return 着手の結果
    */
-  Result play(const Move& move);
+  MoveResult play(const Move& move);
 
   /**
-   * Reverts the specified move from the board.
-   * This function assumes the specified move is the last move made.
-   * @param result The result of the move to revert
+   * 指定された着手の内容を盤面から取り消す。
+   * この関数は指定された着手が直前の着手であることを前提としている。
+   * @param result 取り消す着手の結果
    */
-  void undo(const Result& result);
+  void undo(const MoveResult& result);
 
   /**
-   * Gets the positions of pieces attacking the specified coordinate.
-   * @param position The coordinate to check
-   * @return List of positions of pieces attacking the specified coordinate
+   * 指定された座標に効きがある駒の位置を取得する。
+   * @param position 確認する座標
+   * @return 指定された座標に効きがある駒の位置のリスト
    */
   std::vector<Position> getAttackers(const Position& position) const;
 
   /**
-   * Gets the list of legal moves in the current board state.
-   * @param removeUnpromote If true, removes non-promotion moves for pawns, bishops, rooks, and lances on the 2nd row
-   * @param checkOnly If true, only returns moves that give check
-   * @return List of legal moves
+   * 現在の盤面の合法手の一覧を取得する。
+   * @param removeUnpromote 歩、角、飛車、2行目の香の不成の手を削除する場合はtrue
+   * @param checkOnly 王手が発生する手のみを取得する場合はtrue
+   * @return 合法手の一覧
    */
   std::vector<Move> getLegalMoves(bool removeUnpromote, bool checkOnly) const;
 
   /**
-   * Gets the move sequence for the checkmate line in the current board state.
-   * @param depth The depth of checkmate search
-   * @return Move sequence for the checkmate line
+   * 現在の盤面の詰み筋の着手手順を取得する。
+   * @param depth 詰み探索の深さ
+   * @return 詰み筋の着手手順
    */
   std::vector<Move> getCheckmateMoves(int32_t depth) const;
 
   /**
-   * Returns true if a declaration of victory is possible.
-   * @param color The side making the declaration
-   * @return True if a declaration of victory is possible
+   * 入玉宣言可能な状態であればtrueを返す。
+   * @param color 宣言側の手番
+   * @return 入玉宣言可能な状態であればtrue
    */
   bool isNyugyoku(int8_t color) const;
 
   /**
-   * Returns true if the specified side is in check.
-   * @param color The side that is in check
-   * @return True if in check
+   * 王手がかかっていればtrueを返す。
+   * @param color 王手をかけられている側の色
+   * @return 王手がかかっていればtrue
    */
   bool isCheck(int8_t color) const;
 
   /**
-   * Gets the SFEN format string.
-   * @return SFEN format string
+   * SFEN形式の文字列を取得する。
+   * @return SFEN形式の文字列
    */
   std::string getSfen() const;
 
   /**
-   * Gets data to input to the model.
-   * @param inputs Data to input to the model
+   * モデルに入力するデータを取得する。
+   * @param inputs モデルに入力するデータ
    */
   void getInputs(int32_t* inputs) const;
 
   /**
-   * Gets data to input to the model.
-   * @param inputs Data to input to the model
-   * @param color The side to move
+   * モデルに入力するデータを取得する。
+   * @param inputs モデルに入力するデータ
+   * @param color 手番
    */
   void getInputs(int32_t* inputs, int8_t color) const;
 
   /**
-   * Copies the board state.
-   * @param board The source board to copy from
+   * 盤面の状態をコピーする。
+   * @param board コピー元の盤面
    */
   void copyFrom(const Board* board);
 
   /**
-   * Gets a string representation of the board state.
-   * @return String representation of the board state
+   * 盤面情報を表示するための文字列を取得する。
+   * @return 盤面情報を表示するための文字列
    */
   std::string toString() const;
 
   /**
-   * Gets the side to move.
-   * @return The side to move
+   * 手番を取得する。
+   * @return 手番
    */
   inline int8_t getColor() const {
     return _color;
   }
 
   /**
-   * Gets the current move number.
-   * @return The current move number
+   * 現在の手数を取得する。
+   * @return 現在の手数
    */
   inline int16_t getTurn() const {
     return _turn;
   }
 
   /**
-   * Gets the move number at which a draw occurs.
-   * @return The move number at which a draw occurs
+   * 引き分けとなる手数を取得する。
+   * @return 引き分けとなる手数
    */
   inline int16_t getDrawTurn() const {
     return _drawTurn;
   }
 
   /**
-   * Returns true if this board is the same as or subordinate to the specified board.
-   * A subordinate board is one where the piece placement on the board is the same,
-   * and the number of hand pieces of all types is the equal or less.
-   * The same piece placement on the board is confirmed by checking the hash values.
-   * (Hash collisions are considered extremely rare in practice, so they are ignored here)
-   * To confirm this hand piece condition, it is sufficient to check that
-   * the set of bit positions of hand pieces representation is a subset of the other set.
-   * @param other The board to compare against
-   * @param color The side to evaluate
-   * @return True if this is a subordinate board
+   * この盤面が指定された盤面の同じ盤面か劣後盤面であればtrueを返す。
+   * 劣後盤面とは、手番と盤上の駒の配置が同じであり、
+   * すべての種類の持ち駒の数が同じか少ない盤面のことを意味する。
+   * 盤上の駒の配置が同じであることは、盤面のハッシュ値が同じであることで確認する。
+   * （ハッシュ値の衝突は、実際には非常に稀だと考えられるため、ここでは無視する）
+   * この持ち駒の条件を確認するためには、持ち駒のビット表現のビットが立っている位置の集合が
+   * もう片方の集合の部分集合になっていることを確認すればよい。
+   * @param other 比較対象の盤面
+   * @param color 評価対象の手番
+   * @return 同じ盤面か劣後盤面であればtrue
    */
   inline bool isLesserThanOrEqual(const Board& other, int8_t color) const {
-    // If the hash values of the boards are different,
-    // the piece placement is determined to be different
+    // 手番が異なるならば違う盤面と判断する
+    if (_color != other._color) {
+      return false;
+    }
+
+    // 盤面のハッシュ値が異なるならば、盤上の駒の配置が異なると判断する
     if (_cellHash != other._cellHash) {
       return false;
     }
 
-    // Return false if the piece placement on the board is different
+    // 盤面の配置が異なるならFalseを返す
     if (_colorBitBoards[0] != other._colorBitBoards[0] ||
         _colorBitBoards[1] != other._colorBitBoards[1]) {
       return false;
     }
 
-    // Check that the set of bit positions of hand pieces representation
-    // is a subset of the other set
+    // 持ち駒のビット表現のビットが立っている位置の集合が
+    // もう片方の集合の部分集合になっていることを確認する
     int8_t color_idx = (color == COLOR_BLACK) ? 0 : 1;
 
     return (_handBits[color_idx] & other._handBits[color_idx]) == _handBits[color_idx];
   }
 
   /**
-   * Returns true if this board is a subordinate board of the specified board.
-   * @param other The board to compare against
-   * @param color The side to evaluate
-   * @return True if this is a subordinate board
+   * この盤面が指定された盤面の劣後盤面であればtrueを返す。
+   * @param other 比較対象の盤面
+   * @param color 評価対象の手番
+   * @return 劣後盤面であればtrue
    */
   inline bool isLesserThan(const Board& other, int8_t color) const {
-    // If the hash values of the boards are different,
-    // the piece placement is determined to be different
+    // 手番が異なるならば違う盤面と判断する
+    if (_color != other._color) {
+      return false;
+    }
+
+    // 盤面のハッシュ値が異なるならば、盤上の駒の配置が異なると判断する
     if (_cellHash != other._cellHash) {
       return false;
     }
 
-    // Return false if the piece placement on the board is different
+    // 盤面の配置が異なるならFalseを返す
     if (_colorBitBoards[0] != other._colorBitBoards[0] ||
         _colorBitBoards[1] != other._colorBitBoards[1]) {
       return false;
     }
 
-    // If the bit representation of hand pieces is the same,
-    // the number of hand pieces is also considered to be the same
+    // 持ち駒のビット表現が同じならば、持ち駒の数も同じであると判断する
     if (_handBits[0] == other._handBits[0] && _handBits[1] == other._handBits[1]) {
       return false;
     }
 
-    // Check that the set of bit positions of hand pieces representation
-    // is a subset of the other set
+    // 持ち駒のビット表現のビットが立っている位置の集合が
+    // もう片方の集合の部分集合になっていることを確認する
     int8_t color_idx = (color == COLOR_BLACK) ? 0 : 1;
 
     return (_handBits[color_idx] & other._handBits[color_idx]) == _handBits[color_idx];
   }
 
   /**
-   * Gets the piece at the specified position.
-   * @param position The position on the board
-   * @return The piece type
+   * 指定された座標の駒を取得する。
+   * @param x x座標
+   * @param y y座標
+   * @return 駒の種類
    */
   inline uint8_t getPiece(const Position& position) const {
     return _cells[position.getIndex()];
   }
 
   /**
-   * Gets the number of hand pieces of the specified type.
-   * @param color The side to move
-   * @param piece The piece type
-   * @return The number of hand pieces
+   * 指定された種類の持ち駒の数を取得する。
+   * @param color 手番
+   * @param piece 駒の種類
+   * @return 持ち駒の数
    */
   inline int8_t getHandPieceNum(int8_t color, uint8_t piece) const {
     return _hands[(color == COLOR_BLACK) ? 0 : 1][piece];
   }
 
   /**
-   * Gets the last move made.
-   * @return The last move
+   * 最後の着手を取得する。
+   * @return 最後の着手
    */
   inline Move getLastMove() const {
     return _lastMove;
   }
 
   /**
-   * Writes the string representation of the board to the output stream.
-   * @param os Output stream
-   * @param board Board object
-   * @return Output stream
+   * 盤面情報の文字列表現を出力ストリームに書き込む。
+   * @param os 出力ストリーム
+   * @param board 盤面オブジェクト
+   * @return 出力ストリーム
    */
   friend std::ostream& operator<<(std::ostream& os, const Board& board) {
     os << board.toString();
@@ -258,345 +267,346 @@ class Board {
 
  private:
   /**
-   * Copies the board object.
-   * Copying via the `=` operator is for internal use only.
-   * @param board The source board object to copy from
+   * 盤面オブジェクトをコピーする。
+   * 演算子`=`によるコピーは内部でのみ使用可能とする。
+   * @param board コピー元の盤面オブジェクト
    */
   Board(const Board& board) = default;
 
   /**
-   * Array representing the state of each square on the board.
+   * 盤面上の各マスの状態を表す配列。
    */
   uint8_t _cells[BOARD_SIZE * BOARD_SIZE];
 
   /**
-   * Hash value representing the piece placement on the board.
+   * 盤面上の駒の配置を表すハッシュ値。
    */
   uint64_t _cellHash;
 
   /**
-   * Array representing the number of hand pieces for each player.
+   * 各プレイヤーの持ち駒の数を表す配列。
    */
   uint8_t _hands[2][PIECE_HAND_END - PIECE_HAND_BEGIN];
 
   /**
-   * Array representing the number of hand pieces for each player using bits.
-   * Sets bits in the following ranges according to the number of pieces.
-   * Pawn: 0-17, Lance: 18-21, Knight: 22-25, Silver: 26-29, Bishop: 30-31, Rook: 32-33, Gold: 34-37
+   * 各プレイヤーの持ち駒の数をビットで表現する配列。
+   * 以下の範囲のビットを駒の数だけ立てる。
+   * 歩: 0-17, 香: 18-21, 桂: 22-25, 銀: 26-29, 角: 30-31, 飛: 32-33, 金: 34-37
    *
-   * This bit representation is used for the following purposes:
-   * - To confirm the hand piece conditions when determining subordinate board states
-   * - To create hand piece information when generating input data for the model
+   * このビット表現は以下の目的で使用される。
+   * - 劣後盤面を判定するときの持ち駒の条件を確認するため
+   * - モデルへの入力データを生成するときの持ち駒の情報を作成するため
    */
   uint64_t _handBits[2];
 
   /**
-   * Position of the king (0: black, 1: white).
+   * 王の位置（0:先手、1:後手）。
    */
   Position _kingPositions[2];
 
   /**
-   * Points required for declaration of victory (0: black, 1: white).
+   * 入玉宣言に必要な点数（0:先手、1:後手）。
    */
   int8_t _nyugyokuScores[2];
 
   /**
-   * The side to move.
+   * 手番。
    */
   int8_t _color;
 
   /**
-   * The current move number.
+   * 現在の手数。
    */
   int16_t _turn;
 
   /**
-   * The move number at which a draw occurs.
+   * 引き分けとなる手数。
    */
   int16_t _drawTurn;
 
   /**
-   * Object storing the last move.
+   * 直前の着手を保存するオブジェクト。
    */
   Move _lastMove;
 
   /**
-   * Bitboards representing the positions of black and white pieces (0: black pieces, 1: white pieces).
-   * Each bit corresponds to a square on the board, with 1 indicating a piece is present and 0 otherwise.
+   * 白黒の駒の所在を表すビットボード（0: 先手の駒、1: 後手の駒）。
+   * 各ビットは盤面上のマスに対応し、駒が存在する場合は1、それ以外は0となる。
    */
   BitBoard _colorBitBoards[2];
 
   /**
-   * Bitboards representing the positions of each piece type (0: black pieces, 1: white pieces).
-   * Each bit corresponds to a square on the board, with 1 indicating a piece is present and 0 otherwise.
-   * Array indices correspond to piece types.
-   * However, the following pieces are assigned to other piece bitboards:
-   *  - Promoted pawn, promoted lance, promoted knight, and promoted silver are assigned to the gold bitboard
-   *  - Horse is assigned to the bishop and king bitboards
-   *  - Dragon is assigned to the rook and king bitboards
+   * 各種類の駒の所在を表すビットボード（0: 先手の駒、1: 後手の駒）。
+   * 各ビットは盤面上のマスに対応し、駒が存在する場合は1、それ以外は0となる。
+   * 配列のインデックスは、駒の種類に対応する。
+   * ただし、以下の駒は別の駒のビットボードに割り当てられる。
+   *  - と金、成香、成桂、成銀は、それぞれ金のビットボードに割り当てられる
+   *  - 馬は、角と王のビットボードに割り当てられる
+   *  - 龍は、飛と王のビットボードに割り当てられる
    */
   BitBoard _pieceBitBoards[2][PIECE_BLACK_PRO_PAWN - PIECE_BLACK_BEGIN];
 
   /**
-   * Places a piece at the specified position.
-   * This function assumes the specified coordinate is empty.
-   * @param pos The position to place the piece
-   * @param piece Integer value representing the piece to place
+   * 指定された位置に駒を配置する。
+   * この関数は指定座標に駒がないことを前提としている。
+   * @param pos 駒を配置する座標
+   * @param piece 配置する駒を表す整数値
    */
   void _putPiece(const Position& pos, uint8_t piece);
 
   /**
-   * Removes a piece from the specified position.
-   * @param pos The position from which to remove the piece
+   * 指定された位置から駒を取り除く。
+   * @param pos 駒を取り除く座標
    */
   void _removePiece(const Position& pos);
 
   /**
-   * Adds a piece to hand.
-   * @param color The side (COLOR_BLACK or COLOR_WHITE)
-   * @param piece Integer value representing the piece to add
-   * @param num The number of pieces to add
+   * 指定された駒を持ち駒として追加する。
+   * @param color 手番（COLOR_BLACK または COLOR_WHITE）
+   * @param piece 追加する駒を表す整数値
+   * @param num 追加する駒の数
    */
   void _addHand(int8_t color, uint8_t piece, int32_t num);
 
   /**
-   * Adds a piece to hand.
-   * @param color The side (COLOR_BLACK or COLOR_WHITE)
-   * @param piece Integer value representing the piece to add
+   * 指定された駒を持ち駒として追加する。
+   * @param color 手番（COLOR_BLACK または COLOR_WHITE）
+   * @param piece 追加する駒を表す整数値
    */
   void _addHand(int8_t color, uint8_t piece);
 
   /**
-   * Removes a piece from hand.
-   * This function assumes the specified piece exists in hand.
-   * @param color The side (COLOR_BLACK or COLOR_WHITE)
-   * @param piece Integer value representing the piece to remove
+   * 指定された駒を持ち駒から取り除く。
+   * この関数は指定された駒が持ち駒に存在することを前提としている。
+   * @param color 手番（COLOR_BLACK または COLOR_WHITE）
+   * @param piece 取り除く駒を表す整数値
    */
   void _removeHand(int8_t color, uint8_t piece);
 
   /**
-   * Returns a list of positions of pieces attacking the specified coordinate.
-   * If the template argument returnOnFirstAttacker is true, only the first attacking piece found is returned.
-   * If additionalOccIndex is specified, a piece blocking that square is assumed when calculating slider attacks.
-   * If the template argument removeOwnKing is true, the own king square is removed when calculating slider attacks.
-   * @param color The side being attacked
-   * @param posIndex The coordinate to check for attacking pieces
-   * @param additionalOccIndex Coordinate to assume a piece is on (-1 if not adding)
-   * @return List of positions of pieces attacking the specified coordinate
+   * 指定された座標に効きをかけている駒の座標の一覧を返す。
+   * template引数returnOnFirstAttackerがtrueの場合は、
+   * 効きをかけている駒の座標のうち最初に見つかった1つのみを返す。
+   * additionalOccIndexで指定された場合は、その座標に動けない駒があるとして飛び駒の効きを計算する。
+   * template引数removeOwnKingがtrueの場合は、飛び駒の効きを計算するときに自分の王の座標を削除する。
+   * @param color 効きをかけられている側の色
+   * @param posIndex 効きをかけている駒の存在を確認する座標
+   * @param additionalOccIndex 追加で駒があると仮定する座標（追加しない場合は-1を指定）
+   * @return 指定された座標に効きをかけている駒の座標の一覧
    */
   template <bool returnOnFirstAttacker, bool removeOwnKing>
   std::vector<int8_t> _getAttackers(
       int8_t color, int8_t posIndex, int8_t additionalOccIndex = -1) const;
 
   /**
-   * Gets the list of legal moves in the current board state.
-   * If the template argument removeUnpromote is true, removes non-promotion moves for pawns, bishops, rooks, and lances on the 2nd row.
-   * If the template argument checkOnly is true, only returns moves that give check.
-   * @param legalMoves Array to add the list of legal moves to
+   * 現在の盤面の合法手の一覧を取得する。
+   * template引数removeUnpromoteがtrueの場合は、歩、角、飛車、2行目の香の不成の手を削除する。
+   * template引数checkOnlyがtrueの場合は、王手が発生する手のみを取得する。
+   * @param legalMoves 合法手の一覧を追加する配列オブジェクト
    */
   template <bool removeUnpromote, bool checkOnly>
   void _getLegalMoves(std::vector<Move>& legalMoves) const;
 
   /**
-   * Creates legal moves for pawn moves.
-   * If the template argument removeUnpromote is true, removes non-promotion moves.
-   * If the template argument checkOnly is true, only returns moves that give check.
-   * @param legalMoves Array to add legal pawn moves to
-   * @param destinationBitBoard Bitboard of valid destinations for pawn moves
+   * 歩の移動の合法手を作成する。
+   * template引数removeUnpromoteがtrueの場合は、不成の手を削除する。
+   * template引数checkOnlyがtrueの場合は、王手が発生する手のみを取得する。
+   * @param legalMoves 歩の移動の合法手の一覧を追加する配列オブジェクト
+   * @param destinationBitBoard 歩の移動の目的地として有効な座標を表すビットボード
    */
   template <bool removeUnpromote, bool checkOnly>
   void _getLegalPawnMoves(
       std::vector<Move>& legalMoves, const BitBoard& destinationBitBoard) const;
 
   /**
-   * Creates legal moves for lance moves.
-   * If the template argument removeUnpromote is true, removes non-promotion moves on the 2nd row.
-   * If the template argument checkOnly is true, only returns moves that give check.
-   * @param legalMoves Array to add legal lance moves to
-   * @param destinationBitBoard Bitboard of valid destinations for lance moves
+   * 香の移動の合法手を作成する。
+   * template引数removeUnpromoteがtrueの場合は、2行目の不成の手を削除する。
+   * template引数checkOnlyがtrueの場合は、王手が発生する手のみを取得する。
+   * @param legalMoves 香の移動の合法手の一覧を追加する配列オブジェクト
+   * @param destinationBitBoard 香の移動の目的地として有効な座標を表すビットボード
    */
   template <bool removeUnpromote, bool checkOnly>
   void _getLegalLanceMoves(
       std::vector<Move>& legalMoves, const BitBoard& destinationBitBoard) const;
 
   /**
-   * Creates legal moves for knight moves.
-   * If the template argument checkOnly is true, only returns moves that give check.
-   * @param legalMoves Array to add legal knight moves to
-   * @param destinationBitBoard Bitboard of valid destinations for knight moves
+   * 桂の移動の合法手を作成する。
+   * template引数checkOnlyがtrueの場合は、王手が発生する手のみを取得する。
+   * @param legalMoves 桂の移動の合法手の一覧を追加する配列オブジェクト
+   * @param destinationBitBoard 桂の移動の目的地として有効な座標を表すビットボード
    */
   template <bool checkOnly>
   void _getLegalKnightMoves(
       std::vector<Move>& legalMoves, const BitBoard& destinationBitBoard) const;
 
   /**
-   * Creates legal moves for silver moves.
-   * If the template argument checkOnly is true, only returns moves that give check.
-   * @param legalMoves Array to add legal silver moves to
-   * @param destinationBitBoard Bitboard of valid destinations for silver moves
+   * 銀の移動の合法手を作成する。
+   * template引数checkOnlyがtrueの場合は、王手が発生する手のみを取得する。
+   * @param legalMoves 銀の移動の合法手の一覧を追加する配列オブジェクト
+   * @param destinationBitBoard 銀の移動の目的地として有効な座標を表すビットボード
    */
   template <bool checkOnly>
   void _getLegalSilverMoves(
       std::vector<Move>& legalMoves, const BitBoard& destinationBitBoard) const;
 
   /**
-   * Creates legal moves for gold moves.
-   * If the template argument checkOnly is true, only returns moves that give check.
-   * @param legalMoves Array to add legal gold moves to
-   * @param destinationBitBoard Bitboard of valid destinations for gold moves
+   * 金の移動の合法手を作成する。
+   * template引数checkOnlyがtrueの場合は、王手が発生する手のみを取得する。
+   * @param legalMoves 金の移動の合法手の一覧を追加する配列オブジェクト
+   * @param destinationBitBoard 金の移動の目的地として有効な座標を表すビットボード
    */
   template <bool checkOnly>
   void _getLegalGoldMoves(
       std::vector<Move>& legalMoves, const BitBoard& destinationBitBoard) const;
 
   /**
-   * Creates legal moves for king moves.
-   * If the template argument checkOnly is true, only returns moves that give check.
-   * @param legalMoves Array to add legal king moves to
-   * @param destinationBitBoard Bitboard of valid destinations for king moves
+   * 王の移動の合法手を作成する。
+   * template引数checkOnlyがtrueの場合は、王手が発生する手のみを取得する。
+   * @param legalMoves 王の移動の合法手の一覧を追加する配列オブジェクト
+   * @param destinationBitBoard 王の移動の目的地として有効な座標を表すビットボード
    */
   template <bool checkOnly>
   void _getLegalKingMoves(
       std::vector<Move>& legalMoves, const BitBoard& destinationBitBoard) const;
 
   /**
-   * Creates legal moves for bishop moves.
-   * If the template argument removeUnpromote is true, removes non-promotion moves.
-   * If the template argument checkOnly is true, only returns moves that give check.
-   * @param legalMoves Array to add legal bishop moves to
-   * @param destinationBitBoard Bitboard of valid destinations for bishop moves
+   * 角の移動の合法手を作成する。
+   * template引数removeUnpromoteがtrueの場合は、不成の手を削除する。
+   * template引数checkOnlyがtrueの場合は、王手が発生する手のみを取得する。
+   * @param legalMoves 角の移動の合法手の一覧を追加する配列オブジェクト
+   * @param destinationBitBoard 角の移動の目的地として有効な座標を表すビットボード
    */
   template <bool removeUnpromote, bool checkOnly>
   void _getLegalBishopMoves(
       std::vector<Move>& legalMoves, const BitBoard& destinationBitBoard) const;
 
   /**
-   * Creates legal moves for rook moves.
-   * If the template argument removeUnpromote is true, removes non-promotion moves.
-   * If the template argument checkOnly is true, only returns moves that give check.
-   * @param legalMoves Array to add legal rook moves to
-   * @param destinationBitBoard Bitboard of valid destinations for rook moves
+   * 飛の移動の合法手を作成する。
+   * template引数removeUnpromoteがtrueの場合は、不成の手を削除する。
+   * template引数checkOnlyがtrueの場合は、王手が発生する手のみを取得する。
+   * @param legalMoves 飛の移動の合法手の一覧を追加する配列オブジェクト
+   * @param destinationBitBoard 飛の移動の目的地として有効な座標を表すビットボード
    */
   template <bool removeUnpromote, bool checkOnly>
   void _getLegalRookMoves(
       std::vector<Move>& legalMoves, const BitBoard& destinationBitBoard) const;
 
   /**
-   * Creates legal moves for hand pawn drops.
-   * If the template argument checkOnly is true, only returns moves that give check.
-   * @param legalMoves Array to add legal hand pawn moves to
-   * @param destinationBitBoard Bitboard of valid destinations for hand pawn drops
+   * 持ち駒の歩の移動の合法手を作成する。
+   * template引数checkOnlyがtrueの場合は、王手が発生する手のみを取得する。
+   * @param legalMoves 持ち駒の歩の移動の合法手の一覧を追加する配列オブジェクト
+   * @param destinationBitBoard 持ち駒の歩の移動の目的地として有効な座標を表すビットボード
    */
   template <bool checkOnly>
   void _getLegalHandPawnMoves(
       std::vector<Move>& legalMoves, const BitBoard& destinationBitBoard) const;
 
   /**
-   * Creates legal moves for hand lance drops.
-   * If the template argument checkOnly is true, only returns moves that give check.
-   * @param legalMoves Array to add legal hand lance moves to
-   * @param destinationBitBoard Bitboard of valid destinations for hand lance drops
+   * 持ち駒の香の移動の合法手を作成する。
+   * template引数checkOnlyがtrueの場合は、王手が発生する手のみを取得する。
+   * @param legalMoves 持ち駒の香の移動の合法手の一覧を追加する配列オブジェクト
+   * @param destinationBitBoard 持ち駒の香の移動の目的地として有効な座標を表すビットボード
    */
   template <bool checkOnly>
   void _getLegalHandLanceMoves(
       std::vector<Move>& legalMoves, const BitBoard& destinationBitBoard) const;
 
   /**
-   * Creates legal moves for hand knight drops.
-   * If the template argument checkOnly is true, only returns moves that give check.
-   * @param legalMoves Array to add legal hand knight moves to
-   * @param destinationBitBoard Bitboard of valid destinations for hand knight drops
+   * 持ち駒の桂の移動の合法手を作成する。
+   * template引数checkOnlyがtrueの場合は、王手が発生する手のみを取得する。
+   * @param legalMoves 持ち駒の桂の移動の合法手の一覧を追加する配列オブジェクト
+   * @param destinationBitBoard 持ち駒の桂の移動の目的地として有効な座標を表すビットボード
    */
   template <bool checkOnly>
   void _getLegalHandKnightMoves(
       std::vector<Move>& legalMoves, const BitBoard& destinationBitBoard) const;
 
   /**
-   * Creates legal moves for hand silver drops.
-   * If the template argument checkOnly is true, only returns moves that give check.
-   * @param legalMoves Array to add legal hand silver moves to
-   * @param destinationBitBoard Bitboard of valid destinations for hand silver drops
+   * 持ち駒の銀の移動の合法手を作成する。
+   * template引数checkOnlyがtrueの場合は、王手が発生する手のみを取得する。
+   * @param legalMoves 持ち駒の銀の移動の合法手の一覧を追加する配列オブジェクト
+   * @param destinationBitBoard 持ち駒の銀の移動の目的地として有効な座標を表すビットボード
    */
   template <bool checkOnly>
   void _getLegalHandSilverMoves(
       std::vector<Move>& legalMoves, const BitBoard& destinationBitBoard) const;
 
   /**
-   * Creates legal moves for hand gold drops.
-   * If the template argument checkOnly is true, only returns moves that give check.
-   * @param legalMoves Array to add legal hand gold moves to
-   * @param destinationBitBoard Bitboard of valid destinations for hand gold drops
+   * 持ち駒の金の移動の合法手を作成する。
+   * template引数checkOnlyがtrueの場合は、王手が発生する手のみを取得する。
+   * @param legalMoves 持ち駒の金の移動の合法手の一覧を追加する配列オブジェクト
+   * @param destinationBitBoard 持ち駒の金の移動の目的地として有効な座標を表すビットボード
    */
   template <bool checkOnly>
   void _getLegalHandGoldMoves(
       std::vector<Move>& legalMoves, const BitBoard& destinationBitBoard) const;
 
   /**
-   * Creates legal moves for hand bishop drops.
-   * If the template argument checkOnly is true, only returns moves that give check.
-   * @param legalMoves Array to add legal hand bishop moves to
-   * @param destinationBitBoard Bitboard of valid destinations for hand bishop drops
+   * 持ち駒の角の移動の合法手を作成する。
+   * template引数checkOnlyがtrueの場合は、王手が発生する手のみを取得する。
+   * @param legalMoves 持ち駒の角の移動の合法手の一覧を追加する配列オブジェクト
+   * @param destinationBitBoard 持ち駒の角の移動の目的地として有効な座標を表すビットボード
    */
   template <bool checkOnly>
   void _getLegalHandBishopMoves(
       std::vector<Move>& legalMoves, const BitBoard& destinationBitBoard) const;
 
   /**
-   * Creates legal moves for hand rook drops.
-   * If the template argument checkOnly is true, only returns moves that give check.
-   * @param legalMoves Array to add legal hand rook moves to
-   * @param destinationBitBoard Bitboard of valid destinations for hand rook drops
+   * 持ち駒の飛の移動の合法手を作成する。
+   * template引数checkOnlyがtrueの場合は、王手が発生する手のみを取得する。
+   * @param legalMoves 持ち駒の飛の移動の合法手の一覧を追加する配列オブジェクト
+   * @param destinationBitBoard 持ち駒の飛の移動の目的地として有効な座標を表すビットボード
    */
   template <bool checkOnly>
   void _getLegalHandRookMoves(
       std::vector<Move>& legalMoves, const BitBoard& destinationBitBoard) const;
 
   /**
-   * Returns whether a move from the specified position to another position gives check.
-   * The template argument piece specifies the type of piece being moved (use PIECE_BLACK_XXX).
-   * @param srcIndex Integer value representing the source position
-   * @param dstIndex Integer value representing the destination position
-   * @return True if the move gives check
+   * 指定された位置から指定された位置への移動が王手になるかを返す。
+   * template引数pieceで移動させる駒の種類を指定する（PIECE_BLACK_XXXで指定する）。
+   * @param srcIndex 移動元の位置を表す整数値
+   * @param dstIndex 移動先の位置を表す整数値
+   * @return 指定された位置から指定された位置への移動が王手になる場合はtrue
    */
   template <uint8_t piece>
   bool _isCheckMove(int8_t srcIndex, int8_t dstIndex) const;
 
   /**
-   * Returns whether a move from the specified position to another position creates a discovered check.
-   * @param srcIndex Integer value representing the source position
-   * @param dstIndex Integer value representing the destination position
-   * @param color The side being checked
-   * @return True if the move creates a discovered check
+   * 指定された位置から指定された位置への移動が空き王手を発生させるかを返す。
+   * @param srcIndex 移動元の位置を表す整数値
+   * @param dstIndex 移動先の位置を表す整数値
+   * @param color 確認対象となる王の駒の手番
+   * @return 指定された位置から指定された位置への移動が空き王手を発生させる場合はtrue
    */
   bool _isDiscoveredCheckMove(int8_t srcIndex, int8_t dstIndex, int8_t color) const;
 
   /**
-   * Returns whether a drop to the specified position gives check.
-   * The template argument piece specifies the type of piece being dropped (use PIECE_BLACK_XXX).
-   * @param dstIndex Integer value representing the destination position
-   * @return True if the drop gives check
+   * 指定された位置への駒の打ちが王手になるかを返す。
+   * template引数pieceで打つ駒の種類を指定する（PIECE_BLACK_XXXで指定する）。
+   * @param dstIndex 移動先の位置を表す整数値
+   * @return 指定された位置への駒の打ちが王手になる場合はtrue
    */
   template <uint8_t piece>
   bool _isDropCheckMove(int8_t dstIndex) const;
 
   /**
-   * Returns whether a pawn drop at the specified position is an illegal pawn drop checkmate.
-   * @param dstIndex Integer value representing the destination position
-   * @return True if the pawn drop is an illegal checkmate
+   * 指定された位置への歩の打ちが打ち歩詰めになるかを返す。
+   * @param dstIndex 移動先の位置を表す整数値
+   * @return 指定された位置への歩の打ちが打ち歩詰めになる場合はtrue
    */
   bool _isDropPawnCheckmateMove(int8_t dstIndex) const;
 
   /**
-   * Gets board data to input to the model.
-   * @param inputs Board data to input to the model
-   * @param color The side to move (COLOR_BLACK or COLOR_WHITE)
+   * モデルに入力する盤面データを取得する。
+   * @param inputs モデルに入力する盤面データ
+   * @param color 手番（COLOR_BLACK または COLOR_WHITE）
    */
   void _getBoardInputs(int32_t* inputs, int8_t color) const;
 
   /**
-   * Gets game data to input to the model.
-   * @param inputs Game data to input to the model
-   * @param color The side to move (COLOR_BLACK or COLOR_WHITE)
+   * モデルに入力するゲームデータを取得する。
+   * @param inputs モデルに入力するゲームデータ
+   * @param color 手番（COLOR_BLACK または COLOR_WHITE）
    */
   void _getInfoInputs(int32_t* inputs, int8_t color) const;
 };

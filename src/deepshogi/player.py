@@ -12,8 +12,7 @@ from .config import (BOARD_SIZE, COLOR_BLACK, COLOR_NONE, COLOR_WHITE,
                      DEFAULT_PUCB_CONSTANT_BASE, DEFAULT_PUCB_CONSTANT_INIT,
                      DEFAULT_UCB_CONSTANT, RESULT_MAX_MOVES, RESULT_NONE,
                      RESULT_NYUGYOKU, RESULT_SENNICHITE, RESULT_TSUMI,
-                     SEARCH_PUCB, SEARCH_UCB, get_color_name,
-                     get_opposite_color)
+                     get_color_name, get_opposite_color)
 from .exception import ShogiException
 from .native import NativePlayer
 from .processor import Processor
@@ -50,7 +49,6 @@ class Candidate(object):
         playouts: int,
         policy: float,
         value: float,
-        minimax: float,
         variations: List[int],
     ) -> None:
         '''Initialize candidate move object.
@@ -63,7 +61,6 @@ class Candidate(object):
             playouts (int): Number of playouts
             policy (float): Expected move probability
             value (float): Predicted win rate
-            minimax (float): Minimax value
             variations (List[int]): Expected sequence (move representation)
         '''
         self.src = src
@@ -74,7 +71,6 @@ class Candidate(object):
         self.playouts = playouts
         self.policy = policy
         self.value = value
-        self.minimax = minimax
         self.variations = [parse_move16(v) for v in variations]
 
         if math.isnan(self.policy):
@@ -83,39 +79,21 @@ class Candidate(object):
         if math.isnan(self.value):
             raise ShogiException('value is NaN')
 
-        if math.isnan(self.minimax):
-            raise ShogiException('minimax is NaN')
-
         self.value_lcb = value - color * 1.96 * 0.5 / (visits + 1)**0.5
-        self.minimax_lcb = minimax - color * 1.96 * 0.5 / (visits + 1)**0.5
 
-    def get_win_chance(self, criterion: str) -> float:
+    def get_win_chance(self) -> float:
         '''Get the win rate.
-        Args:
-            criterion (str): Criterion ('value', 'minimax', 'visits')
         Returns:
             float: Win rate
         '''
-        if criterion == 'value' or criterion == 'visits':
-            return self.value * self.color * 0.5 + 0.5
-        elif criterion == 'minimax':
-            return self.minimax * self.color * 0.5 + 0.5
-        else:
-            raise ValueError(f'Unknown criterion: {criterion}')
+        return self.value * self.color * 0.5 + 0.5
 
-    def get_win_chance_lcb(self, criterion: str) -> float:
+    def get_win_chance_lcb(self) -> float:
         '''Get the lower confidence bound of the win rate.
-        Args:
-            criterion (str): Criterion ('value', 'minimax', 'visits')
         Returns:
             float: Lower confidence bound of the win rate
         '''
-        if criterion == 'value' or criterion == 'visits':
-            return self.value_lcb * self.color * 0.5 + 0.5
-        elif criterion == 'minimax':
-            return self.minimax_lcb * self.color * 0.5 + 0.5
-        else:
-            raise ValueError(f'Unknown criterion: {criterion}')
+        return self.value_lcb * self.color * 0.5 + 0.5
 
     def __str__(self) -> str:
         return (
@@ -123,8 +101,7 @@ class Candidate(object):
             f'src={self.src}, dst={self.dst}, promote={self.promote},'
             f' color={get_color_name(self.color)},'
             f' visits={self.visits}, playouts={self.playouts}, policy={self.policy:.2f},'
-            f' value={self.value:.3f}, minimax={self.minimax:.3f},'
-            f' value_lcb={self.value_lcb:.3f}, minimax_lcb={self.minimax_lcb:.3f},'
+            f' value={self.value:.3f}, value_lcb={self.value_lcb:.3f},'
             f' variations={self.variations})')
 
     def __repr__(self) -> str:
@@ -226,17 +203,16 @@ class Player(object):
         self,
         processor: Processor,
         threads: int = 1,
-        cache_size: int = 0,
+        max_visits: int = DEFAULT_MAX_VISITS,
         initial_sfen: str = DEFAULT_INITIAL_SFEN,
         nyugyoku_scores: Tuple[int, int] = DEFAULT_NYUGYOKU_SCORES,
         draw_turn: int = DEFAULT_DRAW_TURN,
         check_search_depth: int = DEFAULT_CHECK_SEARCH_DEPTH,
         check_search_node: int = DEFAULT_CHECK_SEARCH_NODE,
+        check_node_depth: int = DEFAULT_CHECK_NODE_DEPTH,
         ucb_constant: float = DEFAULT_UCB_CONSTANT,
         pucb_constant_init: float = DEFAULT_PUCB_CONSTANT_INIT,
         pucb_constant_base: float = DEFAULT_PUCB_CONSTANT_BASE,
-        eval_leaf_only: bool = False,
-        max_visits: int = DEFAULT_MAX_VISITS,
         allowed_repeats: int = DEFAULT_ALLOWED_REPEATS,
         check_next_repeats: bool = True,
     ) -> None:
@@ -244,17 +220,16 @@ class Player(object):
         Args:
             processor (Processor): Processor management object
             threads (int): Number of threads to use
-            cache_size (int): Cache size for evaluation results (if 0, caching is disabled)
+            max_visits (int): Maximum number of visits for search
             initial_sfen (str): Initial board in SFEN format
             nyugyoku_scores (Tuple[int, int]): Points required for nyugyoku declaration
             draw_turn (int): Number of turns for a draw
             check_search_depth (int): Depth for checkmate search
             check_search_node (int): Number of nodes for checkmate search
+            check_node_depth (int): Maximum depth of nodes for checkmate search
             ucb_constant (float): Constant multiplied to UCB upper confidence bound
             pucb_constant_init (float): Initial value applied to PUCB upper confidence bound
             pucb_constant_base (float): Base value applied to PUCB upper confidence bound
-            eval_leaf_only (bool): True to evaluate only leaf nodes
-            max_visits (int): Maximum number of visits for search
             allowed_repeats (int): Allowed number of repeats of the same position (default is 3)
             check_next_repeats (bool): True to judge repetition for the next side to move
         '''
@@ -263,10 +238,9 @@ class Player(object):
 
         # Create native object
         self.native = NativePlayer(
-            processor.native, threads, cache_size,
-            nyugyoku_scores, draw_turn, check_search_depth, check_search_node,
-            ucb_constant, pucb_constant_init, pucb_constant_base,
-            eval_leaf_only, max_visits)
+            processor.native, threads, max_visits, nyugyoku_scores, draw_turn,
+            check_search_depth, check_search_node, check_node_depth,
+            ucb_constant, pucb_constant_init, pucb_constant_base)
 
         self.native.initialize(initial_sfen)
 
@@ -321,33 +295,33 @@ class Player(object):
         self,
         width: int = 16,
         timelimit: float = 120.0,
-        criterion: str = 'value',
         temperature: float = 1.0,
         delta: float = 0.1,
+        ponder: bool = False,
     ) -> Candidate:
         '''Return a random move.
         Args:
             width (int): Number of candidate moves
             timelimit (float): Time limit (seconds)
-            criterion (str): Criterion for candidate prioritization ('value', 'minimax', or 'visits')
             temperature (float): Temperature parameter
             delta (float): Allowable win rate drop
+            ponder (bool): True to continue searching
         Returns:
             Candidate: Candidate move
         '''
         # Evaluate the board
-        self.native.start_evaluation(True, SEARCH_PUCB, width, 0, 1.0, 0.0)
-        self.native.wait_evaluation(width + 1, 0, timelimit, True)
+        self.native.start_evaluation(True, width, 1.0, 0.0)
+        self.native.wait_evaluation(width + 1, 0, timelimit, not ponder)
 
         # Create a list of candidate moves
         candidates = [Candidate(*c) for c in self.native.get_candidates()]
 
         # Get the maximum predicted win rate
-        max_win_chance = max(c.get_win_chance(criterion) for c in candidates)
+        max_win_chance = max(c.get_win_chance() for c in candidates)
 
         # Exclude candidate moves whose predicted win rate is more than delta below the maximum
         candidates = [
-            c for c in candidates if c.get_win_chance(criterion) >= max_win_chance - delta]
+            c for c in candidates if c.get_win_chance() >= max_win_chance - delta]
 
         # Convert policy values to selection probabilities
         probs = [c.policy**(1 / max(temperature, 1e-3)) for c in candidates]
@@ -361,10 +335,8 @@ class Player(object):
         playouts: int = 0,
         timelimit: float = 120.0,
         equally: bool = False,
-        algorithm: str = 'pucb',
         criterion: str = 'value',
         candidate_width: int = 0,
-        check_node_depth: int = DEFAULT_CHECK_NODE_DEPTH,
         temperature: float = 1.0,
         noise: float = 0.0,
         sennichite_penalty: float = 0.0,
@@ -376,10 +348,8 @@ class Player(object):
             playouts (int): Target number of playouts
             timelimit (float): Time limit (seconds)
             equally (bool): True to make the number of searches equal, False to use UCB or PUCB
-            algorithm (str): Search algorithm ('ucb' or 'pucb')
-            criterion (str): Criterion for prioritizing candidate moves ('value', 'minimax', or 'visits')
+            criterion (str): Criterion for prioritizing candidate moves ('value' or 'visits')
             candidate_width (int): Search width for candidate moves (if 0, width is automatically adjusted)
-            check_node_depth (int): Maximum depth of nodes for checkmate search
             temperature (float): Temperature parameter for search
             noise (float): Strength of Gumbel noise for search
             sennichite_penalty (float): Penalty to set for repetition (sennichite) evaluation
@@ -387,20 +357,11 @@ class Player(object):
         Returns:
             List[Candidate]: List of candidate moves
         '''
-        # Get the configuration value for the search algorithm
-        if algorithm == 'ucb':
-            algorithm_num = SEARCH_UCB
-        elif algorithm == 'pucb':
-            algorithm_num = SEARCH_PUCB
-        else:
-            raise ValueError(f'Unknown search algorithm: {algorithm}')
-
         # Evaluate the board
         LOGGER.debug(
             'Evaluation: %d visits, %d playouts, %.1f seconds',
             visits, playouts, timelimit)
-        self.native.start_evaluation(
-            equally, algorithm_num, candidate_width, check_node_depth, temperature, noise)
+        self.native.start_evaluation(equally, candidate_width, temperature, noise)
         self.native.wait_evaluation(visits, playouts, timelimit, not ponder)
 
         # Create a list of candidate moves
@@ -424,9 +385,7 @@ class Player(object):
                     value = winner
 
                 candidate.value = value
-                candidate.minimax = value
                 candidate.value_lcb = value
-                candidate.minimax_lcb = value
                 continue
 
             # If not judging repetition for the next side to move, proceed to the next
@@ -447,22 +406,18 @@ class Player(object):
                     continue
                 elif candidate.color == COLOR_BLACK:
                     candidate.value = min(candidate.value, -1 * sennichite_penalty)
-                    candidate.minimax = min(candidate.minimax, -1 * sennichite_penalty)
                     candidate.value_lcb = min(candidate.value_lcb, -1 * sennichite_penalty)
-                    candidate.minimax_lcb = min(candidate.minimax_lcb, -1 * sennichite_penalty)
                     break
                 else:
                     candidate.value = max(candidate.value, sennichite_penalty)
-                    candidate.minimax = max(candidate.minimax, sennichite_penalty)
                     candidate.value_lcb = max(candidate.value_lcb, sennichite_penalty)
-                    candidate.minimax_lcb = max(candidate.minimax_lcb, sennichite_penalty)
                     break
 
         # Sort candidate moves
         if criterion == 'visits':
             candidates.sort(key=lambda cand: cand.visits, reverse=True)
         else:
-            candidates.sort(key=lambda cand: cand.get_win_chance_lcb(criterion), reverse=True)
+            candidates.sort(key=lambda cand: cand.get_win_chance_lcb(), reverse=True)
 
         # Output logs
         if LOGGER.isEnabledFor(logging.DEBUG):
@@ -494,3 +449,10 @@ class Player(object):
         self.native.copy_board_to(board.native)
 
         return board
+
+    def __str__(self) -> str:
+        '''Return the string representation.
+        Returns:
+            str: String representation
+        '''
+        return self.native.to_string()

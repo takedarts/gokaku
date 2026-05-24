@@ -7,17 +7,17 @@
 namespace deepshogi {
 
 /**
- * Creates an invalid move object.
+ * 無効な着手オブジェクトを作成する。
  */
 Move::Move()
     : _move(-1) {
 }
 
 /**
- * Creates a move object with source and destination coordinates and promotion flag.
- * @param src Source position index
- * @param dst Destination position index
- * @param promote Whether to promote
+ * 移動元と移動先の座標番号、成りの有無を指定してオブジェクトを作成する。
+ * @param src 移動元の座標番号
+ * @param dst 移動先の座標番号
+ * @param promote 成りの有無
  */
 Move::Move(const Position& src, const Position& dst, bool promote)
     : _move(((src.getIndex() & 0x7F) << 7) |
@@ -26,16 +26,16 @@ Move::Move(const Position& src, const Position& dst, bool promote)
 }
 
 /**
- * Creates a move object with the specified move number.
- * @param move Move number
+ * 着手番号を指定してオブジェクトを作成する。
+ * @param move 着手番号
  */
 Move::Move(int16_t move)
     : _move(move) {
 }
 
 /**
- * Returns the string representation of this move.
- * @return String representation of the move.
+ * 着手の文字列表現を返す。
+ * @return 着手の文字列表現。
  */
 std::string Move::toString() const {
   if (_move < 0) {

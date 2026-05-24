@@ -4,45 +4,45 @@
 
 namespace deepshogi {
 
-// BitBoard representing enemy territory
+// 敵陣を表すビットボード
 extern const BitBoard BITBOARD_ENEMY_AREAS[2];
 
-// BitBoard representing squares where pawns can be dropped
+// 歩を打てる場所を表すビットボード
 extern const BitBoard BITBOARD_PAWN_DROPABLES[2];
 
-// BitBoard representing squares where knights can be dropped
+// 桂を打てる場所を表すビットボード
 extern const BitBoard BITBOARD_KNIGHT_DROPABLES[2];
 
-// BitBoard representing pawn attacks
+// 歩の利きを表すビットボード
 extern const BitBoard BITBOARD_PAWN_ATTACKS[2][81];
 
-// BitBoard representing lance attacks
+// 香の利きを表すビットボード
 extern const BitBoard BITBOARD_LANCE_ATTACKS[2][81];
 
-// BitBoard representing knight attacks
+// 桂の利きを表すビットボード
 extern const BitBoard BITBOARD_KNIGHT_ATTACKS[2][81];
 
-// BitBoard representing silver attacks
+// 銀の利きを表すビットボード
 extern const BitBoard BITBOARD_SILVER_ATTACKS[2][81];
 
-// BitBoard representing gold attacks
+// 金の利きを表すビットボード
 extern const BitBoard BITBOARD_GOLD_ATTACKS[2][81];
 
-// BitBoard representing king attacks
+// 王の利きを表すビットボード
 extern const BitBoard BITBOARD_KING_ATTACKS[81];
 
-// BitBoard representing long-range attacks
-// The following directions are represented in the bitboards
-// 0: up, 1: up-right, 2: right, 3: down-right, 4: down, 5: down-left, 6: left, 7: up-left
+// 長い利きを表すビットボード
+// 以下の方向の利きを表すビットボードを格納している
+// 0:上, 1:右上, 2:右, 3:右下, 4:下, 5:左下, 6:左, 7:左上
 extern const BitBoard BITBOARD_LONG_ATTACKS[8][81];
 
-// Constants representing direction indices
-// These integers represent the direction between two coordinates
-// 0: up, 1: up-right, 2: right, 3: down-right, 4: down, 5: down-left, 6: left, 7: up-left, 8: other
+// 方向のインデックスを表す定数
+// 2つの座標の方向を表す整数値を格納している
+// 0:上, 1:右上, 2:右, 3:右下, 4:下, 5:左下, 6:左, 7:左上, 8:その他
 extern const int DIRECTION_INDICES[81][81];
 
-// Constants for calculating board hash values
-// Random 64-bit integers for each combination of turn, position, and piece type
+// 盤面のハッシュ値を計算するための定数
+// 手番、位置、駒の種類に対してランダムな64ビット整数値を格納している
 extern const uint64_t BOARD_HASH_VALUES[81][31];
 
 }  //  namespace deepshogi

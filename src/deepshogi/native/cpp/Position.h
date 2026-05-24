@@ -9,114 +9,114 @@
 namespace deepshogi {
 
 /**
- * A class representing coordinates on the board.
+ * 盤面上の座標を表現するクラス。
  *
- * The X and Y coordinates have (0, 0) at the top-right, with X increasing rightward and Y increasing downward.
+ * X座標とY座標は右上を(0, 0)とし、右方向にX座標・下方向にY座標が増加する。
  *   (8, 0), ... (2, 0), (1, 0), (0, 0)
  *   (8, 1), ... (2, 1), (1, 1), (0, 1)
  *   ...
  *   (8, 8), ... (2, 8), (1, 8), (0, 8)
  *
- * The index used as the internal representation is assigned from top-right in row-major order.
- *   index = Y coordinate * BOARD_SIZE + X coordinate
+ * 内部表現としても使用する座標番号は右上から縦横の順で割り当てられる。
+ *   座標番号（index） = Y座標 * BOARD_SIZE + X座標
  *
- * The index is represented as an 8-bit integer (int8_t).
- * Invalid coordinates are represented by a negative index value (typically -1).
+ * 座標番号は8ビットの整数（int8_t）で表現される。
+ * 無効な座標は座標番号が負の値（通常は-1）で表現される。
  */
 class Position {
  public:
   /**
-   * Creates an object representing an invalid coordinate.
+   * 無効な座標を表すオブジェクトを生成する。
    */
   Position();
 
   /**
-   * Creates an object with the specified coordinates.
-   * @param x X coordinate.
-   * @param y Y coordinate.
+   * 座標を指定してオブジェクトを生成する。
+   * @param x X座標。
+   * @param y Y座標。
    */
   Position(int8_t x, int8_t y);
 
   /**
-   * Creates an object with the specified index.
-   * @param index Index.
+   * 座標番号を指定してオブジェクトを生成する。
+   * @param index 座標番号。
    */
   Position(int8_t index);
 
   /**
-   * Creates an object by copying the specified coordinates.
+   * 指定された座標をコピーしてオブジェクトを生成する。
    */
   Position(const Position& other) = default;
 
   /**
-   * Destroys the object.
+   * オブジェクトを破棄する。
    */
   virtual ~Position() = default;
 
   /**
-   * Returns the string representation of the coordinates.
-   * @return String representation of the coordinates.
+   * 座標の文字列表現を返す。
+   * @return 座標の文字列表現。
    */
   std::string toString() const;
 
   /**
-   * Returns the index of the coordinates.
-   * @return Index of the coordinates.
+   * 座標番号を返す。
+   * @return 座標番号。
    */
   inline int8_t getIndex() const {
     return _index;
   }
 
   /**
-   * Returns the X coordinate.
-   * @return X coordinate.
+   * X座標を返す。
+   * @return X座標。
    */
   inline int8_t getX() const {
     return _index / BOARD_SIZE;
   }
 
   /**
-   * Returns the Y coordinate.
-   * @return Y coordinate.
+   * Y座標を返す。
+   * @return Y座標。
    */
   inline int8_t getY() const {
     return _index % BOARD_SIZE;
   }
 
   /**
-   * Returns whether the coordinates are valid.
-   * @return True if the coordinates are valid, false otherwise.
+   * 座標が有効かどうかを返す。
+   * @return 座標が有効ならtrue、無効ならfalse。
    */
   inline bool isValid() const {
     return _index >= 0;
   }
 
   /**
-   * Returns whether the coordinates are equal.
+   * 座標が等しいかどうかを返す。
    */
   inline bool operator==(const Position& other) const {
     return _index == other._index;
   }
 
   /**
-   * Returns whether the coordinates are not equal.
+   * 座標が等しくないかどうかを返す。
    */
   inline bool operator!=(const Position& other) const {
     return _index != other._index;
   }
 
   /**
-   * Returns whether this coordinate is less than the specified coordinate.
+   * この座標が指定された座標より小さいならtrueを返す。
    */
   inline bool operator<(const Position& other) const {
     return _index < other._index;
   }
 
   /**
-   * Writes the string representation of the coordinates to the output stream.
-   * @param os Output stream.
-   * @param position Coordinate object.
-   * @return Output stream.
+   * 座標オブジェクトの文字列表現を出力ストリームに書き込む。
+   * @param os 出力ストリーム。
+   * @param position 座標オブジェクト。
+   * @return 出力ストリーム。
    */
   friend std::ostream& operator<<(std::ostream& os, const Position& position) {
     os << position.toString();
@@ -125,12 +125,12 @@ class Position {
 
  private:
   /**
-   * Index of the coordinates.
+   * 座標番号。
    */
   int8_t _index;
 };
 
-// Object representing invalid coordinates
+// 無効な座標を表すオブジェクト
 const Position POSITION_INVALID = Position(-1);
 
 }  // namespace deepshogi

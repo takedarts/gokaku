@@ -8,112 +8,112 @@
 namespace deepshogi {
 
 /**
- * A class for efficiently performing calculations by representing the board state as a bit sequence.
- * Each bit represents a specific position on the board and is used to indicate the presence and type of pieces.
- * Bit 0 corresponds to the top-right of the board, with bits assigned in vertical and horizontal order.
- * For example, in a 9x9 shogi board, bit 0 represents the top-right square and bit 8 represents the bottom-right square.
- * Since shogi boards are targeted, the following two variables are used to manage the bit state:
- *  - lower (int64_t): Bit sequence representing the lower bits of the board (bits 0-53).
- *  - upper (int32_t): Bit sequence representing the upper bits of the board (bits 54-80).
+ * 盤面の状態をビット列で表現し、効率的な計算を行うためのクラス。
+ * 各ビットは盤面の特定の位置を表し、駒の存在や種類を示すために使用する。
+ * 盤面の右上を0ビット目とし、縦横の順でビットが割り当てられる。
+ * 例えば、9x9の将棋盤の場合、0ビット目は右上のマスを表し、8ビット目は右下のマスを表す。
+ * 将棋盤を想定しているため、以下の2つの変数を使用してビット状態を管理する。
+ *  - lower (int64_t): 盤面の下位ビット（0-53ビット目）を表すビット列。
+ *  - upper (int32_t): 盤面の上位ビット（54-80ビット目）を表すビット列。
  */
 class BitBoard {
  public:
   /**
-   * Creates an object with all bits set to 0.
+   * 全てのビットを0に設定したオブジェクトを生成する。
    */
   BitBoard();
 
   /**
-   * Creates an object with the specified bit sequence set.
-   * @param lower Bit sequence representing the lower bits of the board.
-   * @param upper Bit sequence representing the upper bits of the board.
+   * 指定されたビット列を設定したオブジェクトを生成する。
+   * @param lower 盤面の下位ビットを表すビット列。
+   * @param upper 盤面の上位ビットを表すビット列。
    */
   BitBoard(uint64_t lower, uint32_t upper);
 
   /**
-   * Creates an object with a bit set at the specified position.
-   * @param index Integer value representing the position to set the bit.
+   * 指定された位置にビットを立てたオブジェクトを生成する。
+   * @param index ビットを立てる位置を表す整数値
    */
   BitBoard(int8_t index);
 
   /**
-   * Creates an object by copying the specified bit sequence.
+   * 指定されたビット列をコピーしてオブジェクトを生成する。
    */
   BitBoard(const BitBoard& other) = default;
 
   /**
-   * Destroys the object.
+   * オブジェクトを破棄する。
    */
   virtual ~BitBoard() = default;
 
   /**
-   * Sets a bit at the specified position.
-   * @param index Integer value representing the position to set the bit.
+   * 指定された位置にビットを立てる。
+   * @param index ビットを立てる位置を表す整数値
    */
   void setBit(int8_t index);
 
   /**
-   * Clears the bit at the specified position.
-   * @param index Integer value representing the position to clear the bit.
+   * 指定された位置のビットをクリアする。
+   * @param index ビットをクリアする位置を表す整数値
    */
   void clearBit(int8_t index);
 
   /**
-   * Returns whether the bit at the specified position is set.
-   * @param index Integer value representing the position to check the bit state.
-   * @return true if the bit at the specified position is set.
+   * 指定された位置のビットが立っているかを返す。
+   * @param index ビットの状態を確認する位置を表す整数値
+   * @return 指定された位置のビットが立っている場合はtrue
    */
   bool hasBit(int8_t index) const;
 
   /**
-   * Returns the position of the leftmost set bit.
-   * Returns -1 if all bits are 0.
-   * @return Integer value representing the position of the leftmost set bit.
+   * 最も左のビットが立っている位置を返す。
+   * ビット列が全て0である場合は-1を返す。
+   * @return 最も左のビットが立っている位置を表す整数値
    */
   int8_t getLeftmostBitIndex() const;
 
   /**
-   * Returns the position of the rightmost set bit.
-   * Returns -1 if all bits are 0.
-   * @return Integer value representing the position of the rightmost set bit.
+   * 最も右のビットが立っている位置を返す。
+   * ビット列が全て0である場合は-1を返す。
+   * @return 最も右のビットが立っている位置を表す整数値
    */
   int8_t getRightmostBitIndex() const;
 
   /**
-   * Clears the rightmost set bit and returns its position.
-   * Returns -1 if all bits are 0.
-   * @return Integer value representing the position of the rightmost set bit.
+   * 最も右のビットが立っている位置をクリアし、その位置を返す。
+   * ビット列が全て0である場合は-1を返す。
+   * @return 最も右のビットが立っている位置を表す整数値
    */
   int8_t popRightmostBitIndex();
 
   /**
-   * Represents the bit sequence in string format.
-   * @return String representing the bit sequence.
+   * ビット列を文字列形式で表現する。
+   * @return ビット列を表す文字列
    */
   std::string toString() const;
 
   /**
-   * Returns the result of the logical negation of the bit sequence.
-   * @return BitBoard object with the logical negation applied.
+   * ビット列の論理否定を計算した結果を返す。
+   * @return 論理否定を取った結果のBitBoardオブジェクト
    */
   BitBoard operator~() const;
 
   /**
-   * Left-shifts the bit sequence and assigns it to this object.
-   * @param shift Number of bits to shift.
-   * @return Reference to the BitBoard object with the left-shift applied.
+   * ビット列を左にシフトしてこのオブジェクトに代入する。
+   * @param shift シフトするビット数
+   * @return 左シフトした結果のBitBoardオブジェクトへの参照
    */
   BitBoard& operator<<=(int32_t shift);
 
   /**
-   * Right-shifts the bit sequence and assigns it to this object.
-   * @param shift Number of bits to shift.
-   * @return Reference to the BitBoard object with the right-shift applied.
+   * ビット列を右にシフトしてこのオブジェクトに代入する。
+   * @param shift シフトするビット数
+   * @return 右シフトした結果のBitBoardオブジェクトへの参照
    */
   BitBoard& operator>>=(int32_t shift);
 
   /**
-   * Resets all bits to 0.
+   * 全てのビットを0にリセットする。
    */
   inline void clearAll() {
     _lower = 0;
@@ -121,55 +121,55 @@ class BitBoard {
   }
 
   /**
-   * Returns the lower part of the bit sequence representing the board.
-   * @return Lower bits of the board.
+   * 盤面を表すビット列の下位部分を返す。
+   * @return 盤面の下位ビット
    */
   inline uint64_t getLower() const {
     return _lower;
   }
 
   /**
-   * Returns the upper part of the bit sequence representing the board.
-   * @return Upper bits of the board.
+   * 盤面を表すビット列の上位部分を返す。
+   * @return 盤面の上位ビット
    */
   inline uint32_t getUpper() const {
     return _upper;
   }
 
   /**
-   * Returns the count of set bits in the bit sequence.
-   * @return Integer value representing the count of set bits.
+   * ビット列が立っているビットの数を返す。
+   * @return ビット列が立っているビットの数を表す整数値
    */
   inline int8_t countBit() const {
     return std::popcount(_lower) + std::popcount(_upper);
   }
 
   /**
-   * Returns true if any bit in the bit sequence is set.
-   * @return true if any bit is set.
+   * ビット列のいずれかのビットが立っているならばtrueを返す。
+   * @return ビット列のいずれかのビットが立っている場合はtrue
    */
   explicit inline operator bool() const {
     return _lower != 0 || _upper != 0;
   }
 
   /**
-   * Returns true if the bit sequences are equal.
+   * ビット列が等しいならばtrueを返す。
    */
   inline bool operator==(const BitBoard& other) const {
     return _lower == other._lower && _upper == other._upper;
   }
 
   /**
-   * Returns true if the bit sequences are different.
+   * ビット列が異なるならばtrueを返す。
    */
   inline bool operator!=(const BitBoard& other) const {
     return !(*this == other);
   }
 
   /**
-   * Performs bitwise AND and assigns the result to this object.
-   * @param other BitBoard object to perform AND with.
-   * @return Reference to the BitBoard object with the AND result.
+   * ビット列の論理積をこのオブジェクトに代入する。
+   * @param other 論理積を取る相手のBitBoardオブジェクト
+   * @return 論理積を取った結果のBitBoardオブジェクトへの参照
    */
   inline BitBoard& operator&=(const BitBoard& other) {
     _lower &= other._lower;
@@ -178,9 +178,9 @@ class BitBoard {
   }
 
   /**
-   * Performs bitwise OR and assigns the result to this object.
-   * @param other BitBoard object to perform OR with.
-   * @return Reference to the BitBoard object with the OR result.
+   * ビット列の論理和をこのオブジェクトに代入する。
+   * @param other 論理和を取る相手のBitBoardオブジェクト
+   * @return 論理和を取った結果のBitBoardオブジェクトへの参照
    */
   inline BitBoard& operator|=(const BitBoard& other) {
     _lower |= other._lower;
@@ -189,9 +189,9 @@ class BitBoard {
   }
 
   /**
-   * Performs bitwise XOR and assigns the result to this object.
-   * @param other BitBoard object to perform XOR with.
-   * @return Reference to the BitBoard object with the XOR result.
+   * ビット列の排他的論理和をこのオブジェクトに代入する。
+   * @param other 排他的論理和を取る相手のBitBoardオブジェクト
+   * @return 排他的論理和を取った結果のBitBoardオブジェクトへの参照
    */
   inline BitBoard& operator^=(const BitBoard& other) {
     _lower ^= other._lower;
@@ -200,36 +200,36 @@ class BitBoard {
   }
 
   /**
-   * Returns the bitwise AND of the bit sequences.
-   * @param other BitBoard object to perform AND with.
-   * @return BitBoard object with the AND result.
+   * ビット列の論理積を返す。
+   * @param other 論理積を取る相手のBitBoardオブジェクト
+   * @return 論理積を取った結果のBitBoardオブジェクト
    */
   inline BitBoard operator&(const BitBoard& other) const {
     return BitBoard(_lower & other._lower, _upper & other._upper);
   }
 
   /**
-   * Returns the bitwise OR of the bit sequences.
-   * @param other BitBoard object to perform OR with.
-   * @return BitBoard object with the OR result.
+   * ビット列の論理和を返す。
+   * @param other 論理和を取る相手のBitBoardオブジェクト
+   * @return 論理和を取った結果のBitBoardオブジェクト
    */
   inline BitBoard operator|(const BitBoard& other) const {
     return BitBoard(_lower | other._lower, _upper | other._upper);
   }
 
   /**
-   * Returns the bitwise XOR of the bit sequences.
-   * @param other BitBoard object to perform XOR with.
-   * @return BitBoard object with the XOR result.
+   * ビット列の排他的論理和を返す。
+   * @param other 排他的論理和を取る相手のBitBoardオブジェクト
+   * @return 排他的論理和を取った結果のBitBoardオブジェクト
    */
   inline BitBoard operator^(const BitBoard& other) const {
     return BitBoard(_lower ^ other._lower, _upper ^ other._upper);
   }
 
   /**
-   * Returns the result of left-shifting the bit sequence.
-   * @param shift Number of bits to shift.
-   * @return BitBoard object with the left-shift applied.
+   * ビット列を左にシフトした結果を返す。
+   * @param shift シフトするビット数
+   * @return 左シフトした結果のBitBoardオブジェクト
    */
   inline BitBoard operator<<(int32_t shift) const {
     BitBoard result(*this);
@@ -238,9 +238,9 @@ class BitBoard {
   }
 
   /**
-   * Returns the result of right-shifting the bit sequence.
-   * @param shift Number of bits to shift.
-   * @return BitBoard object with the right-shift applied.
+   * ビット列を右にシフトした結果を返す。
+   * @param shift シフトするビット数
+   * @return 右シフトした結果のBitBoardオブジェクト
    */
   inline BitBoard operator>>(int32_t shift) const {
     BitBoard result(*this);
@@ -249,10 +249,10 @@ class BitBoard {
   }
 
   /**
-   * Compares the magnitude relationship of bit sequences.
-   * Compares the upper bits with priority; if the upper bits are equal, compares the lower bits.
-   * @param other BitBoard object to compare with.
-   * @return true if this bit sequence is less than the other bit sequence.
+   * ビット列の大小関係を比較する。
+   * ビット列の上位部分を優先して比較し、上位部分が等しい場合は下位部分を比較する。
+   * @param other 比較対象のBitBoardオブジェクト
+   * @return ビット列がこのオブジェクトのビット列より小さい場合はtrue
    */
   inline bool operator<(const BitBoard& other) const {
     if (_upper != other._upper) {
@@ -263,10 +263,10 @@ class BitBoard {
   }
 
   /**
-   * Writes the string representation of the bit sequence to an output stream.
-   * @param os Output stream.
-   * @param board BitBoard object.
-   * @return Output stream.
+   * ビット列の文字列表現を出力ストリームに書き込む。
+   * @param os 出力ストリーム
+   * @param board ビットボードオブジェクト
+   * @return 出力ストリーム
    */
   friend std::ostream& operator<<(std::ostream& os, const BitBoard& bitboard) {
     os << bitboard.toString();
@@ -275,12 +275,12 @@ class BitBoard {
 
  private:
   /**
-   * Bit sequence representing the lower bits of the board.
+   * 盤面の下位ビットを表すビット列。
    */
   uint64_t _lower;
 
   /**
-   * Bit sequence representing the upper bits of the board.
+   * 盤面の上位ビットを表すビット列。
    */
   uint32_t _upper;
 };

@@ -16,7 +16,7 @@ def is_hand_position(pos: Tuple[int, int]) -> bool:
     Returns:
         bool: True if it is a hand piece position
     '''
-    return pos[0] >= BOARD_SIZE
+    return pos[0] == BOARD_SIZE
 
 
 class Board(object):

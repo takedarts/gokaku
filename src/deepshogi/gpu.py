@@ -1,7 +1,7 @@
 import logging
 from typing import List, Sequence, Tuple
 
-from deepshogi.native import NativeModel
+from deepshogi.native import NativeInferenceModel
 
 LOGGER = logging.getLogger(__name__)
 
@@ -22,7 +22,7 @@ def get_default_gpus(
         Tuple[List[int], bool]: List of GPU IDs and FP16 availability
     '''
     # Get list of available GPU IDs
-    available_gpus = NativeModel.get_available_gpus()
+    available_gpus = NativeInferenceModel.get_available_gpus()
 
     # If GPU ID list is not specified, set the list of available GPU IDs
     if gpus is None:

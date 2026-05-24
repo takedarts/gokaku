@@ -84,17 +84,16 @@ def usi_move_to_string(src: Tuple[int, int], dst: Tuple[int, int], promote: bool
     return f'{src_str}{dst_str}{promote_str}'
 
 
-def usi_candidate_to_string(candidate: Candidate, criterion: str, index: int) -> str:
+def usi_candidate_to_string(candidate: Candidate, index: int) -> str:
     '''Convert candidate move information to a USI analysis result string.
     Args:
         candidate (Candidate): Candidate move information
-        criterion (str): Criterion ('value', 'minimax', or 'visits')
         index (int): Priority
     Returns:
         str: USI analysis result string
     '''
     nodes = candidate.visits
-    score = get_shogi_score(candidate.get_win_chance(criterion))
+    score = get_shogi_score(candidate.get_win_chance())
     text = f'info multipv {index} nodes {nodes} score cp {score}'
 
     if len(candidate.variations) > 0:
@@ -114,13 +113,14 @@ class USIEngine(object):
         visits: int,
         playouts: int = 0,
         timelimit: float = 0,
-        algorithm: str = 'pucb',
         criterion: str = 'value',
         ponder: bool = False,
+        multipv: int = 1,
         resign_threshold: float = 0.0,
         resign_turn: int = 0,
         initial_turn: int = 4,
         initial_width: int = 16,
+        initial_temperature: float = 1.0,
         nyugyoku_scores: Tuple[int, int] = DEFAULT_NYUGYOKU_SCORES,
         draw_turn: int = DEFAULT_DRAW_TURN,
         check_search_depth: int = DEFAULT_CHECK_SEARCH_DEPTH,
@@ -142,13 +142,14 @@ class USIEngine(object):
             visits (int): Number of search visits
             playouts (int): Number of search playouts
             timelimit (float): Thinking time limit (seconds)
-            algorithm (str): Search algorithm ('ucb' or 'pucb')
-            criterion (str): Criterion for prioritizing candidate moves ('value', 'minimax', or 'visits')
+            criterion (str): Criterion for prioritizing candidate moves ('value' or 'visits')
             ponder (bool): True to continue analysis during opponent's thinking
+            multipv (int): Number of candidate moves to output in analysis results
             resign_threshold (float): Win rate threshold for resignation
             resign_turn (int): Minimum number of turns before resignation
             initial_turn (int): Number of initial turns for random moves
             initial_width (int): Number of candidate moves for random moves
+            initial_temperature (float): Temperature parameter for random move selection
             nyugyoku_scores (Tuple[int,int]): Points required for nyugyoku declaration
             draw_turn (int): Number of turns for a draw
             check_search_depth (int): Depth for checkmate search
@@ -179,15 +180,16 @@ class USIEngine(object):
         self.visits = visits
         self.playouts = playouts
         self.timelimit = timelimit
-        self.algorithm = algorithm
         self.criterion = criterion
         self.ponder = ponder
+        self.multipv = multipv
 
         self.resign_threshold = resign_threshold
         self.resign_turn = resign_turn
 
         self.initial_turn = initial_turn
         self.initial_width = initial_width
+        self.initial_temperature = initial_temperature
 
         self.client_name = client_name
         self.client_version = client_version
@@ -223,13 +225,16 @@ class USIEngine(object):
                           lambda v: str(int(v * 1000)), lambda s: float(s) / 1000),
             'Ponder': ('check default {}', 'ponder',
                        lambda v: str(v).lower(), lambda s: s.lower() == 'true'),
-            'Algorithm': ('combo default {} var ucb var pucb', 'algorithm', str, str),
-            'Criterion': ('combo default {} var value var minimax var visits',
+            'MultiPV': ('spin default {} min 1', 'multipv', str, int),
+            'Criterion': ('combo default {} var value var visits',
                           'criterion', str, str),
             'ResignThreshold': ('spin default {} min 0 max 100', 'resign_threshold',
                                 lambda v: str(int(v * 100)), lambda s: float(s) / 100),
             'ResignTurn': ('spin default {} min 0', 'resign_turn', str, int),
             'InitialTurn': ('spin default {} min 0', 'initial_turn', str, int),
+            'InitialWidth': ('spin default {} min 1', 'initial_width', str, int),
+            'InitialTemperature': ('spin default {} min 0', 'initial_temperature',
+                                   lambda v: str(int(v * 100)), lambda s: float(s) / 100),
         }
 
     def run(self) -> None:
@@ -389,11 +394,11 @@ class USIEngine(object):
             self.player = Player(
                 processor=self.processor,
                 threads=self.threads,
-                cache_size=max(self.visits, self.playouts * 2) * 2,
                 nyugyoku_scores=self.nyugyoku_scores,
                 draw_turn=self.draw_turn,
                 check_search_depth=self.check_search_depth,
                 check_search_node=self.check_search_node,
+                check_node_depth=self.check_node_depth,
                 ucb_constant=self.ucb_constant,
                 pucb_constant_init=self.pucb_constant_init,
                 pucb_constant_base=self.pucb_constant_base)
@@ -560,7 +565,12 @@ class USIEngine(object):
         # Otherwise, calculate the move using the evaluation function
         if not ponder and len(self.moves) < self.initial_turn:
             LOGGER.debug('RandomMove: turn=%d', len(self.moves))
-            candidates = [self.player.get_random(width=self.initial_width, timelimit=timelimit)]
+            candidates = [self.player.get_random(
+                width=self.initial_width,
+                timelimit=timelimit,
+                temperature=self.initial_temperature,
+                delta=0.01,
+                ponder=self.ponder)]
         else:
             LOGGER.debug(
                 'Evaluate: visits=%d, playouts=%d, timelimit=%.1f, ponder=%s',
@@ -569,9 +579,9 @@ class USIEngine(object):
                 visits=visits,
                 playouts=self.playouts,
                 timelimit=timelimit,
-                algorithm=self.algorithm,
                 criterion=self.criterion,
-                check_node_depth=self.check_node_depth,
+                equally=(self.multipv > 1),
+                candidate_width=self.multipv if self.multipv > 1 else 0,
                 ponder=self.ponder)
 
         # If there are no candidate moves, raise an exception (only occurs if
@@ -585,7 +595,7 @@ class USIEngine(object):
         # Create analysis result string
         if analyze:
             results.extend(
-                usi_candidate_to_string(candidate, self.criterion, i + 1)
+                usi_candidate_to_string(candidate, i + 1)
                 for i, candidate in enumerate(candidates))
 
         # If ponder, do not return bestmove
@@ -593,7 +603,7 @@ class USIEngine(object):
             return (True, '\n'.join(results), True)
 
         # If win rate is below threshold, judge as resignation
-        win_chance = candidates[0].get_win_chance(self.criterion)
+        win_chance = candidates[0].get_win_chance()
 
         if (not ponder
                 and len(self.moves) > self.resign_turn

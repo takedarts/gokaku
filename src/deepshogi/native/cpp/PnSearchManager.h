@@ -11,53 +11,53 @@
 namespace deepshogi {
 
 /**
- * Class that manages PN search engine objects.
+ * PN探索エンジンのオブジェクトを管理するクラス。
  */
 class PnSearchManager {
  public:
   /**
-   * Creates an object that manages PN search engine objects.
-   * @param nodes Maximum number of nodes for search
-   * @param size Number of PN search engines to pool
+   * PN探索エンジンのオブジェクトを管理するクラスのオブジェクトを生成する。
+   * @param nodes 探索の最大ノード数
+   * @param size プールするPN探索エンジンの数
    */
   PnSearchManager(int32_t nodes, int32_t size);
 
   /**
-   * Destroys the object that manages PN search engine objects.
+   * PN探索エンジンのオブジェクトを管理するクラスのオブジェクトを破棄する。
    */
   virtual ~PnSearchManager();
 
   /**
-   * Acquires a PN search engine object.
-   * If no PN search engine objects are available in the pool, blocks the calling thread.
-   * @return Pointer to a PN search engine object
+   * PN探索エンジンのオブジェクトを取得する。
+   * プールにPN探索エンジンのオブジェクトが存在しない場合は、呼び出し元のスレッドをブロックする。
+   * @return PN探索エンジンのオブジェクトへのポインタ
    */
   PnSearchEngine* acquire();
 
   /**
-   * Releases a PN search engine object.
-   * @param engine Pointer to the PN search engine object to release
+   * PN探索エンジンのオブジェクトを返却する。
+   * @param engine 返却するPN探索エンジンのオブジェクトへのポインタ
    */
   void release(PnSearchEngine* engine);
 
  private:
   /**
-   * Mutex for synchronization.
+   * 同期用のミューテックス。
    */
   std::mutex _mutex;
 
   /**
-   * Condition variable.
+   * 条件変数。
    */
   std::condition_variable _condition;
 
   /**
-   * List of PN search engine objects.
+   * PN探索エンジンのオブジェクト一覧。
    */
   std::unique_ptr<PnSearchEngine*[]> _engines;
 
   /**
-   * Pointers to available PN search engines in the pool.
+   * プール中のPN探索エンジンへのポインタ。
    */
   std::queue<PnSearchEngine*> _availableEngines;
 };

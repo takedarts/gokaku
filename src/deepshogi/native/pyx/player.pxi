@@ -5,74 +5,71 @@ from libcpp cimport bool
 from libcpp.vector cimport vector
 from pyx.candidate cimport Candidate
 from pyx.move cimport Move
-from pyx.position cimport Position
 from pyx.player cimport Player
+from pyx.position cimport Position
 
 
 cdef class NativePlayer:
-    '''Class for managing game state and deciding moves as a player.'''
+    '''プレイヤとしてゲームの状態管理と着手の決定を行うクラス。'''
     cdef Player* player
 
     def __cinit__(
         self,
-        processor: NativeProcessor,  # type: ignore
+        processor: NativeInferenceProcessor,  # type: ignore
         threads: int,
-        cache_size: int,
+        max_visits: int,
         nyugyoku_scores: Tuple[int, int],
         draw_turn: int,
         check_search_depth: int,
         check_search_node: int,
+        check_node_depth: int,
         ucb_constant: float,
         pucb_constant_init: float,
         pucb_constant_base: float,
-        eval_leaf_only: bool,
-        max_visits: int,
     )->None:
-        '''Initialize player object.
+        '''プレイヤオブジェクトを初期化する。
         Args:
-            processor (NativeProcessor): Processor object
-            threads (int): Number of threads
-            cache_size (int): Cache size for evaluation results
-            nyugyoku_scores (Tuple[int, int]): Score required for nyugyoku declaration
-            draw_turn (int): Number of moves for a draw
-            check_search_depth (int): Depth for checkmate search
-            check_search_node (int): Number of nodes for checkmate search
-            ucb_constant (float): Constant multiplied to UCB upper confidence bound
-            pucb_constant_init (float): Initial value applied to PUCB upper confidence bound
-            pucb_constant_base (float): Base value applied to PUCB upper confidence bound
-            eval_leaf_only (bool): True to evaluate only leaf nodes
-            max_visits (int): Maximum number of visits for search
+            processor (NativeInferenceProcessor): 推論プロセッサオブジェクト
+            threads (int): スレッド数
+            max_visits (int): ノードの最大訪問回数
+            nyugyoku_scores (Tuple[int, int]): 入玉宣言に必要となる点数
+            draw_turn (int): 引き分けとなるまでの手数
+            check_search_depth (int): 詰み探索の深さ
+            check_search_node (int): 詰み探索のノード数
+            check_node_depth (int): 詰み探索のノードの深さ
+            ucb_constant (float): UCBの信頼上限に掛ける定数
+            pucb_constant_init (float): PUCBの信頼上限に掛ける定数の初期値
+            pucb_constant_base (float): PUCBの信頼上限に掛ける定数の変化値
         '''
         self.player = new Player(
-            processor.processor, threads, cache_size,
+            processor.processor, threads, max_visits,
             nyugyoku_scores[0], nyugyoku_scores[1], draw_turn,
-            check_search_depth, check_search_node,
-            ucb_constant, pucb_constant_init, pucb_constant_base,
-            eval_leaf_only, max_visits)
+            check_search_depth, check_search_node, check_node_depth,
+            ucb_constant, pucb_constant_init, pucb_constant_base)
 
     def __dealloc__(self):
         del self.player
 
     def initialize(self, sfen: str) -> None:
-        '''Set the game state to the initial state.
+        '''対戦状態を初期状態に設定する。
         Args:
-            sfen (str): SFEN string of the position
+            sfen (str): SFEN形式の局面
         '''
         self.player.initialize(sfen.encode('utf-8'))
 
     def get_color(self) -> int:
-        '''Get side to move.
+        '''手番を取得する。
         Returns:
-            int: Side to move
+            int: 手番
         '''
         return self.player.getColor()
 
-    def play(self, src: Tuple[int, int], dst: Tuple[int, int], promote: bool) -> int:
-        '''Move a piece.
+    def play(self, src: Tuple[int, int], dst: Tuple[int, int], promote: bool) -> None:
+        '''駒を動かす。
         Args:
-            src (Tuple[int, int]): Source coordinates
-            dst (Tuple[int, int]): Destination coordinates
-            promote (bool): True if promote
+            src (Tuple[int, int]): 移動元の座標
+            dst (Tuple[int, int]): 移動先の座標
+            promote (bool): 成るかどうか
         '''
         cdef Position src_pos = Position(src[0], src[1])
         cdef Position dst_pos = Position(dst[0], dst[1])
@@ -82,31 +79,26 @@ cdef class NativePlayer:
     def start_evaluation(
         self,
         equally: bool,
-        algorithm: int,
         candidate_width: int,
-        check_node_depth: int,
         temperature: float,
         noise: float,
     ) -> None:
-        '''Start evaluation.
+        '''評価を開始する。
         Args:
-            equally (bool): True to make search count equal, False to use UCB or PUCB
-            algorithm (int): Search algorithm
-            candidate_width (int): Search width for candidate moves (0 for automatic setting)
-            check_node_depth (int): Maximum depth for checkmate search nodes
-            temperature (float): Temperature parameter for search
-            noise (float): Strength of Gumbel noise for search
+            equally (bool): 探索回数を均等にするならTrue、PUCB等を使用するならFalse
+            candidate_width (int): 候補手の探索幅(0ならば探索幅を自動で設定する)
+            temperature (float): 探索の温度パラメータ
+            noise (float): 探索のガンベルノイズの強さ
         '''
-        self.player.startEvaluation(
-            equally, algorithm, candidate_width, check_node_depth, temperature, noise)
+        self.player.startEvaluation(equally, candidate_width, temperature, noise)
 
     def wait_evaluation(self, visits: int, playouts: int, timelimit: float, stop: bool) -> None:
-        '''Wait until the specified number of visits and playouts is reached.
+        '''指定された訪問数とプレイアウト数になるまで待機する。
         Args:
-            visits (int): Number of visits
-            playouts (int): Number of playouts
-            timelimit (float): Time limit (seconds)
-            stop (bool): True to issue stop command
+            visits (int): 訪問数
+            playouts (int): プレイアウト数
+            timelimit (float): 時間制限（秒）
+            stop (bool): 停止命令を出すならばTrue
         '''
         cdef int32_t visits_int = visits
         cdef int32_t playouts_int = playouts
@@ -118,14 +110,14 @@ cdef class NativePlayer:
 
     def get_candidates(
         self,
-    ) -> List[Tuple[Tuple[int, int], Tuple[int, int], int, int, int, float, float, float, List[int]]]:
-        '''Get list of candidate moves.
+    ) -> List[Tuple[Tuple[int, int], Tuple[int, int], int, int, int, float, float, List[int]]]:
+        '''候補手の一覧を取得する。
         Returns:
-            List[Tuple[Tuple[int, int], Tuple[int, int], int, int, int, float, float, float, List[int]]]: List of candidate moves
+            List[Tuple[Tuple[int, int], Tuple[int, int], int, int, int, float, float, List[int]]]: 候補手の一覧
         '''
         cdef vector[Candidate] candidates = self.player.getCandidates()
 
-        results: List[Tuple[Tuple[int, int], Tuple[int, int], int, int, float, float, float, List[int]]] = []
+        results: List[Tuple[Tuple[int, int], Tuple[int, int], int, int, float, float, List[int]]] = []
 
         for i in range(candidates.size()):
             src = (candidates[i].getMove().getSrc().getX(), candidates[i].getMove().getSrc().getY())
@@ -136,26 +128,25 @@ cdef class NativePlayer:
             playouts = candidates[i].getPlayouts()
             policy = candidates[i].getPolicy()
             value = candidates[i].getValue()
-            minimax = candidates[i].getMinimax()
             variations = candidates[i].getVariations()
 
             results.append((
-                src, dst, promote, color, visits, playouts, policy, value, minimax,
+                src, dst, promote, color, visits, playouts, policy, value,
                 [variations[j].getValue() for j in range(variations.size())],
             ))
 
         return results
 
     def copy_board_to(self, board: NativeBoard) -> None:  # type: ignore
-        '''Copy the board state to the specified board object.
+        '''指定された盤面オブジェクトに盤面の状態をコピーする。
         Args:
-            board (NativeBoard): Board object
+            board (NativeBoard): 盤面オブジェクト
         '''
         self.player.copyBoardTo(board.board)
 
-    def get_debug_info(self) -> str:
-        '''Output debug information of the search tree.
+    def to_string(self) -> str:
+        '''プレイヤオブジェクトの状態を表す文字列を取得する。
         Returns:
-            str: Debug information
+            str: プレイヤオブジェクトの状態を表す文字列
         '''
-        return self.player.getDebugInfo().decode('utf-8')
+        return self.player.toString().decode('utf-8')

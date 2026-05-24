@@ -3,9 +3,8 @@ from libcpp cimport bool as cpp_bool
 from libcpp.pair cimport pair
 from libcpp.string cimport string
 from libcpp.vector cimport vector
-from pyx.move cimport Move
+from pyx.move cimport Move, MoveResult
 from pyx.position cimport Position
-from pyx.result cimport Result
 
 
 cdef extern from "cpp/Board.h" namespace "deepshogi":
@@ -13,8 +12,8 @@ cdef extern from "cpp/Board.h" namespace "deepshogi":
         Board() except +
         Board(int8_t nyugyokuScoreBlack, int8_t nyugyokuScoreWhite, int16_t drawTurn)
         void initialize(const string& sfen)
-        Result play(const Move& move) except +
-        void undo(const Result& result)
+        MoveResult play(const Move& move) except +
+        void undo(const MoveResult& result)
         vector[Position] getAttackers(const Position& position) const
         vector[Move] getLegalMoves(cpp_bool removeUnpromote, cpp_bool checkOnly) const
         vector[Move] getCheckmateMoves(int32_t depth) const

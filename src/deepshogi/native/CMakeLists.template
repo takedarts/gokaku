@@ -22,14 +22,25 @@ set( CAFFE2_USE_CUDNN 1 )
 list( APPEND CMAKE_PREFIX_PATH ${Python3_SITELIB} )
 find_package( Torch REQUIRED )
 
+# Find TensorRT libraries
+find_package( TorchTensorRT REQUIRED )
+
 # Set the include directories.
 include_directories( ${CMAKE_CURRENT_LIST_DIR} )
 include_directories( ${PYTHON_INCLUDE_DIRS} )
 include_directories( ${Python3_NumPy_INCLUDE_DIRS} )
 include_directories( ${TORCH_INCLUDE_DIRS} )
 
+if ( USE_TORCH_TENSORRT )
+  include_directories( ${TORCH_TENSORRT_INCLUDE_DIRS} )
+endif()
+
 # Set the libraries.
 set( CYTHON_LIBRARIES ${CYTHON_LIBRARIES} ${TORCH_LIBRARIES} )
+
+if ( USE_TORCH_TENSORRT )
+  set( CYTHON_LIBRARIES ${CYTHON_LIBRARIES} ${TORCH_TENSORRT_LIBRARIES} )
+endif()
 
 # Set the compile options.
 set( CMAKE_CXX_STANDARD 20 )
@@ -43,7 +54,13 @@ else()
 endif()
 
 # If the pyx file is a C++ file, we should specify that here.
-set_source_files_properties(modules.pyx PROPERTIES CYTHON_IS_CXX TRUE )
+set_source_files_properties( modules.pyx PROPERTIES CYTHON_IS_CXX TRUE )
 
 # Multi-file cython modules do not appear to be working at the moment.
 cython_add_module( modules modules.pyx %CPP_FILES%)
+
+# When compiling with torch-tensorrt support, all libraries will be linked.
+if( USE_TORCH_TENSORRT )
+  target_link_options( modules PRIVATE "-Wl,--no-as-needed")
+  target_compile_definitions( modules PRIVATE USE_TORCH_TENSORRT )
+endif()
