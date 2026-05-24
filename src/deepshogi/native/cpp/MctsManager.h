@@ -10,13 +10,13 @@
 
 namespace deepshogi {
 
-// MCTSの探索ノードオブジェクトを管理するクラス。
-// MctsNode.hでMctsNodeクラスが定義されている。
-// 相互参照のため、MctsNodeクラスは前方宣言する。
+// Class that manages MCTS search node objects.
+// MctsNode class is defined in MctsNode.h.
+// MctsNode class is forward-declared due to circular reference.
 class MctsNode;
 
 /**
- * MCTSの探索ノードオブジェクトを管理するクラス。
+ * Class that manages MCTS search node objects.
  */
 class MctsManager {
  private:
@@ -24,44 +24,44 @@ class MctsManager {
 
  public:
   /**
-   * MCTSの探索ノード管理オブジェクトを作成する。
-   * @param parameter MCTSの探索パラメータ
+   * Creates an MCTS search node manager object.
+   * @param parameter MCTS search parameters
    */
   MctsManager(const MctsParameter& parameter);
 
   /**
-   * MCTSの探索ノード管理オブジェクトを破棄する。
+   * Destroys the MCTS search node manager object.
    */
   virtual ~MctsManager() = default;
 
   /**
-   * ノードオブジェクトを作成する。
-   * 未使用のノードオブジェクトがあればそれを返し、なければ新規作成する。
-   * @return ノードオブジェクト
+   * Creates a node object.
+   * Returns an unused node object if one exists, otherwise creates a new one.
+   * @return Node object
    */
   MctsNode* createNode();
 
   /**
-   * ノードオブジェクトを未使用状態にする。
-   * @param node ノードオブジェクト
+   * Marks a node object as unused.
+   * @param node Node object
    */
   void releaseNode(MctsNode* node);
 
   /**
-   * 指定されたノードオブジェクトとそのすべての子ノードオブジェクトを未使用状態にする。
-   * @param root ノードオブジェクト
+   * Marks the specified node object and all its child node objects as unused.
+   * @param root Node object
    */
   void releaseTree(MctsNode* root);
 
   /**
-   * MCTSの探索ノード管理オブジェクトの状態を文字列として取得する。
-   * @return 状態を表す文字列
+   * Gets the state of the MCTS search node manager object as a string.
+   * @return String representing the state
    */
   std::string toString();
 
   /**
-   * MCTSの探索パラメータを取得する。
-   * @return MCTSの探索パラメータ
+   * Gets the MCTS search parameters.
+   * @return MCTS search parameters
    */
   inline const MctsParameter& getParameter() const {
     return _parameter;
@@ -69,27 +69,27 @@ class MctsManager {
 
  private:
   /**
-   * 同期オブジェクト。
+   * Synchronization object.
    */
   std::mutex _mutex;
 
   /**
-   * MCTSの探索パラメータ。
+   * MCTS search parameters.
    */
   MctsParameter _parameter;
 
   /**
-   * ノードオブジェクトの一覧。
+   * List of node objects.
    */
   std::vector<std::unique_ptr<MctsNode>> _nodes;
 
   /**
-   * 未使用のノードオブジェクトの一覧。
+   * List of unused node objects.
    */
   std::vector<MctsNode*> _poolNodes;
 
   /**
-   * 使用中のノードオブジェクトの一覧。
+   * List of node objects currently in use.
    */
   std::set<MctsNode*> _usedNodes;
 };

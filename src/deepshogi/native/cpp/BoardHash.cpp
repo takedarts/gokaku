@@ -3,8 +3,8 @@
 namespace deepshogi {
 
 /**
- * 盤面のハッシュ値を保持するオブジェクトを作成する。
- * @param board 盤面オブジェクト
+ * Creates an object that holds the hash value of a board state.
+ * @param board Board object
  */
 BoardHash::BoardHash(const Board* board) {
   _cellHash = board->_cellHash;

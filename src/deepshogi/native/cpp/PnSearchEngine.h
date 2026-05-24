@@ -12,68 +12,68 @@
 namespace deepshogi {
 
 /**
- * PN探索アルゴリズムを使用して詰み筋を探索するエンジンのクラス。
+ * Engine class that searches for checkmate sequences using the PN search algorithm.
  */
 class PnSearchEngine {
  public:
   /**
-   * PN探索エンジンのオブジェクトを生成する。
-   * @param nodeSize 探索の最大ノード数
+   * Constructs a PN search engine object.
+   * @param nodeSize Maximum number of nodes for the search
    */
   PnSearchEngine(int32_t nodeSize);
 
   /**
-   * コピーコンストラクタを削除する。
+   * Deleted copy constructor.
    */
   PnSearchEngine(const PnSearchEngine& engine) = delete;
 
   /**
-   * PN探索エンジンのオブジェクトを破棄する。
+   * Destroys the PN search engine object.
    */
   virtual ~PnSearchEngine() = default;
 
   /**
-   * 詰み筋を探索して、着手手順を返す。
-   * 詰み筋が見つからない場合は空の配列を返す。
-   * @param board 盤面情報を保持するオブジェクト
-   * @param depth 探索する深さ
-   * @return 詰み筋の着手手順
+   * Searches for a checkmate sequence and returns the move sequence.
+   * Returns an empty array if no checkmate sequence is found.
+   * @param board Object holding the board state
+   * @param depth Search depth
+   * @return Move sequence for the checkmate
    */
   std::vector<Move> getCheckmateMoves(const Board* board, int32_t depth);
 
  private:
   /**
-   * 探索ノードの配列。
+   * Array of search nodes.
    */
   std::vector<PnSearchNode> _nodes;
 
   /**
-   * 探索ノードの数。
+   * Number of search nodes.
    */
   int32_t _nodeSize;
 
   /**
-   * 現在使用しているノード数。
+   * Number of nodes currently in use.
    */
   int32_t _nodeCount;
 
   /**
-   * 探索ノードのキャッシュ。
+   * Cache of search nodes.
    */
   std::map<BoardHash, PnSearchNode*> _nodeCache;
 
   /**
-   * 新しい探索ノードを取得する。
-   * 同じ盤面のノードがキャッシュに存在する場合はそのノードを返す。
-   * 最大ノード数に達している場合はnullptrを返す。
-   * @param board 探索対象となる盤面情報
-   * @param depth 現在の探索深さ
-   * @return 探索ノードのポインタ
+   * Retrieves a new search node.
+   * Returns the cached node if one with the same board state exists.
+   * Returns nullptr if the maximum number of nodes has been reached.
+   * @param board Board state to search
+   * @param depth Current search depth
+   * @return Pointer to the search node
    */
   PnSearchNode* _getNode(const Board* board, int32_t depth);
 
-  // PnSearchNodeクラスのexpand関数がPnSearchEngineクラスの_getNode関数を呼び出すため、
-  // PnSearchNodeクラスのexpand関数をfriend関数として宣言する。
+  // PnSearchNode::expand() calls PnSearchEngine::_getNode(), so
+  // PnSearchNode::expand() is declared as a friend function.
   friend bool PnSearchNode::expand(PnSearchEngine* engine);
 };
 

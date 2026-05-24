@@ -5,12 +5,12 @@
 
 namespace deepshogi {
 
-// 終端ノードを表す定数
+// Constant representing a terminal node
 static const PnSearchNode END_NODE = PnSearchNode();
 
 /**
- * PN探索エンジンのオブジェクトを生成する。
- * @param nodeSize 探索の最大ノード数
+ * Constructs a PN search engine object.
+ * @param nodeSize Maximum number of nodes for the search
  */
 PnSearchEngine::PnSearchEngine(int32_t nodeSize)
     : _nodes(nodeSize),
@@ -20,42 +20,42 @@ PnSearchEngine::PnSearchEngine(int32_t nodeSize)
 }
 
 /**
- * 詰み筋を探索して、着手手順を返す。
- * 詰み筋が見つからない場合は空の配列を返す。
- * @param board 盤面情報を保持するオブジェクト
- * @param depth 探索する深さ
- * @return 詰み筋の着手手順
+ * Searches for a checkmate sequence and returns the move sequence.
+ * Returns an empty array if no checkmate sequence is found.
+ * @param board Object holding the board state
+ * @param depth Search depth
+ * @return Move sequence for the checkmate
  */
 std::vector<Move> PnSearchEngine::getCheckmateMoves(const Board* board, int32_t depth) {
-  // 探索深さは奇数でなければならない
+  // Search depth must be odd
   depth = std::max((depth % 2 == 0) ? depth + 1 : depth, 1);
 
-  // ノードプールをリセットする
+  // Reset the node pool
   _nodeCount = 0;
   _nodeCache.clear();
 
-  // ルートノードを作成する
+  // Create the root node
   PnSearchNode* root = _getNode(board, 0);
 
-  // 探索を実行する
+  // Run the search
   std::vector<PnSearchNode*> parents;
 
-  // 詰みが不詰みが見つかるまで探索を続ける
-  // ただし、最大探索数に達した場合は探索を終了する
+  // Continue searching until checkmate or non-checkmate is determined
+  // Stop if the maximum number of search iterations is reached
   while (root->getPn() != 0 && root->getDn() != 0) {
-    // ルートノードから展開する末端ノードまで探索する
+    // Traverse from the root node down to a terminal node
     PnSearchNode* node = root;
     PnSearchNode* next_node = node->getNextNode();
 
     parents.clear();
 
-    // 末端ノードに到達するまで探索する
+    // Descend until a terminal node is reached
     while (next_node != nullptr) {
-      // ループを検出するために現在のノードを親ノードのリストに追加する
+      // Add the current node to the parent list to detect loops
       parents.push_back(node);
 
-      // 次の探索ノードがいずれかの親ノードの同じノードか劣後ノードである場合は
-      // 次の探索ノードを不詰みノードに置き換える
+      // If the next node is equal to or inferior to any ancestor node,
+      // replace it with the terminal non-checkmate node
       if (std::any_of(parents.begin(), parents.end(), [next_node](PnSearchNode* parent) {
             return next_node->isLesserThanOrEqual(parent);
           })) {
@@ -63,33 +63,33 @@ std::vector<Move> PnSearchEngine::getCheckmateMoves(const Board* board, int32_t 
         next_node = const_cast<PnSearchNode*>(&END_NODE);
       }
 
-      // 次のノードに移動する
+      // Move to the next node
       node = next_node;
       next_node = node->getNextNode();
     }
 
-    // 次の探索ノードが詰み/不詰みノードではない場合はノードを展開する
+    // If the current node is not a checkmate/non-checkmate node, expand it
     if (node->getPn() != 0 && node->getDn() != 0) {
-      // ノードを展開する
-      // ノードの展開の失敗は最大探索ノード数に達したことを意味するため、
-      // ノードの展開に失敗した場合は探索を終了する
+      // Expand the node
+      // A failure to expand means the maximum node count has been reached,
+      // so terminate the search
       if (!node->expand(this)) {
         break;
       }
 
-      // 末端ノードのPN/DN値を更新する
+      // Update the PN/DN values of the terminal node
       node->update(depth);
     }
 
-    // 親ノードのPN/DN値を更新する
-    // 末端ノードが詰み/不詰みノードであっても親ノードのPN/DN値を更新する必要がある。
-    // 親ノードのPN/DN値を更新することでルートノードのPN/DN値に末端ノードの結果を反映させる。
+    // Update the PN/DN values of ancestor nodes
+    // Even if the terminal node is a checkmate/non-checkmate node, the ancestors must still be updated.
+    // Updating ancestors propagates the terminal node result up to the root node.
     for (auto it = parents.rbegin(); it != parents.rend(); it++) {
       (*it)->update(depth);
     }
   }
 
-  // 詰み手順を取得する
+  // Retrieve the checkmate move sequence
   std::vector<Move> checkmate_moves;
   PnSearchNode* node = root;
 
@@ -108,42 +108,42 @@ std::vector<Move> PnSearchEngine::getCheckmateMoves(const Board* board, int32_t 
 }
 
 /**
- * 新しい探索ノードを取得する。
- * 同じ盤面のノードがキャッシュに存在する場合はそのノードを返す。
- * 最大ノード数に達している場合はnullptrを返す。
- * @param board 探索対象となる盤面情報
- * @param depth 現在の探索深さ
- * @return 探索ノードのポインタ
+ * Retrieves a new search node.
+ * Returns the cached node if one with the same board state exists.
+ * Returns nullptr if the maximum number of nodes has been reached.
+ * @param board Board state to search
+ * @param depth Current search depth
+ * @return Pointer to the search node
  */
 PnSearchNode* PnSearchEngine::_getNode(const Board* board, int32_t depth) {
-  // 最大ノード数に達している場合はnullptrを返す
+  // Return nullptr if the maximum node count has been reached
   if (_nodeCount >= _nodeSize) {
     return nullptr;
   }
 
-  // 盤面を表すノードのための変数を宣言する
+  // Declare a variable for the node representing the board state
   PnSearchNode* node = nullptr;
 
-  // ノードキャッシュを確認する
+  // Check the node cache
   BoardHash node_key(board);
   auto it = _nodeCache.find(node_key);
 
-  // キャッシュにノードが存在する場合
+  // If the node exists in the cache
   if (it != _nodeCache.end()) {
-    // キャッシュのノードを使用する
+    // Use the cached node
     node = it->second;
   }
-  // キャッシュにノードが存在しない場合
+  // If the node does not exist in the cache
   else {
-    // ノードプールから新しいノードを取得する
+    // Get a new node from the node pool
     node = &_nodes[_nodeCount];
 
     _nodeCount += 1;
 
-    // ノードを初期化する
+    // Initialize the node
     node->initialize(board, depth);
 
-    // 新しいノードをキャッシュに登録する
+    // Register the new node in the cache
     _nodeCache[node_key] = node;
   }
 

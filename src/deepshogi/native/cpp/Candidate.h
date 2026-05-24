@@ -9,109 +9,109 @@
 namespace deepshogi {
 
 /**
- * 候補手クラス。
+ * Candidate move class.
  */
 class Candidate {
  public:
   /**
-   * 候補手データを作成する。
-   * @param move 着手
-   * @param color 手番
-   * @param visits 訪問回数
-   * @param playouts プレイアウト回数
-   * @param policy 予想着手確率
-   * @param minimax ミニマックス評価値
-   * @param variations 予想進行
+   * Creates candidate move data.
+   * @param move Move
+   * @param color Turn color
+   * @param visits Visit count
+   * @param playouts Playout count
+   * @param policy Predicted move probability
+   * @param minimax Minimax evaluation value
+   * @param variations Predicted line
    */
   Candidate(
       Move move, int32_t color, int32_t visits, int32_t playouts,
       float policy, float value, std::vector<Move> variations);
 
   /**
-   * 候補手データを作成する。
-   * @param move 着手
-   * @param color 手番
-   * @param visits 訪問回数
-   * @param playouts プレイアウト回数
-   * @param policy 予想着手確率
-   * @param value 評価値
+   * Creates candidate move data.
+   * @param move Move
+   * @param color Turn color
+   * @param visits Visit count
+   * @param playouts Playout count
+   * @param policy Predicted move probability
+   * @param value Evaluation value
    */
   Candidate(
       Move move, int32_t color, int32_t visits, int32_t playouts,
       float policy, float value);
 
   /**
-   * インスタンスを破棄する。
+   * Destroys the instance.
    */
   virtual ~Candidate() = default;
 
   /**
-   * 候補手の文字列表現を返す。
-   * @return 候補手の文字列表現。
+   * Returns a string representation of the candidate move.
+   * @return String representation of the candidate move.
    */
   std::string toString() const;
 
   /**
-   * 着手を取得する。
-   * @return 着手
+   * Returns the move.
+   * @return Move
    */
   inline Move getMove() const {
     return _move;
   }
 
   /**
-   * 手番を取得する。
-   * @return 手番
+   * Returns the turn color.
+   * @return Turn color
    */
   inline int32_t getColor() const {
     return _color;
   }
 
   /**
-   * 訪問回数を取得する。
-   * @return 訪問回数
+   * Returns the visit count.
+   * @return Visit count
    */
   inline int32_t getVisits() const {
     return _visits;
   }
 
   /**
-   * プレイアウト回数を取得する。
-   * @return プレイアウト回数
+   * Returns the playout count.
+   * @return Playout count
    */
   inline int32_t getPlayouts() const {
     return _playouts;
   }
 
   /**
-   * 予想着手確率を取得する。
-   * @return 予想着手確率
+   * Returns the predicted move probability.
+   * @return Predicted move probability
    */
   inline float getPolicy() const {
     return _policy;
   }
 
   /**
-   * 評価値を取得する。
-   * @return 評価値
+   * Returns the evaluation value.
+   * @return Evaluation value
    */
   inline float getValue() const {
     return _value;
   }
 
   /**
-   * 予想進行を取得する。
-   * @return 予想進行
+   * Returns the predicted line.
+   * @return Predicted line
    */
   inline std::vector<Move> getVariations() const {
     return _variations;
   }
 
   /**
-   * 候補手の情報を出力ストリームに書き込む。
-   * @param os 出力ストリーム。
-   * @param candidate 候補手オブジェクト。
-   * @return 出力ストリーム。
+   * Writes the candidate move information to an output stream.
+   * @param os Output stream.
+   * @param candidate Candidate move object.
+   * @return Output stream.
    */
   friend std::ostream& operator<<(std::ostream& os, const Candidate& candidate) {
     os << candidate.toString();
@@ -120,37 +120,37 @@ class Candidate {
 
  private:
   /**
-   * 着手。
+   * Move.
    */
   Move _move;
 
   /**
-   * 手番。
+   * Turn color.
    */
   int32_t _color;
 
   /**
-   * 訪問回数。
+   * Visit count.
    */
   int32_t _visits;
 
   /**
-   * プレイアウト回数。
+   * Playout count.
    */
   int32_t _playouts;
 
   /**
-   * 予想着手確率。
+   * Predicted move probability.
    */
   float _policy;
 
   /**
-   * 評価値。
+   * Evaluation value.
    */
   float _value;
 
   /**
-   * 予想進行。
+   * Predicted line.
    */
   std::vector<Move> _variations;
 };

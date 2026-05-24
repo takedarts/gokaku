@@ -7,49 +7,49 @@
 namespace deepshogi {
 
 /**
- * 着手の結果を表すクラス。
- * このクラスは着手とその時に取られた駒の情報を保持する。
- * このクラスは盤面の状態を戻すために使用される。
+ * A class representing the result of a move.
+ * This class holds the move and the piece captured by it.
+ * This class is used to restore the board state.
  */
 class MoveResult {
  public:
   /**
-   * 着手結果オブジェクトを作成する。
-   * 着手はMOVE_INVALIDに初期化される。
-   * 取られた駒はPIECE_EMPTYに初期化される。
+   * Creates a move result object.
+   * The move is initialized to MOVE_INVALID.
+   * The captured piece is initialized to PIECE_EMPTY.
    */
   MoveResult();
 
   /**
-   * 指定された着手と取られた駒の情報を保持するオブジェクトを作成する。
-   * 取られた駒がない場合は取られた駒としてPIECE_EMPTYを指定する。
-   * @param move 着手オブジェクト
-   * @param captured 取られた駒の種類を表す整数値
+   * Creates an object holding the specified move and captured piece.
+   * Specify PIECE_EMPTY as the captured piece if no piece was captured.
+   * @param move Move object
+   * @param captured Integer value representing the type of the captured piece
    */
   MoveResult(const Move& move, uint8_t captured);
 
   /**
-   * コピーコンストラクタはデフォルトの実装を使用する。
+   * Uses the default copy constructor implementation.
    */
   MoveResult(const MoveResult& other) = default;
 
   /**
-   * オブジェクトを破棄する。
+   * Destroys the object.
    */
   virtual ~MoveResult() = default;
 
   /**
-   * 着手を取得する。
-   * @return 着手を表すMoveオブジェクト
+   * Returns the move.
+   * @return Move object representing the move
    */
   inline Move getMove() const {
     return _move;
   }
 
   /**
-   * 取られた駒の種類を取得する。
-   * 取られた駒がない場合はPIECE_EMPTYを返す。
-   * @return 取られた駒の種類を表す整数値
+   * Returns the type of the captured piece.
+   * Returns PIECE_EMPTY if no piece was captured.
+   * @return Integer value representing the type of the captured piece
    */
   inline uint8_t getCaptured() const {
     return _captured;
@@ -57,12 +57,12 @@ class MoveResult {
 
  private:
   /**
-   * 着手。
+   * Move.
    */
   Move _move;
 
   /**
-   * 着手の結果として取られた駒の種類。取られた駒がない場合はPIECE_EMPTY。
+   * Type of the piece captured by the move. PIECE_EMPTY if no piece was captured.
    */
   uint8_t _captured;
 };

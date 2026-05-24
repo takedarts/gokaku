@@ -10,12 +10,12 @@
 
 namespace deepshogi {
 
-// PN探索ノードに設定する値の最大値
+// Maximum value to set in PN search nodes
 static constexpr int32_t MAX_VALUE = 0xffffff;
 
 /**
- * PN探索ノードのオブジェクトを生成する。
- * 不詰みの末端ノードを表すノードとして初期化する。
+ * Constructs a PN search node object.
+ * Initializes the node as a terminal node representing a non-checkmate state.
  */
 PnSearchNode::PnSearchNode()
     : _board(),
@@ -28,12 +28,12 @@ PnSearchNode::PnSearchNode()
 }
 
 /**
- * 指定された盤面情報でこのノードを末端ノードとして初期化する。
- * @param board 盤面オブジェクト
- * @param depth ノードの深さ
+ * Initializes this node as a terminal node with the specified board state.
+ * @param board Board object
+ * @param depth Depth of the node
  */
 void PnSearchNode::initialize(const Board* board, int32_t depth) {
-  // 盤面をコピーして不詰みの末端ノードとしての値を設定する
+  // Copy the board and set values for a terminal node representing non-checkmate
   _board.copyFrom(board);
   _depth = depth;
   _children.clear();
@@ -42,16 +42,16 @@ void PnSearchNode::initialize(const Board* board, int32_t depth) {
   _step = MAX_VALUE;
   _size = 1;
 
-  // 最大手数であれば不詰みとする
+  // Treat as non-checkmate if the maximum number of moves has been reached
   if (_board.getTurn() >= _board.getDrawTurn()) {
     return;
   }
 
-  // PN/DN値を設定する
+  // Set PN/DN values
   if (_depth % 2 == 0) {
-    // 王手をかける手番の場合
-    // 王手をかけられる場合：PN=1, DN=合法手の数, 詰みまでの手数=最大値
-    // 王手をかけられない場合：PN=最大値, DN=0, 詰みまでの手数=最大値
+    // Checking side's turn
+    // Can deliver check: PN=1, DN=number of legal moves, moves to checkmate=max
+    // Cannot deliver check: PN=max, DN=0, moves to checkmate=max
     std::vector<Move> legal_moves = _board.getLegalMoves(false, true);
 
     if (!legal_moves.empty()) {
@@ -64,10 +64,10 @@ void PnSearchNode::initialize(const Board* board, int32_t depth) {
       _step = MAX_VALUE;
     }
   } else {
-    // 王手から逃げる手番の場合
-    // 王手から逃げられる場合：PN=合法手の数, DN=1, 詰みまでの手数=最大値
-    // 王手から逃げられない場合：PN=0, DN=最大値, 詰みまでの手数=1
-    // 同じ座標へ持ち駒を打つ手は駒の種類が異なっていても1つの手としてカウントする
+    // Evading side's turn
+    // Can evade check: PN=number of legal moves, DN=1, moves to checkmate=max
+    // Cannot evade check: PN=0, DN=max, moves to checkmate=1
+    // Moves that drop a piece in hand to the same square are counted as one move even if the piece type differs
     std::vector<Move> legal_moves = _board.getLegalMoves(false, false);
 
     if (!legal_moves.empty()) {
@@ -94,44 +94,44 @@ void PnSearchNode::initialize(const Board* board, int32_t depth) {
 }
 
 /**
- * ノードを展開して子ノードを生成する。
- * @param engine DPFNエンジンのオブジェクト
- * @return ノードを展開できた場合はtrue
+ * Expands the node to generate child nodes.
+ * @param engine PN search engine object
+ * @return true if the node was successfully expanded
  */
 bool PnSearchNode::expand(PnSearchEngine* engine) {
-  // 子ノードをクリアする
+  // Clear child nodes
   _children.clear();
 
-  // 合法手の生成ルールを判別する
-  // depthが偶数の場合：王手をかける手番（王手がかかる手のみを生成する）
-  // depthが奇数の場合：王手から逃げる手番（王手以外の手も生成する）
+  // Determine the rule for generating legal moves
+  // Even depth: checking side's turn (generate only checking moves)
+  // Odd depth: evading side's turn (also generate non-checking moves)
   bool checkmate = (_depth % 2 == 0) ? true : false;
 
-  // 子ノードを登録する
+  // Register child nodes
   Board board;
 
   for (Move& move : _board.getLegalMoves(false, checkmate)) {
-    // 盤面を作成する
+    // Create a board state
     board.copyFrom(&_board);
     board.play(move);
 
-    // ノードオブジェクトを取得する
-    // 同じ盤面のノードがキャッシュに存在する場合はそのノードを返す
-    // 最大ノード数に達している場合はnullptrを返す
+    // Retrieve the node object
+    // If a node with the same board state exists in the cache, return that node
+    // If the maximum number of nodes has been reached, return nullptr
     PnSearchNode* child_node = engine->_getNode(&board, _depth + 1);
 
     if (child_node == nullptr) {
       return false;
     }
 
-    // 子ノードの深さを設定する
-    // ノードキャッシュに同じ盤面のノードが存在する場合、
-    // そのノードの深さが`depth + 1`より大きい場合は深さを`depth + 1`に修正する
+    // Set the depth of the child node
+    // If a node with the same board state exists in the node cache,
+    // and its depth is greater than depth + 1, correct the depth to depth + 1
     if (child_node->_depth > _depth + 1) {
       child_node->_depth = _depth + 1;
     }
 
-    // 子ノードリストに追加する
+    // Add to the child node list
     _children.push_back(std::make_pair(move, child_node));
   }
 
@@ -139,11 +139,11 @@ bool PnSearchNode::expand(PnSearchEngine* engine) {
 }
 
 /**
- * このノードのPN/DN値を更新する。
- * @param depth_limit 深さの制限
+ * Updates the PN/DN values of this node.
+ * @param depth_limit Depth limit
  */
 void PnSearchNode::update(int32_t depth_limit) {
-  // 深さ制限に達した場合は不詰みとする
+  // Treat as non-checkmate if the depth limit is reached
   if (_depth >= depth_limit) {
     _pn = MAX_VALUE;
     _dn = 0;
@@ -152,9 +152,9 @@ void PnSearchNode::update(int32_t depth_limit) {
     return;
   }
 
-  // 王手をかける手番の場合
-  // PN値は子ノードのPN値の最小値、DN値は子ノードのDN値の合計、
-  // 詰みまでの手数は子ノードの詰みまでの手数の最小値+1とする
+  // Checking side's turn
+  // PN value is the minimum of children's PN values, DN value is the sum of children's DN values,
+  // and moves to checkmate is the minimum of children's moves to checkmate + 1
   if (_depth % 2 == 0) {
     _pn = MAX_VALUE;
     _dn = 0;
@@ -164,28 +164,28 @@ void PnSearchNode::update(int32_t depth_limit) {
     for (auto& child_pair : _children) {
       PnSearchNode* child = child_pair.second;
 
-      // PN値は子ノードのPN値の最小値とする
+      // PN value is the minimum of children's PN values
       if (child->_pn < _pn) {
         _pn = child->_pn;
       }
 
-      // DN値は子ノードのDN値の合計とする
+      // DN value is the sum of children's DN values
       _dn = std::min(_dn + child->_dn, MAX_VALUE);
 
-      // 詰みまでの手数は子ノードの詰みまでの手数の最小値+1とする
+      // Moves to checkmate is the minimum of children's moves to checkmate + 1
       if (_step > child->_step + 1) {
         _step = child->_step + 1;
       }
 
-      // ノードのサイズは子ノードのサイズの合計とする
+      // Node size is the sum of children's sizes
       _size = std::min(_size + child->_size, MAX_VALUE);
     }
   }
-  // 王手から逃げる手番の場合
-  // PN値は子ノードのPN値の合計、DN値は子ノードのDN値の最小値、
-  // 詰みまでの手数は子ノードの詰みまでの手数の最大値+1とする。
-  // 子ノードのPN値の合計を計算する際、同じ座標へ持ち駒を打つ手が複数ある場合は、
-  // それらの子ノードのPN値のうち最大のものを合計に加算する。
+  // Evading side's turn
+  // PN value is the sum of children's PN values, DN value is the minimum of children's DN values,
+  // and moves to checkmate is the maximum of children's moves to checkmate + 1.
+  // When computing the sum of children's PN values, if multiple moves drop a piece to the same square,
+  // only the maximum PN value among those child nodes is added to the sum.
   else {
     std::map<Position, int32_t> hand_move_pns;
     _pn = 0;
@@ -194,7 +194,7 @@ void PnSearchNode::update(int32_t depth_limit) {
     _size = 1;
 
     for (auto& [move, child] : _children) {
-      // 同じ座標へ持ち駒を打つ手が複数ある場合は、PN値のうち最大のものを合計に加算する
+      // When multiple moves drop a piece to the same square, add only the maximum PN value to the sum
       if (move.getSrc().getX() == BOARD_SIZE) {
         Position dst = move.getDst();
 
@@ -206,42 +206,42 @@ void PnSearchNode::update(int32_t depth_limit) {
           hand_move_pns[dst] = child->_pn;
         }
       }
-      // 盤上の駒を動かす手はそのままPN値を合計に加算する
+      // For moves that move a piece on the board, add the PN value directly to the sum
       else {
         _pn = std::min(_pn + child->_pn, MAX_VALUE);
       }
 
-      // DN値は子ノードのDN値の最小値とする
+      // DN value is the minimum of children's DN values
       if (child->_dn < _dn) {
         _dn = child->_dn;
       }
 
-      // 詰みまでの手数は子ノードの詰みまでの手数の最大値+1とする
+      // Moves to checkmate is the maximum of children's moves to checkmate + 1
       if (_step < child->_step + 1) {
         _step = child->_step + 1;
       }
 
-      // ノードのサイズは子ノードのサイズの合計とする
+      // Node size is the sum of children's sizes
       _size = std::min(_size + child->_size, MAX_VALUE);
     }
   }
 }
 
 /**
- * 次に探索する子ノードを取得する。
- * このノードが末端ノードの場合はnullptrを返す。
- * 王手をかける手番の場合は「PN値+探索数の対数」が最小の子ノードを返し、
- * 王手から逃げる手番の場合は「DN値+探索数の対数」が最小の子ノードを返す。
- * 探索数を考慮した優先度を計算することで、探索の偏りを減らすことができ、
- * 手数の少ない詰み筋を発見できる可能性が高くなる。
- * @return 次に探索する子ノードのポインタ
+ * Returns the next child node to search.
+ * Returns nullptr if this node is a terminal node.
+ * For the checking side, returns the child node with the minimum "PN value + log(search count)".
+ * For the evading side, returns the child node with the minimum "DN value + log(search count)".
+ * Computing priority with the search count reduces search bias
+ * and increases the chance of finding shorter checkmate sequences.
+ * @return Pointer to the next child node to search
  */
 PnSearchNode* PnSearchNode::getNextNode() {
   PnSearchNode* next_node = nullptr;
 
   if (_depth % 2 == 0) {
-    // 詰み/不詰みが確定していない子ノードの中からPN値が最小のノードを探す
-    // 探索数を考慮するためPN値に探索数の対数を加算した値を優先度とする
+    // Find the child node with the minimum PN value among undecided nodes
+    // Use PN value plus log of search count as priority to account for search frequency
     float max_priority = 0.0f;
 
     for (auto& [move, child] : _children) {
@@ -257,8 +257,8 @@ PnSearchNode* PnSearchNode::getNextNode() {
       }
     }
   } else {
-    // 詰み/不詰みが確定していない子ノードの中からDN値が最小のノードを探す
-    // 探索数を考慮するためDN値に探索数の対数を加算した値を優先度とする
+    // Find the child node with the minimum DN value among undecided nodes
+    // Use DN value plus log of search count as priority to account for search frequency
     float max_priority = 0.0f;
 
     for (auto& [move, child] : _children) {
@@ -279,16 +279,16 @@ PnSearchNode* PnSearchNode::getNextNode() {
 }
 
 /**
- * 詰み手順の着手と子ノードを取得する。
- * 詰み手順となる子ノードが存在しない場合はnullptrを返す。
- * @return 詰み手順の着手と子ノードのペア
+ * Returns the move and child node for the checkmate sequence.
+ * Returns nullptr if no child node forming a checkmate sequence exists.
+ * @return Pair of the checkmate move and child node
  */
 std::pair<Move, PnSearchNode*> PnSearchNode::getCheckmateNode() {
   PnSearchNode* checkmate_node = nullptr;
   Move checkmate_move(MOVE_INVALID);
 
   if (_depth % 2 == 0) {
-    // 王手をかける手番の場合はPN値が0で最小手数の子ノードを探す
+    // For the checking side's turn, find the child node with PN=0 and minimum moves
     int32_t min_step = MAX_VALUE;
 
     for (auto& child_pair : _children) {
@@ -301,7 +301,7 @@ std::pair<Move, PnSearchNode*> PnSearchNode::getCheckmateNode() {
       }
     }
   } else {
-    // 王手から逃げる手番の場合はPN値が0で最大手数の子ノードを探す
+    // For the evading side's turn, find the child node with PN=0 and maximum moves
     int32_t max_step = 0;
 
     for (auto& child_pair : _children) {
@@ -319,9 +319,9 @@ std::pair<Move, PnSearchNode*> PnSearchNode::getCheckmateNode() {
 }
 
 /**
- * 指定された子ノードを新しい子ノードに置き換える。
- * @param targetNode 置き換える子ノード
- * @param newNode 新しい子ノード
+ * Replaces the specified child node with a new child node.
+ * @param targetNode Child node to replace
+ * @param newNode New child node
  */
 void PnSearchNode::replaceChildNode(PnSearchNode* targetNode, PnSearchNode* newNode) {
   for (auto& [move, child] : _children) {
@@ -333,8 +333,8 @@ void PnSearchNode::replaceChildNode(PnSearchNode* targetNode, PnSearchNode* newN
 }
 
 /**
- * ノードの情報を文字列として取得する。
- * @return ノードの情報の文字列
+ * Returns the node information as a string.
+ * @return String representation of the node information
  */
 std::string PnSearchNode::toString() const {
   std::stringstream ss;

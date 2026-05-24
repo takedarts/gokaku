@@ -3,8 +3,8 @@
 namespace deepshogi {
 
 /**
- * スレッド管理オブジェクトを作成する。
- * @param threads スレッド数
+ * Constructs a thread pool object.
+ * @param threads Number of threads
  */
 ThreadPool::ThreadPool(int32_t threads)
     : _mutex(),
@@ -18,7 +18,7 @@ ThreadPool::ThreadPool(int32_t threads)
 }
 
 /**
- * スレッド管理オブジェクトを破棄する。
+ * Destroys the thread pool object.
  */
 ThreadPool::~ThreadPool() {
   {
@@ -34,8 +34,8 @@ ThreadPool::~ThreadPool() {
 }
 
 /**
- * 実行対象のタスクを登録する。
- * @param task タスク
+ * Submits a task for execution.
+ * @param task Task to execute
  */
 void ThreadPool::submit(std::function<void()> task) {
   {
@@ -47,7 +47,7 @@ void ThreadPool::submit(std::function<void()> task) {
 }
 
 /**
- * 探索を実行する。
+ * Worker function executed by each thread.
  */
 void ThreadPool::_run() {
   while (true) {

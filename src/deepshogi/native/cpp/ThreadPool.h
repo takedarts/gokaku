@@ -11,30 +11,30 @@
 namespace deepshogi {
 
 /**
- * スレッド管理クラス。
+ * Thread pool class.
  */
 class ThreadPool {
  public:
   /**
-   * スレッド管理オブジェクトを作成する。
-   * @param threads スレッド数
+   * Constructs a thread pool object.
+   * @param threads Number of threads
    */
   ThreadPool(int32_t threads);
 
   /**
-   * スレッド管理オブジェクトを破棄する。
+   * Destroys the thread pool object.
    */
   virtual ~ThreadPool();
 
   /**
-   * 実行対象のタスクを登録する。
-   * @param task タスク
+   * Submits a task for execution.
+   * @param task Task to execute
    */
   void submit(std::function<void()> task);
 
   /**
-   * スレッド数を返す。
-   * @return スレッド数
+   * Returns the number of threads.
+   * @return Number of threads
    */
   inline int32_t getSize() const {
     return static_cast<int32_t>(_threads.size());
@@ -42,32 +42,32 @@ class ThreadPool {
 
  private:
   /**
-   * 同期用のミューテックス。
+   * Mutex for synchronization.
    */
   std::mutex _mutex;
 
   /**
-   * 同期用の条件変数。
+   * Condition variable for synchronization.
    */
   std::condition_variable _condition;
 
   /**
-   * スレッドオブジェクトの一覧。
+   * List of thread objects.
    */
   std::vector<std::thread> _threads;
 
   /**
-   * 待機中のタスクの一覧。
+   * Queue of pending tasks.
    */
   std::queue<std::function<void()>> _tasks;
 
   /**
-   * 動作を停止するならtrue。
+   * True if the pool should stop.
    */
   bool _terminated;
 
   /**
-   * 探索を実行する。
+   * Worker function executed by each thread.
    */
   void _run();
 };

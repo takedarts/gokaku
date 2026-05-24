@@ -6,8 +6,7 @@ from deepshogi.config import (DEFAULT_BATCH_SIZE, DEFAULT_CHECK_NODE_DEPTH,
                               DEFAULT_CHECK_SEARCH_NODE, DEFAULT_DRAW_TURN,
                               DEFAULT_PUCB_CONSTANT_BASE,
                               DEFAULT_PUCB_CONSTANT_INIT,
-                              DEFAULT_THREADS_PER_GPU, DEFAULT_UCB_CONSTANT,
-                              NAME, VERSION)
+                              DEFAULT_THREADS_PER_GPU, NAME, VERSION)
 from deepshogi.gpu import get_default_gpus
 from deepshogi.log import start_logging
 from deepshogi.processor import Processor
@@ -15,7 +14,7 @@ from deepshogi.usi import USIEngine
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description='Run with GTP mode.')
+    parser = argparse.ArgumentParser(description='Run with USI mode.')
     parser.add_argument(
         'model', type=str, help='Path to the model file')
     parser.add_argument(
@@ -63,9 +62,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         '--check-node-depth', type=int, default=DEFAULT_CHECK_NODE_DEPTH,
         help=f'Node depth where check search runs (default: {DEFAULT_CHECK_NODE_DEPTH})')
-    parser.add_argument(
-        '--ucb-constant', type=float, default=DEFAULT_UCB_CONSTANT,
-        help=f'Constant value in UCB (default: {DEFAULT_UCB_CONSTANT})')
     parser.add_argument(
         '--pucb-constant-init', type=float, default=DEFAULT_PUCB_CONSTANT_INIT,
         help=f'Initial value of the constant in PUCB (default: {DEFAULT_PUCB_CONSTANT_INIT})')
@@ -124,7 +120,7 @@ def main() -> None:
         threads_per_gpu=args.threads_per_gpu,
         cache_size=args.cache_size)
 
-    # Create GPT object
+    # Create USI engine object
     engine = USIEngine(
         processor=processor,
         threads=args.threads,
@@ -143,7 +139,6 @@ def main() -> None:
         check_search_depth=args.check_search_depth,
         check_search_node=args.check_search_node,
         check_node_depth=args.check_node_depth,
-        ucb_constant=args.ucb_constant,
         pucb_constant_init=args.pucb_constant_init,
         pucb_constant_base=args.pucb_constant_base,
         client_name=args.client_name,

@@ -9,11 +9,10 @@ from .config import (AUTHOR, BOARD_SIZE, COLOR_BLACK, COLOR_WHITE,
                      DEFAULT_CHECK_SEARCH_NODE, DEFAULT_DRAW_TURN,
                      DEFAULT_INITIAL_SFEN, DEFAULT_NYUGYOKU_SCORES,
                      DEFAULT_PUCB_CONSTANT_BASE, DEFAULT_PUCB_CONSTANT_INIT,
-                     DEFAULT_UCB_CONSTANT, NAME, PIECE_HAND_BISHOP,
-                     PIECE_HAND_GOLD, PIECE_HAND_KNIGHT, PIECE_HAND_LANCE,
-                     PIECE_HAND_PAWN, PIECE_HAND_ROOK, PIECE_HAND_SILVER,
-                     VERSION, get_color_name, get_opposite_color,
-                     get_shogi_score)
+                     NAME, PIECE_HAND_BISHOP, PIECE_HAND_GOLD,
+                     PIECE_HAND_KNIGHT, PIECE_HAND_LANCE, PIECE_HAND_PAWN,
+                     PIECE_HAND_ROOK, PIECE_HAND_SILVER, VERSION,
+                     get_color_name, get_opposite_color, get_shogi_score)
 from .exception import ShogiException
 from .player import Candidate, Player
 from .processor import Processor
@@ -126,7 +125,6 @@ class USIEngine(object):
         check_search_depth: int = DEFAULT_CHECK_SEARCH_DEPTH,
         check_search_node: int = DEFAULT_CHECK_SEARCH_NODE,
         check_node_depth: int = DEFAULT_CHECK_NODE_DEPTH,
-        ucb_constant: float = DEFAULT_UCB_CONSTANT,
         pucb_constant_init: float = DEFAULT_PUCB_CONSTANT_INIT,
         pucb_constant_base: float = DEFAULT_PUCB_CONSTANT_BASE,
         client_name: str = NAME,
@@ -155,7 +153,6 @@ class USIEngine(object):
             check_search_depth (int): Depth for checkmate search
             check_search_node (int): Number of nodes for checkmate search
             check_node_depth (int): Depth of nodes for checkmate search
-            ucb_constant (float): Constant multiplied to UCB upper confidence bound
             pucb_constant_init (float): Initial value applied to PUCB upper confidence bound
             pucb_constant_base (float): Base value applied to PUCB upper confidence bound
             max_visits (int): Maximum number of search visits
@@ -173,7 +170,6 @@ class USIEngine(object):
         self.check_search_depth = check_search_depth
         self.check_search_node = check_search_node
         self.check_node_depth = check_node_depth
-        self.ucb_constant = ucb_constant
         self.pucb_constant_init = pucb_constant_init
         self.pucb_constant_base = pucb_constant_base
 
@@ -209,8 +205,6 @@ class USIEngine(object):
             'CheckSearchDepth': ('spin default {} min 1', 'check_search_depth', str, int),
             'CheckSearchNode': ('spin default {} min 1', 'check_search_node', str, int),
             'CheckNodeDepth': ('spin default {} min 0', 'check_node_depth', str, int),
-            'UcbConstant': ('spin default {} min 0', 'ucb_constant',
-                            lambda v: str(round(v * 100)), lambda s: float(s) / 100),
             'PucbConstantInit': ('spin default {} min 0', 'pucb_constant_init',
                                  lambda v: str(round(v * 100)), lambda s: float(s) / 100),
             'PucbConstantBase': ('spin default {} min 0', 'pucb_constant_base',
@@ -399,7 +393,6 @@ class USIEngine(object):
                 check_search_depth=self.check_search_depth,
                 check_search_node=self.check_search_node,
                 check_node_depth=self.check_node_depth,
-                ucb_constant=self.ucb_constant,
                 pucb_constant_init=self.pucb_constant_init,
                 pucb_constant_base=self.pucb_constant_base)
 

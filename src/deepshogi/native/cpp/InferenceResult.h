@@ -8,21 +8,21 @@
 namespace deepshogi {
 
 /**
- * 盤面評価結果を格納する構造体。
+ * Structure for storing board evaluation results.
  */
 struct InferenceResult {
   /**
-   * 評価結果オブジェクトを生成する。
+   * Creates an evaluation result object.
    */
   InferenceResult() : value(0.0f), policies() {}
 
   /**
-   * 盤面評価値。
+   * Board evaluation value.
    */
   float value;
 
   /**
-   * 次の着手の予想確率の一覧。
+   * List of predicted probabilities for the next move.
    */
   std::vector<std::pair<Move, float>> policies;
 };

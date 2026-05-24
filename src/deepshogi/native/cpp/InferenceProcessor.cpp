@@ -3,14 +3,14 @@
 namespace deepshogi {
 
 /**
- * 推論管理オブジェクトを生成する。
- * @param model モデルファイル
- * @param gpus GPU番号のリスト
- * @param fp16 16bit精度で計算するならTrue
- * @param deterministic 計算結果を再現可能にするならTrue
- * @param batchSize バッチサイズ
- * @param threadsPerGpu GPUごとのスレッド数
- * @param cacheSize 推論結果のキャッシュサイズ
+ * Creates an inference manager object.
+ * @param model Model file path
+ * @param gpus List of GPU indices
+ * @param fp16 True to compute with 16-bit precision
+ * @param deterministic True to make computation results reproducible
+ * @param batchSize Batch size
+ * @param threadsPerGpu Number of threads per GPU
+ * @param cacheSize Cache size for inference results
  */
 InferenceProcessor::InferenceProcessor(
     std::string model, std::vector<int32_t> gpus, bool fp16, bool deterministic,
@@ -30,28 +30,28 @@ InferenceProcessor::InferenceProcessor(
 }
 
 /**
- * 推論実行を予約する。
- * 推論計算は非同期に実行されるため、この関数はすぐに返る。
- * 推論計算が完了すると、ノードの評価値が更新される。
- * @param node 推論を実行するノード
- * @param callback 推論計算の完了を通知するコールバック関数
+ * Schedules an inference execution.
+ * The inference computation runs asynchronously, so this function returns immediately.
+ * When the computation completes, the node's evaluation value is updated.
+ * @param node Node to run inference on
+ * @param callback Callback function to notify when inference completes
  */
 void InferenceProcessor::submit(
     MctsNode* node, std::function<void(MctsNode*)> callback) {
-  // キャッシュされた推論結果が見つかったときに使用する変数
+  // Variable used when a cached inference result is found
   InferenceResult cached_result;
-  // キャッシュされた推論結果が見つかったかどうかを示すフラグ
+  // Flag indicating whether a cached inference result was found
   bool cached_result_found = false;
-  // 推論実行オブジェクトのインデックス
+  // Index of the inference executor object
   int32_t executor_index;
 
-  // 同期処理を行うためのロックを取得する
+  // Acquire the lock for synchronization
   {
     std::lock_guard<std::mutex> lock(_mutex);
 
-    // キャッシュされた推論結果があるかを確認する
-    // キャッシュされた推論結果がある場合は、その推論結果を保存してフラグを立てる
-    // ノードへの適用とコールバック関数の呼び出しはロックの外で行う
+    // Check if a cached inference result exists
+    // If found, save the cached result and set the flag
+    // Applying to the node and invoking the callback are done outside the lock
     BoardHash boardHash(&node->getBoard());
     auto it = _cacheResults.find(boardHash);
 
@@ -60,7 +60,7 @@ void InferenceProcessor::submit(
       cached_result_found = true;
     }
 
-    // 最も使用されていない推論実行オブジェクトを選択する
+    // Select the least-used inference executor object
     executor_index = 0;
     size_t min_queue_size = _executors[0]->getQueueSize();
 
@@ -74,21 +74,21 @@ void InferenceProcessor::submit(
     }
   }
 
-  // キャッシュされた推論結果が見つかった場合は、それを使用する
+  // If a cached inference result was found, use it
   if (cached_result_found) {
     node->applyInferenceResult(cached_result.value, cached_result.policies);
     callback(node);
     return;
   }
 
-  // 推論終了時のコールバック関数を定義する
+  // Define the callback function invoked when inference completes
   auto exec_callback = [this, node, callback](MctsNode*, const InferenceResult& result) {
-    // 同期処理を行うためのロックを取得する
+    // Acquire the lock for synchronization
     {
       std::lock_guard<std::mutex> lock(_mutex);
 
-      // キャッシュに結果があるかを確認する
-      // 結果がない場合は、キャッシュに保存する
+      // Check if the result is already in the cache
+      // If not, save it to the cache
       BoardHash boardHash(&node->getBoard());
       auto it = _cacheResults.find(boardHash);
 
@@ -97,42 +97,42 @@ void InferenceProcessor::submit(
         _cacheKeys.push(boardHash);
       }
 
-      // キャッシュサイズを超える古いキャッシュを削除する
+      // Remove the oldest cache entry when the cache size is exceeded
       if (_cacheKeys.size() >= _cacheSize) {
         _cacheResults.erase(_cacheKeys.front());
         _cacheKeys.pop();
       }
     }
 
-    // ノードに推論結果を適用する
+    // Apply the inference result to the node
     node->applyInferenceResult(result.value, result.policies);
 
-    // コールバック関数を呼び出す
+    // Invoke the callback function
     callback(node);
   };
 
-  // 推論実行オブジェクトに推論実行を予約する
+  // Schedule inference execution on the executor object
   _executors[executor_index]->submit(node, exec_callback);
 }
 
 /**
- * 指定された盤面の評価値を取得する。
- * @param board 評価する盤面
- * @return 評価値
+ * Returns the evaluation value for the specified board.
+ * @param board Board to evaluate
+ * @return Evaluation value
  */
 float InferenceProcessor::predict(Board* board) {
-  // ダミーのノードオブジェクトを生成する
-  MctsManager manager(MctsParameter(28, 27, 512, 1.0f, 1.0f, 18200.0f));
+  // Create a dummy node object
+  MctsManager manager(MctsParameter(28, 27, 512, 1.0f, 18200.0f));
   MctsNode node(&manager);
 
-  // ノードオブジェクトに盤面を設定する
+  // Set the board on the node object
   node.initialize(board->getSfen());
 
-  // 推論処理の終了を待つための同期オブジェクトと条件変数を生成する
+  // Create a mutex and condition variable to wait for inference to complete
   std::mutex mutex;
   std::condition_variable cv;
 
-  // 推論処理を実行してノードの評価値が更新されるのを待つ
+  // Run inference and wait for the node's evaluation value to be updated
   {
     std::unique_lock<std::mutex> lock(mutex);
     submit(&node, [&cv](MctsNode*) { cv.notify_one(); });
@@ -143,11 +143,11 @@ float InferenceProcessor::predict(Board* board) {
 }
 
 /**
- * 推論を同期的に実行する。
- * @param inputs 入力データ
- * @param masks 出力データのマスク
- * @param outputs 出力データ
- * @param size 評価データの数
+ * Runs inference synchronously.
+ * @param inputs Input data
+ * @param masks Output data mask
+ * @param outputs Output data
+ * @param size Number of evaluation data items
  */
 void InferenceProcessor::execute(int32_t* inputs, int32_t* masks, float* outputs, int32_t size) {
   _executors[0]->execute(inputs, masks, outputs, size);

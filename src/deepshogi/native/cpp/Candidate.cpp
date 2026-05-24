@@ -5,13 +5,13 @@
 namespace deepshogi {
 
 /**
- * 候補手データを作成する。
- * @param move 着手
- * @param visits 訪問回数
- * @param playouts プレイアウト回数
- * @param policy 予想着手確率
- * @param value 評価値
- * @param variations 予想進行
+ * Creates candidate move data.
+ * @param move Move
+ * @param visits Visit count
+ * @param playouts Playout count
+ * @param policy Predicted move probability
+ * @param value Evaluation value
+ * @param variations Predicted line
  */
 Candidate::Candidate(
     Move move, int32_t color, int32_t visits, int32_t playouts,
@@ -26,13 +26,13 @@ Candidate::Candidate(
 }
 
 /**
- * 候補手データを作成する。
- * @param move 着手
- * @param color 手番
- * @param visits 訪問回数
- * @param playouts プレイアウト回数
- * @param policy 予想着手確率
- * @param value 評価値
+ * Creates candidate move data.
+ * @param move Move
+ * @param color Turn color
+ * @param visits Visit count
+ * @param playouts Playout count
+ * @param policy Predicted move probability
+ * @param value Evaluation value
  */
 Candidate::Candidate(
     Move move, int32_t color, int32_t visits, int32_t playouts,
@@ -44,8 +44,8 @@ Candidate::Candidate(
 }
 
 /**
- * 候補手の文字列表現を返す。
- * @return 候補手の文字列表現。
+ * Returns a string representation of the candidate move.
+ * @return String representation of the candidate move.
  */
 std::string Candidate::toString() const {
   std::stringstream ss;

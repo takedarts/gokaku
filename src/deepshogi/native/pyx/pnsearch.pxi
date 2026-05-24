@@ -6,18 +6,18 @@ from pyx.pnsearch cimport PnSearchEngine
 
 
 cdef class NativePnSearch:
-    '''PN探索を実行するためのクラス'''
+    '''Class for running PN search.'''
     cdef PnSearchEngine* engine
 
     def __cinit__(self, nodes: int) -> None:
-        '''PN探索オブジェクトを作成する
+        '''Creates a PN search object.
         Args:
-            nodes: 探索で使用する最大ノード数
+            nodes: Maximum number of nodes used in the search
         '''
         self.engine = new PnSearchEngine(nodes)
 
     def __dealloc__(self) -> None:
-        '''PN探索オブジェクトを破棄する'''
+        '''Destroys the PN search object.'''
         del self.engine
 
     def get_checkmate_moves(
@@ -25,13 +25,13 @@ cdef class NativePnSearch:
         board: NativeBoard,  # type: ignore
         depth: int,
     ) -> List[Tuple[Tuple[int, int], Tuple[int, int], bool]]:
-        '''詰み筋を探索して、着手手順を返す。
-        詰み筋が見つからない場合は空のリストを返す。
+        '''Searches for a checkmate sequence and returns the move sequence.
+        Returns an empty list if no checkmate sequence is found.
         Args:
-            board (NativeBoard): 盤面オブジェクト
-            depth (int): 探索の最大深さ
+            board (NativeBoard): Board object
+            depth (int): Maximum search depth
         Returns:
-            List[Tuple[Tuple[int, int], Tuple[int, int], bool]]: 詰み筋の手順のリスト
+            List[Tuple[Tuple[int, int], Tuple[int, int], bool]]: List of moves in the checkmate sequence
         '''
         cdef vector[Move] moves = self.engine.getCheckmateMoves(board.board, depth)
 

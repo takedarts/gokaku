@@ -10,7 +10,7 @@ from pyx.position cimport Position
 
 
 cdef class NativePlayer:
-    '''プレイヤとしてゲームの状態管理と着手の決定を行うクラス。'''
+    '''Class that manages game state and decides moves as a player.'''
     cdef Player* player
 
     def __cinit__(
@@ -23,53 +23,51 @@ cdef class NativePlayer:
         check_search_depth: int,
         check_search_node: int,
         check_node_depth: int,
-        ucb_constant: float,
         pucb_constant_init: float,
         pucb_constant_base: float,
     )->None:
-        '''プレイヤオブジェクトを初期化する。
+        '''Initializes the player object.
         Args:
-            processor (NativeInferenceProcessor): 推論プロセッサオブジェクト
-            threads (int): スレッド数
-            max_visits (int): ノードの最大訪問回数
-            nyugyoku_scores (Tuple[int, int]): 入玉宣言に必要となる点数
-            draw_turn (int): 引き分けとなるまでの手数
-            check_search_depth (int): 詰み探索の深さ
-            check_search_node (int): 詰み探索のノード数
-            check_node_depth (int): 詰み探索のノードの深さ
-            ucb_constant (float): UCBの信頼上限に掛ける定数
-            pucb_constant_init (float): PUCBの信頼上限に掛ける定数の初期値
-            pucb_constant_base (float): PUCBの信頼上限に掛ける定数の変化値
+            processor (NativeInferenceProcessor): Inference processor object
+            threads (int): Number of threads
+            max_visits (int): Maximum number of visits per node
+            nyugyoku_scores (Tuple[int, int]): Scores required for entering-king declaration
+            draw_turn (int): Number of moves until a draw
+            check_search_depth (int): Depth of the checkmate search
+            check_search_node (int): Number of nodes in the checkmate search
+            check_node_depth (int): Depth of nodes in the checkmate search
+            pucb_constant_init (float): Initial value of the constant multiplied by the PUCB confidence bound
+            pucb_constant_base (float): Rate of change of the constant multiplied by the PUCB confidence bound
         '''
         self.player = new Player(
             processor.processor, threads, max_visits,
             nyugyoku_scores[0], nyugyoku_scores[1], draw_turn,
             check_search_depth, check_search_node, check_node_depth,
-            ucb_constant, pucb_constant_init, pucb_constant_base)
+            pucb_constant_init, pucb_constant_base)
 
     def __dealloc__(self):
         del self.player
 
     def initialize(self, sfen: str) -> None:
-        '''対戦状態を初期状態に設定する。
+        '''Sets the game state to the initial state.
         Args:
-            sfen (str): SFEN形式の局面
+            sfen (str): Board position in SFEN format
         '''
         self.player.initialize(sfen.encode('utf-8'))
 
     def get_color(self) -> int:
-        '''手番を取得する。
+        '''Returns the current turn color.
         Returns:
-            int: 手番
+            int: Current turn color
         '''
         return self.player.getColor()
 
     def play(self, src: Tuple[int, int], dst: Tuple[int, int], promote: bool) -> None:
-        '''駒を動かす。
+        '''Moves a piece.
         Args:
-            src (Tuple[int, int]): 移動元の座標
-            dst (Tuple[int, int]): 移動先の座標
-            promote (bool): 成るかどうか
+            src (Tuple[int, int]): Source coordinate
+            dst (Tuple[int, int]): Destination coordinate
+            promote (bool): True if promoting
         '''
         cdef Position src_pos = Position(src[0], src[1])
         cdef Position dst_pos = Position(dst[0], dst[1])
@@ -83,22 +81,22 @@ cdef class NativePlayer:
         temperature: float,
         noise: float,
     ) -> None:
-        '''評価を開始する。
+        '''Starts evaluation.
         Args:
-            equally (bool): 探索回数を均等にするならTrue、PUCB等を使用するならFalse
-            candidate_width (int): 候補手の探索幅(0ならば探索幅を自動で設定する)
-            temperature (float): 探索の温度パラメータ
-            noise (float): 探索のガンベルノイズの強さ
+            equally (bool): True to distribute visits equally, False to use PUCB or similar
+            candidate_width (int): Search width for candidate moves (0 to set automatically)
+            temperature (float): Temperature parameter for the search
+            noise (float): Strength of Gumbel noise in the search
         '''
         self.player.startEvaluation(equally, candidate_width, temperature, noise)
 
     def wait_evaluation(self, visits: int, playouts: int, timelimit: float, stop: bool) -> None:
-        '''指定された訪問数とプレイアウト数になるまで待機する。
+        '''Waits until the specified visit count and playout count are reached.
         Args:
-            visits (int): 訪問数
-            playouts (int): プレイアウト数
-            timelimit (float): 時間制限（秒）
-            stop (bool): 停止命令を出すならばTrue
+            visits (int): Number of visits
+            playouts (int): Number of playouts
+            timelimit (float): Time limit in seconds
+            stop (bool): True to issue a stop command
         '''
         cdef int32_t visits_int = visits
         cdef int32_t playouts_int = playouts
@@ -111,9 +109,9 @@ cdef class NativePlayer:
     def get_candidates(
         self,
     ) -> List[Tuple[Tuple[int, int], Tuple[int, int], int, int, int, float, float, List[int]]]:
-        '''候補手の一覧を取得する。
+        '''Returns the list of candidate moves.
         Returns:
-            List[Tuple[Tuple[int, int], Tuple[int, int], int, int, int, float, float, List[int]]]: 候補手の一覧
+            List[Tuple[Tuple[int, int], Tuple[int, int], int, int, int, float, float, List[int]]]: List of candidate moves
         '''
         cdef vector[Candidate] candidates = self.player.getCandidates()
 
@@ -138,15 +136,15 @@ cdef class NativePlayer:
         return results
 
     def copy_board_to(self, board: NativeBoard) -> None:  # type: ignore
-        '''指定された盤面オブジェクトに盤面の状態をコピーする。
+        '''Copies the board state to the specified board object.
         Args:
-            board (NativeBoard): 盤面オブジェクト
+            board (NativeBoard): Board object
         '''
         self.player.copyBoardTo(board.board)
 
     def to_string(self) -> str:
-        '''プレイヤオブジェクトの状態を表す文字列を取得する。
+        '''Returns a string representing the state of the player object.
         Returns:
-            str: プレイヤオブジェクトの状態を表す文字列
+            str: String representing the state of the player object
         '''
         return self.player.toString().decode('utf-8')

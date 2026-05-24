@@ -7,8 +7,8 @@
 namespace deepshogi {
 
 /**
- * MCTSの探索ノード管理オブジェクトを作成する。
- * @param parameter MCTSの探索パラメータ
+ * Creates an MCTS search node manager object.
+ * @param parameter MCTS search parameters
  */
 MctsManager::MctsManager(const MctsParameter& parameter)
     : _mutex(),
@@ -19,15 +19,15 @@ MctsManager::MctsManager(const MctsParameter& parameter)
 }
 
 /**
- * ノードオブジェクトを作成する。
- * 未使用のノードオブジェクトがあればそれを返し、なければ新規作成する。
- * @return ノードオブジェクト
+ * Creates a node object.
+ * Returns an unused node object if one exists, otherwise creates a new one.
+ * @return Node object
  */
 MctsNode* MctsManager::createNode() {
   std::lock_guard<std::mutex> lock(_mutex);
 
-  // ノードオブジェクトを作成する
-  // 未使用のノードオブジェクトがあればそれを利用する
+  // Create a node object
+  // Use an unused node object if one exists
   MctsNode* node;
 
   if (_poolNodes.empty()) {
@@ -38,38 +38,38 @@ MctsNode* MctsManager::createNode() {
     _poolNodes.pop_back();
   }
 
-  // 使用中のノードオブジェクトとして登録する
+  // Register as a node object currently in use
   _usedNodes.insert(node);
 
-  // ノードオブジェクトを返す
+  // Return the node object
   return node;
 }
 
 /**
- * ノードオブジェクトを未使用状態にする。
- * @param node ノードオブジェクト
+ * Marks a node object as unused.
+ * @param node Node object
  */
 void MctsManager::releaseNode(MctsNode* node) {
   std::lock_guard<std::mutex> lock(_mutex);
 
-  // 登録済みのノードオブジェクトでないなら何もしない
+  // Do nothing if it is not a registered node object
   if (_usedNodes.find(node) == _usedNodes.end()) {
     return;
   }
 
-  // ノードオブジェクトを未使用状態にする
+  // Mark the node object as unused
   _usedNodes.erase(node);
   _poolNodes.push_back(node);
 }
 
 /**
- * 指定されたノードオブジェクトとそのすべての子ノードオブジェクトを未使用状態にする。
- * @param root ノードオブジェクト
+ * Marks the specified node object and all its child node objects as unused.
+ * @param root Node object
  */
 void MctsManager::releaseTree(MctsNode* root) {
   std::vector<MctsNode*> stack = {root};
 
-  // 深さ優先で探索して、ノードを未使用状態にする
+  // Search depth-first and mark nodes as unused
   while (!stack.empty()) {
     MctsNode* current = stack.back();
     stack.pop_back();
@@ -83,8 +83,8 @@ void MctsManager::releaseTree(MctsNode* root) {
 }
 
 /**
- * MCTSの探索ノード管理オブジェクトの状態を文字列として取得する。
- * @return 状態を表す文字列
+ * Gets the state of the MCTS search node manager object as a string.
+ * @return String representing the state
  */
 std::string MctsManager::toString() {
   std::lock_guard<std::mutex> lock(_mutex);

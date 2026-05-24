@@ -3,9 +3,9 @@
 namespace deepshogi {
 
 /**
- * 予想着手確率を管理するオブジェクトを生成する。
- * @param move 着手情報
- * @param probability 予想着手確率
+ * Creates an object for managing predicted move probabilities.
+ * @param move Move information
+ * @param probability Predicted move probability
  */
 MctsPolicy::MctsPolicy(Move move, float probability)
     : _move(move),

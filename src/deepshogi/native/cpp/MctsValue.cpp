@@ -7,7 +7,7 @@
 namespace deepshogi {
 
 /**
- * MCTSの評価値オブジェクトを生成する。
+ * Creates an MCTS evaluation value object.
  */
 MctsValue::MctsValue()
     : _mutex(),
@@ -16,8 +16,8 @@ MctsValue::MctsValue()
 }
 
 /**
- * MCTSの評価値オブジェクトをコピーする。
- * @param other コピー元のオブジェクト
+ * Copies an MCTS evaluation value object.
+ * @param other The source object to copy from
  */
 MctsValue::MctsValue(const MctsValue& other)
     : _mutex(),
@@ -26,7 +26,7 @@ MctsValue::MctsValue(const MctsValue& other)
 }
 
 /**
- * MCTSの評価値をリセットする。
+ * Resets the MCTS evaluation value.
  */
 void MctsValue::reset() {
   std::lock_guard<std::mutex> lock(_mutex);
@@ -35,8 +35,8 @@ void MctsValue::reset() {
 }
 
 /**
- * MCTSの評価値を更新する。
- * @param value 評価値
+ * Updates the MCTS evaluation value.
+ * @param value Evaluation value
  */
 void MctsValue::update(float value) {
   std::lock_guard<std::mutex> lock(_mutex);
@@ -45,8 +45,8 @@ void MctsValue::update(float value) {
 }
 
 /**
- * MCTSの評価値を設定する。
- * @param value 評価値
+ * Sets the MCTS evaluation value.
+ * @param value Evaluation value
  */
 void MctsValue::setValue(float value) {
   std::lock_guard<std::mutex> lock(_mutex);
@@ -54,9 +54,9 @@ void MctsValue::setValue(float value) {
 }
 
 /**
- * MCTSの評価値の平均を取得する。
- * @param defaultValue 評価回数が0の場合に返す値
- * @return 評価値の平均
+ * Gets the average MCTS evaluation value.
+ * @param defaultValue Value to return when the evaluation count is 0
+ * @return Average evaluation value
  */
 float MctsValue::getValue(float defaultValue) {
   std::lock_guard<std::mutex> lock(_mutex);
@@ -64,10 +64,10 @@ float MctsValue::getValue(float defaultValue) {
 }
 
 /**
- * MCTSの評価値の信頼区間の下限を取得する。
- * @param color 手番（COLOR_BLACKまたはCOLOR_WHITE）
- * @param defaultValue 評価回数が0の場合に返す値
- * @return 評価値の信頼区間の下限
+ * Gets the lower confidence bound of the MCTS evaluation value.
+ * @param color Turn color (COLOR_BLACK or COLOR_WHITE)
+ * @param defaultValue Value to return when the evaluation count is 0
+ * @return Lower confidence bound of the evaluation value
  */
 float MctsValue::getValueLCB(int8_t color, float defaultValue) {
   std::lock_guard<std::mutex> lock(_mutex);

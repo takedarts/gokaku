@@ -190,8 +190,6 @@ DEFAULT_NYUGYOKU_SCORES = (28, 27)
 DEFAULT_DRAW_TURN = 512
 # Default maximum number of visits for search
 DEFAULT_MAX_VISITS = 1_000_000
-# Constant multiplied to UCB upper confidence bound
-DEFAULT_UCB_CONSTANT = 1.4
 # Initial value applied to PUCB upper confidence bound
 DEFAULT_PUCB_CONSTANT_INIT = 1.6
 # Base value applied to PUCB upper confidence bound

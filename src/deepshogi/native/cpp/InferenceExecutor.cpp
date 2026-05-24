@@ -2,26 +2,26 @@
 
 namespace deepshogi {
 
-constexpr int32_t DIR_H = 0;    // 移動:打
-constexpr int32_t DIR_U = 1;    // 移動:上
-constexpr int32_t DIR_D = 2;    // 移動:下
-constexpr int32_t DIR_R = 3;    // 移動:右
-constexpr int32_t DIR_L = 4;    // 移動:左
-constexpr int32_t DIR_UR = 5;   // 移動:右上
-constexpr int32_t DIR_UL = 6;   // 移動:左上
-constexpr int32_t DIR_DR = 7;   // 移動:右下
-constexpr int32_t DIR_DL = 8;   // 移動:左下
-constexpr int32_t DIR_KR = 9;   // 移動:桂馬右
-constexpr int32_t DIR_KL = 10;  // 移動:桂馬左
+constexpr int32_t DIR_H = 0;    // Move: drop
+constexpr int32_t DIR_U = 1;    // Move: up
+constexpr int32_t DIR_D = 2;    // Move: down
+constexpr int32_t DIR_R = 3;    // Move: right
+constexpr int32_t DIR_L = 4;    // Move: left
+constexpr int32_t DIR_UR = 5;   // Move: upper-right
+constexpr int32_t DIR_UL = 6;   // Move: upper-left
+constexpr int32_t DIR_DR = 7;   // Move: lower-right
+constexpr int32_t DIR_DL = 8;   // Move: lower-left
+constexpr int32_t DIR_KR = 9;   // Move: knight right
+constexpr int32_t DIR_KL = 10;  // Move: knight left
 
 /**
- * 指定された着手のPolicyインデックスを取得する。
- * @param board 盤面
- * @param move 着手
- * @return Policyインデックス
+ * Returns the policy index for the specified move.
+ * @param board Board
+ * @param move Move
+ * @return Policy index
  */
 static int32_t getPolicyIndex(const Board* board, Move move) {
-  // 駒番号と移動方向を計算する
+  // Calculate the piece index and move direction
   int32_t move_x = 0;
   int32_t move_y = 0;
   int32_t piece = 0;
@@ -48,61 +48,61 @@ static int32_t getPolicyIndex(const Board* board, Move move) {
     }
   }
 
-  // 後手番の場合は移動座標を反転する
+  // Flip the move coordinates for the white player
   if (board->getColor() == COLOR_WHITE) {
     move_x = -move_x;
     move_y = -move_y;
   }
 
-  // 移動方向を判定する
+  // Determine the move direction
   int32_t dir = 0;
 
-  if (move_x == 0 && move_y == 0) {  // 打
+  if (move_x == 0 && move_y == 0) {  // drop
     dir = DIR_H;
-  } else if (move_x == 0 && move_y < 0) {  // 上
+  } else if (move_x == 0 && move_y < 0) {  // up
     dir = DIR_U;
-  } else if (move_x == 0 && move_y > 0) {  // 下
+  } else if (move_x == 0 && move_y > 0) {  // down
     dir = DIR_D;
-  } else if (move_x < 0 && move_y == 0) {  // 右
+  } else if (move_x < 0 && move_y == 0) {  // right
     dir = DIR_R;
-  } else if (move_x > 0 && move_y == 0) {  // 左
+  } else if (move_x > 0 && move_y == 0) {  // left
     dir = DIR_L;
-  } else if (move_x < 0 && move_y == move_x) {  // 右上
+  } else if (move_x < 0 && move_y == move_x) {  // upper-right
     dir = DIR_UR;
-  } else if (move_x > 0 && move_y == -move_x) {  // 左上
+  } else if (move_x > 0 && move_y == -move_x) {  // upper-left
     dir = DIR_UL;
-  } else if (move_x < 0 && move_y == -move_x) {  // 右下
+  } else if (move_x < 0 && move_y == -move_x) {  // lower-right
     dir = DIR_DR;
-  } else if (move_x > 0 && move_y == move_x) {  // 左下
+  } else if (move_x > 0 && move_y == move_x) {  // lower-left
     dir = DIR_DL;
-  } else if (move_x == -1 && move_y == -2) {  // 桂馬右
+  } else if (move_x == -1 && move_y == -2) {  // knight right
     dir = DIR_KR;
-  } else if (move_x == 1 && move_y == -2) {  // 桂馬左
+  } else if (move_x == 1 && move_y == -2) {  // knight left
     dir = DIR_KL;
   } else {
     throw std::invalid_argument("Invalid move direction");
   }
 
-  // Policyインデックスを計算する
+  // Calculate the policy index
   int32_t index = 0;
 
-  if (piece == 0) {  // 歩
+  if (piece == 0) {  // pawn
     index =
         0 + ((dir == DIR_U)   ? 0
              : (dir == DIR_H) ? 1
                               : -1);
-  } else if (piece == 1) {  // 香車
+  } else if (piece == 1) {  // lance
     index =
         2 + ((dir == DIR_U)   ? 0
              : (dir == DIR_H) ? 1
                               : -3);
-  } else if (piece == 2) {  // 桂馬
+  } else if (piece == 2) {  // knight
     index =
         4 + ((dir == DIR_KR)   ? 0
              : (dir == DIR_KL) ? 1
              : (dir == DIR_H)  ? 2
                                : -5);
-  } else if (piece == 3) {  // 銀
+  } else if (piece == 3) {  // silver
     index =
         7 + ((dir == DIR_U)    ? 0
              : (dir == DIR_UR) ? 1
@@ -111,7 +111,7 @@ static int32_t getPolicyIndex(const Board* board, Move move) {
              : (dir == DIR_DL) ? 4
              : (dir == DIR_H)  ? 5
                                : -8);
-  } else if (piece == 4) {  // 角
+  } else if (piece == 4) {  // bishop
     index =
         13 + ((dir == DIR_UR)   ? 0
               : (dir == DIR_UL) ? 1
@@ -119,7 +119,7 @@ static int32_t getPolicyIndex(const Board* board, Move move) {
               : (dir == DIR_DL) ? 3
               : (dir == DIR_H)  ? 4
                                 : -14);
-  } else if (piece == 5) {  // 飛車
+  } else if (piece == 5) {  // rook
     index =
         18 + ((dir == DIR_U)   ? 0
               : (dir == DIR_D) ? 1
@@ -127,7 +127,7 @@ static int32_t getPolicyIndex(const Board* board, Move move) {
               : (dir == DIR_L) ? 3
               : (dir == DIR_H) ? 4
                                : -19);
-  } else if (piece == 6) {  // 金
+  } else if (piece == 6) {  // gold
     index =
         23 + ((dir == DIR_U)    ? 0
               : (dir == DIR_D)  ? 1
@@ -137,7 +137,7 @@ static int32_t getPolicyIndex(const Board* board, Move move) {
               : (dir == DIR_UL) ? 5
               : (dir == DIR_H)  ? 6
                                 : -24);
-  } else if (piece == 7) {  // 玉
+  } else if (piece == 7) {  // king
     index =
         30 + ((dir == DIR_U)    ? 0
               : (dir == DIR_D)  ? 1
@@ -148,7 +148,7 @@ static int32_t getPolicyIndex(const Board* board, Move move) {
               : (dir == DIR_DR) ? 6
               : (dir == DIR_DL) ? 7
                                 : -31);
-  } else if (piece == 8) {  // と金
+  } else if (piece == 8) {  // tokin (promoted pawn)
     index =
         38 + ((dir == DIR_U)    ? 0
               : (dir == DIR_D)  ? 1
@@ -157,7 +157,7 @@ static int32_t getPolicyIndex(const Board* board, Move move) {
               : (dir == DIR_UR) ? 4
               : (dir == DIR_UL) ? 5
                                 : -39);
-  } else if (piece == 9) {  // 成香
+  } else if (piece == 9) {  // promoted lance
     index =
         44 + ((dir == DIR_U)    ? 0
               : (dir == DIR_D)  ? 1
@@ -166,7 +166,7 @@ static int32_t getPolicyIndex(const Board* board, Move move) {
               : (dir == DIR_UR) ? 4
               : (dir == DIR_UL) ? 5
                                 : -45);
-  } else if (piece == 10) {  // 成桂
+  } else if (piece == 10) {  // promoted knight
     index =
         50 + ((dir == DIR_U)    ? 0
               : (dir == DIR_D)  ? 1
@@ -177,7 +177,7 @@ static int32_t getPolicyIndex(const Board* board, Move move) {
               : (dir == DIR_KR) ? 6
               : (dir == DIR_KL) ? 7
                                 : -51);
-  } else if (piece == 11) {  // 成銀
+  } else if (piece == 11) {  // promoted silver
     index =
         58 + ((dir == DIR_U)    ? 0
               : (dir == DIR_D)  ? 1
@@ -188,7 +188,7 @@ static int32_t getPolicyIndex(const Board* board, Move move) {
               : (dir == DIR_DR) ? 6
               : (dir == DIR_DL) ? 7
                                 : -59);
-  } else if (piece == 12) {  // 馬
+  } else if (piece == 12) {  // horse (promoted bishop)
     index =
         66 + ((dir == DIR_U)    ? 0
               : (dir == DIR_D)  ? 1
@@ -199,7 +199,7 @@ static int32_t getPolicyIndex(const Board* board, Move move) {
               : (dir == DIR_DR) ? 6
               : (dir == DIR_DL) ? 7
                                 : -67);
-  } else if (piece == 13) {  // 龍
+  } else if (piece == 13) {  // dragon (promoted rook)
     index =
         74 + ((dir == DIR_U)    ? 0
               : (dir == DIR_D)  ? 1
@@ -218,7 +218,7 @@ static int32_t getPolicyIndex(const Board* board, Move move) {
     throw std::invalid_argument("Invalid index");
   }
 
-  // 移動先の座標を取得する
+  // Get the destination coordinates
   int32_t x = move.getDst().getX();
   int32_t y = move.getDst().getY();
 
@@ -227,40 +227,40 @@ static int32_t getPolicyIndex(const Board* board, Move move) {
     y = BOARD_SIZE - 1 - y;
   }
 
-  // 番号を返す
+  // Return the index
   return (index * BOARD_SIZE * BOARD_SIZE) + (x * BOARD_SIZE + y);
 }
 
 /**
- * 指定された盤面の出力マスクデータを作成する。
- * @param board 盤面
- * @param mask マスクデータのバッファ
+ * Creates the output mask data for the specified board.
+ * @param board Board
+ * @param mask Buffer for mask data
  */
 static void getOutputMask(const Board* board, int32_t* mask) {
-  // マスクデータを0で初期化する
+  // Initialize the mask data to zero
   std::fill(mask, mask + MODEL_OUTPUT_PACK_SIZE, 0);
 
-  // Policyのマスクデータを作成する
+  // Create the policy mask data
   for (Move move : board->getLegalMoves(true, false)) {
     int32_t index = getPolicyIndex(board, move);
 
     mask[index / 32] |= (1 << (index % 32));
   }
 
-  // Valueのマスクデータを作成する
+  // Create the value mask data
   int32_t value_index = MODEL_PREDICTIONS * BOARD_SIZE * BOARD_SIZE;
 
   mask[value_index / 32] |= (1 << (value_index % 32));
 }
 
 /**
- * 推論実行オブジェクトを生成する。
- * @param model 推論モデルファイルのパス
- * @param gpu 使用するGPUのID
- * @param fp16 半精度浮動小数点を使用するならTrue
- * @param deterministic 決定論的動作を行うならTrue
- * @param batchSize バッチサイズ
- * @param threads 実行するスレッド数
+ * Creates an inference executor object.
+ * @param model Path to the inference model file
+ * @param gpu ID of the GPU to use
+ * @param fp16 True to use half-precision floating point
+ * @param deterministic True to enable deterministic behavior
+ * @param batchSize Batch size
+ * @param threads Number of threads to run
  */
 InferenceExecutor::InferenceExecutor(
     std::string model, int32_t gpu, bool fp16, bool deterministic,
@@ -283,10 +283,10 @@ InferenceExecutor::InferenceExecutor(
 }
 
 /**
- * 推論管理オブジェクトを破棄する。
+ * Destroys the inference manager object.
  */
 InferenceExecutor::~InferenceExecutor() {
-  // 推論処理を終了する
+  // Terminate inference processing
   {
     std::lock_guard<std::mutex> lock(_threadMutex);
     _terminated = true;
@@ -294,12 +294,12 @@ InferenceExecutor::~InferenceExecutor() {
 
   _condition.notify_all();
 
-  // スレッドの終了を待機する
+  // Wait for threads to finish
   for (auto& thread : _threads) {
     thread.join();
   }
 
-  // 推論モデルオブジェクトを破棄する
+  // Destroy the inference model object
   {
     std::lock_guard<std::mutex> lock(_modelMutex);
 
@@ -311,11 +311,11 @@ InferenceExecutor::~InferenceExecutor() {
 }
 
 /**
- * 推論実行を予約する。
- * 推論計算は非同期に実行されるため、この関数はすぐに返る。
- * 推論計算が完了すると、ノードの評価値が更新される。
- * @param node 推論を実行するノード
- * @param callback 推論計算の完了を通知するコールバック関数
+ * Schedules an inference execution.
+ * The inference computation runs asynchronously, so this function returns immediately.
+ * When the computation completes, the node's evaluation value is updated.
+ * @param node Node to run inference on
+ * @param callback Callback function to notify when inference completes
  */
 void InferenceExecutor::submit(MctsNode* node, InferenceExecutorCallback callback) {
   std::lock_guard<std::mutex> lock(_threadMutex);
@@ -324,18 +324,18 @@ void InferenceExecutor::submit(MctsNode* node, InferenceExecutorCallback callbac
 }
 
 /**
- * 推論を同期的に実行する。
- * @param inputs 入力データ
- * @param masks 出力データのマスク
- * @param outputs 出力データ
- * @param size 評価データの数
+ * Runs inference synchronously.
+ * @param inputs Input data
+ * @param masks Output data mask
+ * @param outputs Output data
+ * @param size Number of evaluation data items
  */
 void InferenceExecutor::execute(int32_t* inputs, int32_t* masks, float* outputs, int32_t size) {
-  // 使用するデバイスを設定する
+  // Set the device to use
   torch::DeviceGuard device_guard(InferenceModel::getDevice(_gpu));
 
-  // モデルオブジェクトを取得する
-  // モデルオブジェクトが作成されていない場合は作成する
+  // Get the model object
+  // Create the model object if it has not been created yet
   InferenceModel* model = nullptr;
 
   {
@@ -348,7 +348,7 @@ void InferenceExecutor::execute(int32_t* inputs, int32_t* masks, float* outputs,
     model = _model;
   }
 
-  // CPU以外で計算するなら固定されたバッチサイズで推論を実行する
+  // For non-CPU devices, run inference with a fixed batch size
   if (!_model->isCpu()) {
     std::vector<int32_t> input_buffer(_batchSize * MODEL_INPUT_PACK_SIZE);
     std::vector<int32_t> mask_buffer(_batchSize * MODEL_OUTPUT_PACK_SIZE);
@@ -364,8 +364,8 @@ void InferenceExecutor::execute(int32_t* inputs, int32_t* masks, float* outputs,
 }
 
 /**
- * 推論実行の予約のキューに入っている待機中の推論実行の数を返す。
- * @return 推論実行の予約のキューに入っている待機中の推論実行の数
+ * Returns the number of pending inference executions in the submission queue.
+ * @return Number of pending inference executions in the queue
  */
 int32_t InferenceExecutor::getQueueSize() {
   std::lock_guard<std::mutex> lock(_threadMutex);
@@ -373,18 +373,18 @@ int32_t InferenceExecutor::getQueueSize() {
 }
 
 /**
- * スレッドで実行されるメソッド。
+ * Method executed on a thread.
  */
 void InferenceExecutor::_run() {
-  // 使用するデバイスを設定する
+  // Set the device to use
   torch::DeviceGuard device_guard(InferenceModel::getDevice(_gpu));
 
-  // 入力データとマスクデータと出力データのバッファを作成する
+  // Create buffers for input data, mask data, and output data
   std::vector<int32_t> input_buffer(_batchSize * MODEL_INPUT_PACK_SIZE);
   std::vector<int32_t> mask_buffer(_batchSize * MODEL_OUTPUT_PACK_SIZE);
   std::vector<float> output_buffer(_batchSize * MODEL_OUTPUT_SIZE);
 
-  // モデルオブジェクトが作成されていない場合は作成する
+  // Create the model object if it has not been created yet
   {
     std::lock_guard<std::mutex> lock(_modelMutex);
 
@@ -393,19 +393,19 @@ void InferenceExecutor::_run() {
     }
   }
 
-  // キューから推論実行の予約を取り出してバッチを作成し、
-  // 推論を実行して結果をノードに適用する処理を繰り返す
+  // Repeatedly dequeue scheduled inference executions, build batches,
+  // run inference, and apply results to nodes
   while (true) {
-    // キューから推論実行の予約を取り出してバッチを作成する
+    // Dequeue scheduled inference executions and build a batch
     std::vector<std::pair<MctsNode*, InferenceExecutorCallback>> batch;
 
     {
-      // 同期処理を行うためのロックを取得する
+      // Acquire the lock for synchronization
       std::unique_lock<std::mutex> lock(_threadMutex);
 
-      // 推論実行の予約がない場合は待機する
-      // [停止] 停止要求があり、キューが空である場合は待機を終了する
-      // [推論実行] 推論実行の予約がある場合は待機を終了する
+      // Wait if there are no scheduled inference executions
+      // [stop] If a stop request is received and the queue is empty, exit the wait
+      // [inference] If there are scheduled inference executions, exit the wait
       _condition.wait(lock, [this] {
         if (_terminated && _queue.empty()) {
           return true;
@@ -416,23 +416,23 @@ void InferenceExecutor::_run() {
         }
       });
 
-      // 推論処理を終了するならばループを抜ける
+      // Exit the loop if inference processing should terminate
       if (_terminated && _queue.empty()) {
         break;
       }
 
-      // 推論実行の予約をキューから取り出す
+      // Dequeue scheduled inference executions
       while (!_queue.empty() && batch.size() < _batchSize) {
         batch.push_back(_queue.back());
         _queue.pop_back();
       }
     }
 
-    // 入力データとマスクデータのバッファを初期化する
+    // Initialize the input and mask data buffers
     std::fill(input_buffer.begin(), input_buffer.end(), 0);
     std::fill(mask_buffer.begin(), mask_buffer.end(), 0);
 
-    // 入力データとマスクデータを作成する
+    // Create the input and mask data
     for (size_t i = 0; i < batch.size(); i++) {
       MctsNode* node = batch[i].first;
       int32_t* inputs = input_buffer.data() + (i * MODEL_INPUT_PACK_SIZE);
@@ -442,14 +442,14 @@ void InferenceExecutor::_run() {
       getOutputMask(&node->getBoard(), mask);
     }
 
-    // 推論を実行する
-    // CPUで実行する場合はバッチサイズを実際のバッチサイズに合わせる
-    // CPU以外で計算するなら固定されたバッチサイズで推論を実行する
+    // Run inference
+    // For CPU execution, match the batch size to the actual number of items
+    // For non-CPU devices, run inference with a fixed batch size
     int32_t batch_size = (_model->isCpu()) ? static_cast<int32_t>(batch.size()) : _batchSize;
 
     _model->forward(input_buffer.data(), mask_buffer.data(), output_buffer.data(), batch_size);
 
-    // 推論結果をノードに適用してコールバック関数を呼び出す
+    // Apply inference results to nodes and invoke callbacks
     for (size_t i = 0; i < batch.size(); i++) {
       MctsNode* node = batch[i].first;
       InferenceExecutorCallback callback = batch[i].second;
@@ -457,7 +457,7 @@ void InferenceExecutor::_run() {
       std::vector<Move> legal_moves = node->getBoard().getLegalMoves(true, false);
       InferenceResult result;
 
-      // Policyの推論結果を作成する
+      // Create the policy inference result
       float total_probability = 0.0f;
 
       for (Move move : legal_moves) {
@@ -472,14 +472,14 @@ void InferenceExecutor::_run() {
         result.policies.emplace_back(move, probability);
       }
 
-      // Valueの推論結果を作成する
+      // Create the value inference result
       result.value = outputs[MODEL_PREDICTIONS * BOARD_SIZE * BOARD_SIZE] * 2.0f - 1.0f;
 
       if (node->getBoard().getColor() == COLOR_WHITE) {
         result.value = -result.value;
       }
 
-      // コールバック関数を呼び出す
+      // Invoke the callback function
       callback(node, result);
     }
   }

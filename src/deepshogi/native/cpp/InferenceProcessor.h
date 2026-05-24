@@ -18,65 +18,65 @@
 namespace deepshogi {
 
 /**
- * 盤面評価のための推論実行を管理するクラス。
+ * A class that manages inference execution for board evaluation.
  */
 class InferenceProcessor {
  public:
   /**
-   * 推論管理オブジェクトを生成する。
-   * @param model モデルファイル
-   * @param gpus GPU番号のリスト
-   * @param fp16 16bit精度で計算するならTrue
-   * @param deterministic 計算結果を再現可能にするならTrue
-   * @param batchSize バッチサイズ
-   * @param threadsPerGpu GPUごとのスレッド数
-   * @param cacheSize 推論結果のキャッシュサイズ
+   * Creates an inference manager object.
+   * @param model Model file path
+   * @param gpus List of GPU indices
+   * @param fp16 True to compute with 16-bit precision
+   * @param deterministic True to make computation results reproducible
+   * @param batchSize Batch size
+   * @param threadsPerGpu Number of threads per GPU
+   * @param cacheSize Cache size for inference results
    */
   InferenceProcessor(
       std::string model, std::vector<int32_t> gpus, bool fp16, bool deterministic,
       int32_t batchSize, int32_t threadsPerGpu, int32_t cacheSize);
 
   /**
-   * 推論管理オブジェクトを破棄する。
+   * Destroys the inference manager object.
    */
   virtual ~InferenceProcessor() = default;
 
   /**
-   * 推論実行を予約する。
-   * 推論計算は非同期に実行されるため、この関数はすぐに返る。
-   * 推論計算が完了すると、ノードの評価値が更新される。
-   * @param node 推論を実行するノード
-   * @param callback 推論計算の完了を通知するコールバック関数
+   * Schedules an inference execution.
+   * The inference computation runs asynchronously, so this function returns immediately.
+   * When the computation completes, the node's evaluation value is updated.
+   * @param node Node to run inference on
+   * @param callback Callback function to notify when inference completes
    */
   void submit(MctsNode* node, std::function<void(MctsNode*)> callback);
 
   /**
-   * 指定された盤面の評価値を取得する。
-   * @param board 評価する盤面
-   * @return 評価値
+   * Returns the evaluation value for the specified board.
+   * @param board Board to evaluate
+   * @return Evaluation value
    */
   float predict(Board* board);
 
   /**
-   * 推論を同期的に実行する。
-   * @param inputs 入力データ
-   * @param masks 出力データのマスク
-   * @param outputs 出力データ
-   * @param size 評価データの数
+   * Runs inference synchronously.
+   * @param inputs Input data
+   * @param masks Output data mask
+   * @param outputs Output data
+   * @param size Number of evaluation data items
    */
   void execute(int32_t* inputs, int32_t* masks, float* outputs, int32_t size);
 
   /**
-   * バッチサイズを取得する。
-   * @return バッチサイズ
+   * Returns the batch size.
+   * @return Batch size
    */
   inline int32_t getBatchSize() const {
     return _batchSize;
   }
 
   /**
-   * 推論を実行するためのスレッドの数を取得する。
-   * @return 推論を実行するためのスレッドの数
+   * Returns the number of threads used for inference.
+   * @return Number of threads used for inference
    */
   inline int32_t getThreadSize() const {
     return _threadSize;
@@ -84,44 +84,44 @@ class InferenceProcessor {
 
  private:
   /**
-   * 同期用のミューテックスオブジェクト。
+   * Mutex object for synchronization.
    */
   std::mutex _mutex;
 
   /**
-   * 推論実行オブジェクトの一覧。
+   * List of inference executor objects.
    */
   std::vector<std::unique_ptr<InferenceExecutor>> _executors;
 
   /**
-   * 推論を実行するためのスレッドの数。
+   * Number of threads used for inference.
    */
   int32_t _threadSize;
 
   /**
-   * 推論結果のキャッシュサイズ。
+   * Cache size for inference results.
    */
   int32_t _cacheSize;
 
   /**
-   * 推論結果のキャッシュのキーのキュー。
-   * キャッシュサイズを超える古いキャッシュを削除するために使用する。
+   * Queue of cache keys for inference results.
+   * Used to evict old cache entries when the cache size is exceeded.
    */
   std::queue<BoardHash> _cacheKeys;
 
   /**
-   * 推論結果のキャッシュ。
-   * キーは盤面のハッシュ値、値は推論結果。
+   * Cache of inference results.
+   * Key is the board hash value; value is the inference result.
    */
   std::map<BoardHash, InferenceResult> _cacheResults;
 
   /**
-   * 使用するGPUのIDのリスト。
+   * List of GPU IDs to use.
    */
   std::vector<int32_t> _gpus;
 
   /**
-   * バッチサイズ。
+   * Batch size.
    */
   int32_t _batchSize;
 };

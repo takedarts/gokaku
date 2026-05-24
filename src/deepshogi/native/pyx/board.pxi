@@ -14,26 +14,26 @@ from pyx.position cimport Position
 
 
 cdef class NativeBoard:
-    '''盤面の状態を管理するクラス。'''
+    '''A class for managing the state of the board.'''
     cdef Board *board
 
     def __cinit__(self, nyugyoku_scores: Tuple[int, int], draw_turn: int) -> None:
-        '''盤面オブジェクトを作成する。
+        '''Creates a board object.
         Args:
-            nyugyoku_scores (Tuple[int, int]): 入玉宣言のスコア
-            draw_turn (int): 引き分けまでの手数
+            nyugyoku_scores (Tuple[int, int]): Scores for entering-king declaration
+            draw_turn (int): Number of moves until a draw
         '''
         self.board = new Board(nyugyoku_scores[0], nyugyoku_scores[1], draw_turn)
 
     def __dealloc__(self) -> None:
-        '''盤面オブジェクトを破棄する。'''
+        '''Destroys the board object.'''
         del self.board
 
     def initialize(self, sfen: str) -> None:
         '''
-        SFEN形式の文字列で盤面を初期化する。
+        Initializes the board with a SFEN-format string.
         Args:
-            sfen (str): SFEN形式の文字列
+            sfen (str): SFEN-format string
         '''
         self.board.initialize(sfen.encode('utf-8'))
 
@@ -43,14 +43,14 @@ cdef class NativeBoard:
         dst: Tuple[int, int],
         promote: bool,
     ) -> Tuple[Tuple[int, int], Tuple[int, int], bool, int]:
-        '''駒を動かす。
-        駒を動かした結果である(移動元の座標、移動先の座標、成りの有無、取った駒の種類)を返す。
+        '''Moves a piece.
+        Returns the result of the move as (source coordinate, destination coordinate, promotion flag, type of captured piece).
         Args:
-            src (Tuple[int, int]): 移動元の座標
-            dst (Tuple[int, int]): 移動先の座標
-            promote (bool): 成りの場合True
+            src (Tuple[int, int]): Source coordinate
+            dst (Tuple[int, int]): Destination coordinate
+            promote (bool): True if promoting
         Returns:
-            Tuple[Tuple[int, int], Tuple[int, int], bool, int]: 駒を動かした結果
+            Tuple[Tuple[int, int], Tuple[int, int], bool, int]: Result of the move
         '''
         cdef Position src_pos = Position(src[0], src[1])
         cdef Position dst_pos = Position(dst[0], dst[1])
@@ -64,12 +64,12 @@ cdef class NativeBoard:
             result.getCaptured())
 
     def undo(self, src: Tuple[int, int], dst: Tuple[int, int], promote: bool, captured: int) -> None:
-        '''駒を動かす前の状態に戻す。
+        '''Restores the board to the state before the move.
         Args:
-            src (Tuple[int, int]): 移動元の座標
-            dst (Tuple[int, int]): 移動先の座標
-            promote (bool): 成りの場合True
-            captured (int): 取った駒の種類
+            src (Tuple[int, int]): Source coordinate
+            dst (Tuple[int, int]): Destination coordinate
+            promote (bool): True if the move was a promotion
+            captured (int): Type of the captured piece
         '''
         cdef Position src_pos = Position(src[0], src[1])
         cdef Position dst_pos = Position(dst[0], dst[1])
@@ -79,42 +79,42 @@ cdef class NativeBoard:
         self.board.undo(result)
 
     def get_color(self) -> int:
-        '''手番を取得する。
+        '''Returns the current turn color.
         Returns:
-            int: 手番
+            int: Current turn color
         '''
         return self.board.getColor()
 
     def get_turn(self) -> int:
-        '''手数を取得する。
+        '''Returns the current move number.
         Returns:
-            int: 手数
+            int: Current move number
         '''
         return self.board.getTurn()
 
     def get_piece(self, pos: Tuple[int, int]) -> int:
-        '''指定した座標の駒を取得する。
+        '''Returns the piece at the specified coordinate.
         Args:
-            pos (Tuple[int, int]): 座標
+            pos (Tuple[int, int]): Coordinate
         Returns:
-            int: 駒の種類
+            int: Piece type
         '''
         return self.board.getPiece(Position(pos[0], pos[1]))
 
     def get_hand_piece_num(self, color: int, piece: int) -> int:
-        '''指定した持ち駒の数を取得する。
+        '''Returns the number of the specified piece in hand.
         Args:
-            color (int): 手番
-            piece (int): 駒の種類
+            color (int): Player color
+            piece (int): Piece type
         Returns:
-            int: 持ち駒の数
+            int: Number of pieces in hand
         '''
         return self.board.getHandPieceNum(color, piece)
 
     def get_last_move(self) -> Tuple[Tuple[int, int], Tuple[int, int], bool]:
-        '''最後の着手を取得する。
+        '''Returns the last move made.
         Returns:
-            Tuple[Tuple[int, int], Tuple[int, int], bool]: 最後の着手
+            Tuple[Tuple[int, int], Tuple[int, int], bool]: Last move
         '''
         cdef Move move = self.board.getLastMove()
         return (
@@ -123,12 +123,12 @@ cdef class NativeBoard:
             move.isPromote())
 
     def get_attackers(self, x: int, y: int) -> List[Tuple[int,int]]:
-        '''指定した座標に利いている駒のリストを取得する。
+        '''Returns the list of pieces attacking the specified coordinate.
         Args:
-            x (int): X座標
-            y (int): Y座標
+            x (int): X coordinate
+            y (int): Y coordinate
         Returns:
-            List[Tuple[int, int]]: 指定した座標に利いている駒のリスト
+            List[Tuple[int, int]]: List of pieces attacking the specified coordinate
         '''
         cdef vector[Position] attackers = self.board.getAttackers(Position(x, y))
         return [(pos.getX(), pos.getY()) for pos in attackers]
@@ -139,12 +139,12 @@ cdef class NativeBoard:
         check_only: bool,
     ) -> List[Tuple[Tuple[int, int], Tuple[int, int], bool]]:
         '''
-        合法手のリストを取得する。
+        Returns the list of legal moves.
         Args:
-            remove_unpromote (bool): 歩、角、飛車の不成の手を削除する場合はTrue
-            check_only (bool): 王手のみの手を取得する場合はTrue
+            remove_unpromote (bool): True to exclude non-promotion moves for pawn, bishop, and rook
+            check_only (bool): True to return only moves that give check
         Returns:
-            List[Tuple[Tuple[int, int], Tuple[int, int], bool]]: 合法手のリスト
+            List[Tuple[Tuple[int, int], Tuple[int, int], bool]]: List of legal moves
         '''
         cdef vector[Move] moves = self.board.getLegalMoves(remove_unpromote, check_only)
 
@@ -159,11 +159,11 @@ cdef class NativeBoard:
         depth: int,
     ) -> List[Tuple[Tuple[int, int], Tuple[int, int], bool]]:
         '''
-        現在の盤面の詰み筋の着手手順を取得する。
+        Returns the sequence of moves for the checkmate line from the current board state.
         Args:
-            depth (int): 詰み探索の深さ
+            depth (int): Depth of the checkmate search
         Returns:
-            List[Tuple[Tuple[int, int], Tuple[int, int], bool]]: 詰み筋の着手手順
+            List[Tuple[Tuple[int, int], Tuple[int, int], bool]]: Sequence of moves in the checkmate line
         '''
         cdef vector[Move] moves = self.board.getCheckmateMoves(depth)
 
@@ -175,38 +175,38 @@ cdef class NativeBoard:
 
     def is_nyugyoku(self, color: int) -> bool:
         '''
-        入玉宣言ができるならTrueを返す。
+        Returns True if entering-king declaration is possible.
         Args:
-            color (int): 宣言側の手番
+            color (int): Color of the declaring player
         Returns:
-            bool: 入玉宣言ができるならTrue
+            bool: True if entering-king declaration is possible
         '''
         return self.board.isNyugyoku(color)
 
     def is_check(self, color: int) -> bool:
         '''
-        王手がかかっているかを判定する。
+        Determines whether the specified player is in check.
         Args:
-            color (int): 王手をかけられている側の色
+            color (int): Color of the player who may be in check
         Returns:
-            bool: 王手がかかっていればTrue
+            bool: True if the player is in check
         '''
         return self.board.isCheck(color)
 
     def get_sfen(self) -> str:
         '''
-        盤面のSFEN形式の文字列を取得する。
+        Returns the SFEN-format string representation of the board.
         Returns:
-            str: SFEN形式の文字列
+            str: SFEN-format string
         '''
         return self.board.getSfen().decode('utf-8')
 
     def get_inputs(self, color: int) -> numpy.ndarray:
-        '''モデルに入力するデータを取得する。
+        '''Returns the data to be fed into the model.
         Args:
-            color (int): 手番
+            color (int): Current turn color
         Returns:
-            numpy.ndarray: モデルに入力するデータ
+            numpy.ndarray: Data to be fed into the model
         '''
         cdef numpy.ndarray[numpy.int32_t, ndim=1, mode="c"] inputs = numpy.empty(
             (MODEL_INPUT_PACK_SIZE,), dtype=numpy.int32)
@@ -217,16 +217,16 @@ cdef class NativeBoard:
 
     def copy_from(self, board: NativeBoard) -> None:
         '''
-        盤面をコピーする。
+        Copies the board state from another board.
         Args:
-            board (NativeBoard): コピー元の盤面
+            board (NativeBoard): Source board to copy from
         '''
         self.board.copyFrom(board.board)
 
     def to_string(self) -> str:
         '''
-        盤面の文字列表現を取得する。
+        Returns the string representation of the board.
         Returns:
-            str: 盤面の文字列表現
+            str: String representation of the board
         '''
         return self.board.toString().decode('utf-8')

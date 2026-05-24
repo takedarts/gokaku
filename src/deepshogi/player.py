@@ -10,9 +10,9 @@ from .config import (BOARD_SIZE, COLOR_BLACK, COLOR_NONE, COLOR_WHITE,
                      DEFAULT_DRAW_TURN, DEFAULT_INITIAL_SFEN,
                      DEFAULT_MAX_VISITS, DEFAULT_NYUGYOKU_SCORES,
                      DEFAULT_PUCB_CONSTANT_BASE, DEFAULT_PUCB_CONSTANT_INIT,
-                     DEFAULT_UCB_CONSTANT, RESULT_MAX_MOVES, RESULT_NONE,
-                     RESULT_NYUGYOKU, RESULT_SENNICHITE, RESULT_TSUMI,
-                     get_color_name, get_opposite_color)
+                     RESULT_MAX_MOVES, RESULT_NONE, RESULT_NYUGYOKU,
+                     RESULT_SENNICHITE, RESULT_TSUMI, get_color_name,
+                     get_opposite_color)
 from .exception import ShogiException
 from .native import NativePlayer
 from .processor import Processor
@@ -210,7 +210,6 @@ class Player(object):
         check_search_depth: int = DEFAULT_CHECK_SEARCH_DEPTH,
         check_search_node: int = DEFAULT_CHECK_SEARCH_NODE,
         check_node_depth: int = DEFAULT_CHECK_NODE_DEPTH,
-        ucb_constant: float = DEFAULT_UCB_CONSTANT,
         pucb_constant_init: float = DEFAULT_PUCB_CONSTANT_INIT,
         pucb_constant_base: float = DEFAULT_PUCB_CONSTANT_BASE,
         allowed_repeats: int = DEFAULT_ALLOWED_REPEATS,
@@ -227,7 +226,6 @@ class Player(object):
             check_search_depth (int): Depth for checkmate search
             check_search_node (int): Number of nodes for checkmate search
             check_node_depth (int): Maximum depth of nodes for checkmate search
-            ucb_constant (float): Constant multiplied to UCB upper confidence bound
             pucb_constant_init (float): Initial value applied to PUCB upper confidence bound
             pucb_constant_base (float): Base value applied to PUCB upper confidence bound
             allowed_repeats (int): Allowed number of repeats of the same position (default is 3)
@@ -240,7 +238,7 @@ class Player(object):
         self.native = NativePlayer(
             processor.native, threads, max_visits, nyugyoku_scores, draw_turn,
             check_search_depth, check_search_node, check_node_depth,
-            ucb_constant, pucb_constant_init, pucb_constant_base)
+            pucb_constant_init, pucb_constant_base)
 
         self.native.initialize(initial_sfen)
 

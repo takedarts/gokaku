@@ -18,97 +18,96 @@
 namespace deepshogi {
 
 /**
- * プレイヤとして次の着手を選択するクラス。
+ * Class that selects the next move as a player.
  */
 class Player {
  public:
   /**
-   * プレイヤオブジェクトを作成する。
-   * @param processor 推論を実行するオブジェクト
-   * @param threads スレッドの数
-   * @param searchMaxVisits ノードの最大訪問回数
-   * @param nyugyokuScoreBlack 先手番の入玉宣言に必要となる点数
-   * @param nyugyokuScoreWhite 後手番の入玉宣言に必要となる点数
-   * @param drawTurn 引き分けとなるまでの手数
-   * @param checkSearchDepth 詰み手筋の探索深さ
-   * @param checkSearchNode 詰み手筋の探索ノード数
-   * @param checkNodeDepth 詰み手筋を探索するノードの最大深さ
-   * @param ucbConstant UCBの信頼上限に掛ける定数
-   * @param pucbConstantInit PUCBの信頼上限に掛ける定数の初期値
-   * @param pucbConstantBase PUCBの信頼上限に掛ける定数の変化値
+   * Creates a player object.
+   * @param processor Object that performs inference
+   * @param threads Number of threads
+   * @param searchMaxVisits Maximum visit count for a node
+   * @param nyugyokuScoreBlack Score required for first-player nyugyoku declaration
+   * @param nyugyokuScoreWhite Score required for second-player nyugyoku declaration
+   * @param drawTurn Number of moves until draw
+   * @param checkSearchDepth Search depth for checkmate sequences
+   * @param checkSearchNode Number of search nodes for checkmate sequences
+   * @param checkNodeDepth Maximum depth of nodes to perform checkmate search
+   * @param pucbConstantInit Initial value of the constant multiplied by the PUCB confidence upper bound
+   * @param pucbConstantBase Change value of the constant multiplied by the PUCB confidence upper bound
    */
   Player(
       InferenceProcessor* processor, int32_t threads, int32_t searchMaxVisits,
       int32_t nyugyokuScoreBlack, int32_t nyugyokuScoreWhite, int32_t drawTurn,
       int32_t checkSearchDepth, int32_t checkSearchNode, int32_t checkNodeDepth,
-      float ucbConstant, float pucbConstantInit, float pucbConstantBase);
+      float pucbConstantInit, float pucbConstantBase);
 
   /**
-   * プレイヤオブジェクトを破棄する。
+   * Destroys the player object.
    */
   virtual ~Player();
 
   /**
-   * プレイヤオブジェクトの状態を初期化する。
-   * @param sfen 初期局面のSFEN
+   * Initializes the state of the player object.
+   * @param sfen SFEN of the initial position
    */
   void initialize(const std::string& sfen);
 
   /**
-   * 次の手番を取得する。
-   * @return 手番
+   * Gets the next turn color.
+   * @return Turn color
    */
   int32_t getColor();
 
   /**
-   * 指定された着手にしたがって駒を動かす。
-   * @param move 動かす駒の情報
+   * Moves a piece according to the specified move.
+   * @param move Information about the piece to move
    */
   void play(const Move& move);
 
   /**
-   * 盤面評価を開始する。
-   * 探索処理は別スレッドで実行される。
-   * @param equally 探索回数を均等にするならばtrue、UCBかPUCBを使用するならばfalse
-   * @param candidateWidth 候補手の探索幅(0の場合は探索幅を自動で調整する)
-   * @param temperature 探索の温度パラメータ
-   * @param noise 探索のガンベルノイズの強さ
+   * Starts board evaluation.
+   * Search processing is executed on a separate thread.
+   * @param equally true to equalize search visit count, false to use UCB or PUCB
+   * @param candidateWidth Search width for candidate moves (0 means automatic adjustment)
+   * @param temperature Temperature parameter for search
+   * @param noise Strength of Gumbel noise for search
    */
   void startEvaluation(
       bool equally, int32_t candidateWidth, float temperature, float noise);
 
   /**
-   * 探索が終了するまで待機する。
-   * @param visits 探索の訪問回数
-   * @param playouts 探索のプレイアウト回数
-   * @param timelimit 待機する時間（秒）
-   * @param stop 探索を停止するならばtrue
+   * Waits until the search completes.
+   * @param visits Search visit count
+   * @param playouts Search playout count
+   * @param timelimit Time to wait (seconds)
+   * @param stop true to stop the search
    */
   void waitEvaluation(int32_t visits, int32_t playouts, float timelimit, bool stop);
 
   /**
-   * 候補手の一覧を取得する。
-   * @return 候補手の一覧
+   * Gets the list of candidate moves.
+   * @return List of candidate moves
    */
   std::vector<Candidate> getCandidates();
 
   /**
-   * 指定された盤面オブジェクトに盤面の状態をコピーする。
-   * @param board 盤面オブジェクト
+   * Copies the board state to the specified board object.
+   * @param board Board object
    */
   void copyBoardTo(Board* board);
 
   /**
-   * プレイヤオブジェクトの状態を表す文字列を取得する。
-   * @return プレイヤオブジェクトの状態を表す文字列
+   * Gets a string representing the state of the player object.
+   * @return String representing the state of the player object
    */
   std::string toString();
 
   /**
-   * プレイヤオブジェクトの状態を出力ストリームに書き込む。
-   * @param os 出力ストリーム
-   * @param player プレイヤオブジェクト
-   * @return 出力ストリーム
+   * Writes the state of the player object to an output stream.
+   * @param os Output stream
+   * @param player Player object
+   * @return Output stream
    */
   friend std::ostream& operator<<(std::ostream& os, Player& player) {
     os << player.toString();
@@ -117,143 +116,143 @@ class Player {
 
  private:
   /**
-   * 同期オブジェクト。
+   * Synchronization object.
    */
   std::mutex _mutex;
 
   /**
-   * 探索を起動するための条件変数。
+   * Condition variable for triggering search.
    */
   std::condition_variable _searchCondition;
 
   /**
-   * ノードの更新処理を起動するための条件変数。
+   * Condition variable for triggering node update processing.
    */
   std::condition_variable _updateCondition;
 
   /**
-   * 終了を待機するための条件変数。
+   * Condition variable for waiting for termination.
    */
   std::condition_variable _stopCondition;
 
   /**
-   * 推論を実行するオブジェクト。
+   * Object that performs inference.
    */
   InferenceProcessor* _processor;
 
   /**
-   * 詰み探索エンジンを管理するオブジェクト。
+   * Object that manages the checkmate search engine.
    */
   PnSearchManager _pnsearch;
 
   /**
-   * スレッド管理オブジェクト。
+   * Thread management object.
    */
   ThreadPool _threadPool;
 
   /**
-   * 探索状態を管理するスレッド。
+   * Thread that manages search state.
    */
   std::thread _searchThread;
 
   /**
-   * ノードの状態を更新するスレッド。
+   * Thread that updates node state.
    */
   std::thread _updateThread;
 
   /**
-   * 探索ノードを管理するオブジェクト。
+   * Object that manages search nodes.
    */
   MctsManager _manager;
 
   /**
-   * ルートノード。
+   * Root node.
    */
   MctsNode* _root;
 
   /**
-   * ノードの最大訪問回数。
+   * Maximum visit count for a node.
    */
   int32_t _searchMaxVisits;
 
   /**
-   * 長手数の詰み手筋の深さ。
+   * Depth for long-sequence checkmate search.
    */
   int32_t _checkSearchDepth;
 
   /**
-   * 詰み探索を行うノードの最大深さ。
+   * Maximum depth of nodes to perform checkmate search.
    */
   int32_t _checkNodeDepth;
 
   /**
-   * 探索回数を均等にするならtrue。
+   * true to equalize search visit count.
    */
   bool _searchEqually;
 
   /**
-   * 候補手の探索幅。
+   * Search width for candidate moves.
    */
   int32_t _searchCandidateWidth;
 
   /**
-   * 探索の温度パラメータ。
+   * Temperature parameter for search.
    */
   float _searchTemperature;
 
   /**
-   * 探索のガンベルノイズの強さ。
+   * Strength of Gumbel noise for search.
    */
   float _searchNoise;
 
   /**
-   * 実行中のスレッド数。
+   * Number of running threads.
    */
   int32_t _runnings;
 
   /**
-   * 探索を一時停止しているならtrue。
+   * true if the search is paused.
    */
   bool _paused;
 
   /**
-   * 探索を停止しているならtrue。
+   * true if the search is stopped.
    */
   bool _stopped;
 
   /**
-   * 探索を終了しているならtrue。
+   * true if the search is terminated.
    */
   bool _terminated;
 
   /**
-   * 評価中のノードオブジェクトの一覧。
+   * List of node objects being evaluated.
    */
   std::queue<MctsNode*> _evaluatingNodes;
 
   /**
-   * 詰み探索を行うノードオブジェクトの一覧。
+   * List of node objects to perform checkmate search.
    */
   std::queue<MctsNode*> _checkingNodes;
 
   /**
-   * 探索を実行する。
+   * Executes search.
    */
   void _runSearch();
 
   /**
-   * 探索木を展開する。
+   * Expands the search tree.
    */
   void _runExpand();
 
   /**
-   * 詰み探索を実行する。
-   * @param node 詰み探索を行うノードオブジェクト
+   * Executes checkmate search.
+   * @param node Node object to perform checkmate search
    */
   void _runCheckmateSearch(MctsNode* node);
 
   /**
-   * ノードの状態を更新する。
+   * Updates node state.
    */
   void _runUpdate();
 };

@@ -8,31 +8,31 @@
 namespace deepshogi {
 
 /**
- * 盤面のハッシュ値を保持するクラス。
+ * A class that holds the hash value of a board state.
  */
 class BoardHash {
  public:
   /**
-   * 盤面のハッシュ値を保持するオブジェクトを作成する。
-   * @param board 盤面オブジェクト
+   * Creates an object that holds the hash value of a board state.
+   * @param board Board object
    */
   BoardHash(const Board* board);
 
   /**
-   * 盤面のハッシュ値を保持するオブジェクトを複製する。
-   * @param other 複製元の盤面のハッシュ値を保持するオブジェクト
+   * Copies an object that holds the hash value of a board state.
+   * @param other The source object holding the board hash value to copy from
    */
   BoardHash(const BoardHash& other) = default;
 
   /**
-   * 盤面のハッシュ値を保持するオブジェクトを破棄する。
+   * Destroys the object that holds the hash value of a board state.
    */
   virtual ~BoardHash() = default;
 
   /**
-   * このオブジェクトが指定されたオブジェクトより大きいかどうかを比較する。
-   * @param other 比較対象のBoardHashオブジェクト
-   * @return このオブジェクトが指定されたオブジェクトより小さい場合はtrue
+   * Compares whether this object is less than the specified object.
+   * @param other The BoardHash object to compare against
+   * @return true if this object is less than the specified object
    */
   inline bool operator<(const BoardHash& other) const {
     if (_cellHash != other._cellHash) {
@@ -52,17 +52,17 @@ class BoardHash {
 
  private:
   /**
-   * 盤面上の駒の配置を表すハッシュ値。
+   * Hash value representing the arrangement of pieces on the board.
    */
   uint64_t _cellHash;
 
   /**
-   * 駒の配置を表すビットボード。
+   * Bitboards representing the piece placement.
    */
   BitBoard _colorBitBoards[2];
 
   /**
-   * 持ち駒の数を表すビット表現。
+   * Bit representation of the number of pieces in hand.
    */
   uint64_t _handBits[2];
 };

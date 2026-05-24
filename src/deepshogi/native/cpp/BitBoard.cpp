@@ -6,13 +6,13 @@
 
 namespace deepshogi {
 
-static constexpr int8_t LOWER_SIZE(BOARD_SIZE * 6);                     // 下位ビットサイズ
-static constexpr int8_t UPPER_SIZE(BOARD_SIZE * 3);                     // 上位ビットサイズ
-static constexpr uint64_t LOWER_MASK((uint64_t(1) << LOWER_SIZE) - 1);  // 下位ビットのマスク
-static constexpr uint32_t UPPER_MASK((uint32_t(1) << UPPER_SIZE) - 1);  // 上位ビットのマスク
+static constexpr int8_t LOWER_SIZE(BOARD_SIZE * 6);                     // lower bit size
+static constexpr int8_t UPPER_SIZE(BOARD_SIZE * 3);                     // upper bit size
+static constexpr uint64_t LOWER_MASK((uint64_t(1) << LOWER_SIZE) - 1);  // lower bit mask
+static constexpr uint32_t UPPER_MASK((uint32_t(1) << UPPER_SIZE) - 1);  // upper bit mask
 
 /**
- * 全てのビットを0に設定したオブジェクトを生成する。
+ * Constructs an object with all bits set to 0.
  */
 BitBoard::BitBoard()
     : _lower(0),
@@ -20,9 +20,9 @@ BitBoard::BitBoard()
 }
 
 /**
- * 指定されたビット列を設定したオブジェクトを生成する。
- * @param lower 盤面の下位ビットを表すビット列。
- * @param upper 盤面の上位ビットを表すビット列。
+ * Constructs an object with the specified bit strings.
+ * @param lower Bit string representing the lower bits of the board.
+ * @param upper Bit string representing the upper bits of the board.
  */
 BitBoard::BitBoard(uint64_t lower, uint32_t upper)
     : _lower(lower),
@@ -30,8 +30,8 @@ BitBoard::BitBoard(uint64_t lower, uint32_t upper)
 }
 
 /**
- * 指定された位置にビットを立てたオブジェクトを生成する。
- * @param index ビットを立てる位置を表す整数値
+ * Constructs an object with the bit at the specified position set.
+ * @param index Integer value representing the position to set the bit
  */
 BitBoard::BitBoard(int8_t index) {
   if (index < LOWER_SIZE) {
@@ -44,8 +44,8 @@ BitBoard::BitBoard(int8_t index) {
 }
 
 /**
- * 指定された位置にビットを立てる。
- * @param index ビットを立てる位置を表す整数値
+ * Sets the bit at the specified position.
+ * @param index Integer value representing the position to set the bit
  */
 void BitBoard::setBit(int8_t index) {
   if (index < LOWER_SIZE) {
@@ -56,8 +56,8 @@ void BitBoard::setBit(int8_t index) {
 }
 
 /**
- * 指定された位置のビットをクリアする。
- * @param index ビットをクリアする位置を表す整数値
+ * Clears the bit at the specified position.
+ * @param index Integer value representing the position to clear the bit
  */
 void BitBoard::clearBit(int8_t index) {
   if (index < LOWER_SIZE) {
@@ -68,9 +68,9 @@ void BitBoard::clearBit(int8_t index) {
 }
 
 /**
- * 指定された位置のビットが立っているかを返す。
- * @param index ビットの状態を確認する位置を表す整数値
- * @return 指定された位置のビットが立っている場合はtrue
+ * Returns whether the bit at the specified position is set.
+ * @param index Integer value representing the position to check the bit state
+ * @return true if the bit at the specified position is set
  */
 bool BitBoard::hasBit(int8_t index) const {
   if (index < LOWER_SIZE) {
@@ -81,9 +81,9 @@ bool BitBoard::hasBit(int8_t index) const {
 }
 
 /**
- * 最も左のビットが立っている位置を返す。
- * ビット列が全て0である場合は-1を返す。
- * @return 最も左のビットが立っている位置を表す整数値
+ * Returns the position of the leftmost set bit.
+ * Returns -1 if all bits are 0.
+ * @return Integer value representing the position of the leftmost set bit
  */
 int8_t BitBoard::getLeftmostBitIndex() const {
   if (_upper != 0) {
@@ -96,9 +96,9 @@ int8_t BitBoard::getLeftmostBitIndex() const {
 }
 
 /**
- * 最も右のビットが立っている位置を返す。
- * ビット列が全て0である場合は-1を返す。
- * @return 最も右のビットが立っている位置を表す整数値
+ * Returns the position of the rightmost set bit.
+ * Returns -1 if all bits are 0.
+ * @return Integer value representing the position of the rightmost set bit
  */
 int8_t BitBoard::getRightmostBitIndex() const {
   if (_lower != 0) {
@@ -111,18 +111,18 @@ int8_t BitBoard::getRightmostBitIndex() const {
 }
 
 /**
- * 最も右のビットが立っている位置をクリアし、その位置を返す。
- * ビット列が全て0である場合は-1を返す。
- * @return 最も右のビットが立っている位置を表す整数値
+ * Returns the position of the rightmost set bit.
+ * Returns -1 if all bits are 0.
+ * @return Integer value representing the position of the rightmost set bit
  */
 int8_t BitBoard::popRightmostBitIndex() {
   if (_lower != 0) {
     int8_t index = std::countr_zero(_lower);
-    _lower &= _lower - 1;  // 最も右のビットをクリア
+    _lower &= _lower - 1;  // clear the rightmost bit
     return index;
   } else if (_upper != 0) {
     int8_t index = LOWER_SIZE + std::countr_zero(_upper);
-    _upper &= _upper - 1;  // 最も右のビットをクリア
+    _upper &= _upper - 1;  // clear the rightmost bit
     return index;
   } else {
     return -1;
@@ -130,17 +130,17 @@ int8_t BitBoard::popRightmostBitIndex() {
 }
 
 /**
- * ビット列の論理否定を計算した結果を返す。
- * @return 論理否定を取った結果のBitBoardオブジェクト
+ * Returns the result of computing the bitwise NOT of the bit string.
+ * @return BitBoard object with the bitwise NOT applied
  */
 BitBoard BitBoard::operator~() const {
   return BitBoard(~_lower & LOWER_MASK, ~_upper & UPPER_MASK);
 }
 
 /**
- * ビット列を左にシフトしてこのオブジェクトに代入する。
- * @param shift シフトするビット数
- * @return 左シフトした結果のBitBoardオブジェクトへの参照
+ * Left-shifts the bit string and assigns the result to this object.
+ * @param shift Number of bits to shift
+ * @return Reference to the BitBoard object with the left-shifted result
  */
 BitBoard& BitBoard::operator<<=(int32_t shift) {
   if (shift < UPPER_SIZE) {
@@ -161,9 +161,9 @@ BitBoard& BitBoard::operator<<=(int32_t shift) {
 }
 
 /**
- * ビット列を右にシフトしてこのオブジェクトに代入する。
- * @param shift シフトするビット数
- * @return 右シフトした結果のBitBoardオブジェクトへの参照
+ * Right-shifts the bit string and assigns the result to this object.
+ * @param shift Number of bits to shift
+ * @return Reference to the BitBoard object with the right-shifted result
  */
 BitBoard& BitBoard::operator>>=(int32_t shift) {
   if (shift < UPPER_SIZE) {
@@ -184,8 +184,8 @@ BitBoard& BitBoard::operator>>=(int32_t shift) {
 }
 
 /**
- * ビット列を文字列形式で表現する。
- * @return ビット列を表す文字列
+ * Returns a string representation of the bit string.
+ * @return String representing the bit string
  */
 std::string BitBoard::toString() const {
   std::stringstream ss;

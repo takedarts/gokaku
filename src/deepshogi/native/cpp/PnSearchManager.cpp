@@ -3,9 +3,9 @@
 namespace deepshogi {
 
 /**
- * PN探索エンジンのオブジェクトを管理するクラスのオブジェクトを生成する。
- * @param nodes 探索の最大ノード数
- * @param size プールするPN探索エンジンの数
+ * Constructs a PnSearchManager object.
+ * @param nodes Maximum number of nodes for the search
+ * @param size Number of PN search engines to pool
  */
 PnSearchManager::PnSearchManager(int32_t nodes, int32_t size)
     : _mutex(),
@@ -19,7 +19,7 @@ PnSearchManager::PnSearchManager(int32_t nodes, int32_t size)
 }
 
 /**
- * PN探索エンジンのオブジェクトを管理するクラスのオブジェクトを破棄する。
+ * Destroys the PnSearchManager object.
  */
 PnSearchManager::~PnSearchManager() {
   for (size_t i = 0; i < _availableEngines.size(); ++i) {
@@ -28,9 +28,9 @@ PnSearchManager::~PnSearchManager() {
 }
 
 /**
- * PN探索エンジンのオブジェクトを取得する。
- * プールにPN探索エンジンのオブジェクトが存在しない場合は、呼び出し元のスレッドをブロックする。
- * @return PN探索エンジンのオブジェクトへのポインタ
+ * Acquires a PN search engine object.
+ * Blocks the calling thread if no PN search engine is available in the pool.
+ * @return Pointer to the PN search engine object
  */
 PnSearchEngine* PnSearchManager::acquire() {
   std::unique_lock<std::mutex> lock(_mutex);
@@ -42,8 +42,8 @@ PnSearchEngine* PnSearchManager::acquire() {
 }
 
 /**
- * PN探索エンジンのオブジェクトを返却する。
- * @param engine 返却するPN探索エンジンのオブジェクトへのポインタ
+ * Releases a PN search engine object back to the pool.
+ * @param engine Pointer to the PN search engine object to release
  */
 void PnSearchManager::release(PnSearchEngine* engine) {
   std::unique_lock<std::mutex> lock(_mutex);

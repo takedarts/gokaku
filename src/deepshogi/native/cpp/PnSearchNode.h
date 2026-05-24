@@ -9,131 +9,131 @@ namespace deepshogi {
 class PnSearchEngine;
 
 /**
- * PN探索アルゴリズムの探索ノードを表すクラス。
+ * Class representing a search node in the PN search algorithm.
  */
 class PnSearchNode {
  public:
   /**
-   * PN探索ノードのオブジェクトを生成する。
-   * 不詰みの末端ノードを表すノードとして初期化する。
+   * Constructs a PN search node object.
+   * Initializes the node as a terminal node representing a non-checkmate state.
    */
   PnSearchNode();
 
   /**
-   * コピーコンストラクタを削除する。
+   * Deleted copy constructor.
    */
   PnSearchNode(const PnSearchNode& node) = delete;
 
   /**
-   * PN探索ノードのオブジェクトを破棄する。
+   * Destroys the PN search node object.
    */
   virtual ~PnSearchNode() = default;
 
   /**
-   * 指定された盤面情報でこのノードを末端ノードとして初期化する。
-   * @param board 盤面オブジェクト
-   * @param depth ノードの深さ
+   * Initializes this node as a terminal node with the specified board state.
+   * @param board Board object
+   * @param depth Depth of the node
    */
   void initialize(const Board* board, int32_t depth);
 
   /**
-   * ノードを展開して子ノードを生成する。
-   * @param engine PN探索エンジンのオブジェクト
-   * @return ノードを展開できた場合はtrue
+   * Expands the node to generate child nodes.
+   * @param engine PN search engine object
+   * @return true if the node was successfully expanded
    */
   bool expand(PnSearchEngine* engine);
 
   /**
-   * このノードのPN/DN値を更新する。
-   * @param depth_limit 深さの制限
+   * Updates the PN/DN values of this node.
+   * @param depth_limit Depth limit
    */
   void update(int32_t depth_limit);
 
   /**
-   * 次に探索する子ノードを取得する。
-   * このノードが末端ノードの場合はnullptrを返す。
-   * 王手をかける手番の場合は「PN値+探索数の対数」が最小の子ノードを返し、
-   * 王手から逃げる手番の場合は「DN値+探索数の対数」が最小の子ノードを返す。
-   * 探索数を考慮した優先度を計算することで、探索の偏りを減らすことができ、
-   * 手数の少ない詰み筋を発見できる可能性が高くなる。
-   * @return 次に探索する子ノードのポインタ
+   * Returns the next child node to search.
+   * Returns nullptr if this node is a terminal node.
+   * For the checking side, returns the child node with the minimum "PN value + log(search count)".
+   * For the evading side, returns the child node with the minimum "DN value + log(search count)".
+   * Computing priority with the search count reduces search bias
+   * and increases the chance of finding shorter checkmate sequences.
+   * @return Pointer to the next child node to search
    */
   PnSearchNode* getNextNode();
 
   /**
-   * 詰み手順の着手と子ノードを取得する。
-   * 詰み手順となる子ノードが存在しない場合はnullptrを返す。
-   * @return 詰み手順の着手と子ノードのペア
+   * Returns the move and child node for the checkmate sequence.
+   * Returns nullptr if no child node forming a checkmate sequence exists.
+   * @return Pair of the checkmate move and child node
    */
   std::pair<Move, PnSearchNode*> getCheckmateNode();
 
   /**
-   * 指定された子ノードを新しい子ノードに置き換える。
-   * @param targetNode 置き換える子ノード
-   * @param newNode 新しい子ノード
+   * Replaces the specified child node with a new child node.
+   * @param targetNode Child node to replace
+   * @param newNode New child node
    */
   void replaceChildNode(PnSearchNode* targetNode, PnSearchNode* newNode);
 
   /**
-   * ノードの情報を文字列として取得する。
-   * @return ノードの情報の文字列
+   * Returns the node information as a string.
+   * @return String representation of the node information
    */
   std::string toString() const;
 
   /**
-   * ノードの深さを取得する。
-   * @return ノードの深さ
+   * Returns the depth of the node.
+   * @return Depth of the node
    */
   inline int32_t getDepth() const {
     return _depth;
   }
 
   /**
-   * PN値を取得する。
-   * @return PN値
+   * Returns the PN value.
+   * @return PN value
    */
   inline int32_t getPn() const {
     return _pn;
   }
 
   /**
-   * DN値を取得する。
-   * @return DN値
+   * Returns the DN value.
+   * @return DN value
    */
   inline int32_t getDn() const {
     return _dn;
   }
 
   /**
-   * 詰みまでの手数を取得する。
-   * @return 詰みまでの手数
+   * Returns the number of moves to checkmate.
+   * @return Number of moves to checkmate
    */
   inline int32_t getStep() const {
     return _step;
   }
 
   /**
-   * ノードのサイズを取得する。
-   * @return ノードのサイズ
+   * Returns the size of the node.
+   * @return Size of the node
    */
   inline int32_t getSize() const {
     return _size;
   }
 
   /**
-   * このノードが指定されたノードの同じノードか劣後ノードであればtrueを返す。
-   * 劣後ノードとは、盤上の駒の配置が同じであり、
-   * すべての種類の持ち駒の数が同じか少ないノードのことを意味する。
-   * 王手をかける側の手番が評価対象の手番となる。
-   * @param node 比較対象のノード
-   * @return 同じノードか劣後ノードであればtrue
+   * Returns true if this node is the same as or inferior to the specified node.
+   * An inferior node has the same board piece arrangement and the same or fewer
+   * pieces in hand for every piece type.
+   * The side delivering check is the turn evaluated.
+   * @param node Node to compare against
+   * @return true if this node is equal to or inferior to the specified node
    */
   inline bool isLesserThanOrEqual(const PnSearchNode* node) const {
-    // 王手をかける側の手番：盤上の駒配置が同じで、自分の持ち駒が同じか少ないことを確認する
+    // Checking side's turn: verify that the board piece arrangement is the same and own pieces in hand are the same or fewer
     if (_depth % 2 == 1) {
       return _board.isLesserThanOrEqual(node->_board, _board.getColor());
     }
-    // 王手から逃げる側の手番：盤上の駒配置が同じで、相手の持ち駒が同じか少ないことを確認する
+    // Evading side's turn: verify that the board piece arrangement is the same and opponent's pieces in hand are the same or fewer
     else {
       return _board.isLesserThanOrEqual(node->_board, OPPOSITE_COLOR(_board.getColor()));
     }
@@ -141,37 +141,37 @@ class PnSearchNode {
 
  private:
   /**
-   * 盤面オブジェクト。
+   * Board object.
    */
   Board _board;
 
   /**
-   * ノードの深さ。
+   * Depth of the node.
    */
   int32_t _depth;
 
   /**
-   * 子ノードの一覧。
+   * List of child nodes.
    */
   std::vector<std::pair<Move, PnSearchNode*>> _children;
 
   /**
-   * PN値。
+   * PN value.
    */
   int32_t _pn;
 
   /**
-   * DN値。
+   * DN value.
    */
   int32_t _dn;
 
   /**
-   * 詰みまでの手数。
+   * Number of moves to checkmate.
    */
   int32_t _step;
 
   /**
-   * ノードのサイズ。
+   * Size of the node.
    */
   int32_t _size;
 };

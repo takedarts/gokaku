@@ -6,73 +6,73 @@
 namespace deepshogi {
 
 /**
- * MCTSの評価値を管理するクラス。
- * 評価値の合計と評価回数を管理する。
- * スレッドセーフに評価値の平均を取得できるようにする。
+ * A class for managing MCTS evaluation values.
+ * Manages the sum of evaluation values and the evaluation count.
+ * Allows thread-safe retrieval of the average evaluation value.
  */
 class MctsValue {
  public:
   /**
-   * MCTSの評価値オブジェクトを生成する。
+   * Creates an MCTS evaluation value object.
    */
   MctsValue();
 
   /**
-   * MCTSの評価値オブジェクトをコピーする。
-   * @param other コピー元のオブジェクト
+   * Copies an MCTS evaluation value object.
+   * @param other The source object to copy from
    */
   MctsValue(const MctsValue& other);
 
   /**
-   * MCTSの評価値オブジェクトを破棄する。
+   * Destroys the MCTS evaluation value object.
    */
   virtual ~MctsValue() = default;
 
   /**
-   * MCTSの評価値をリセットする。
+   * Resets the MCTS evaluation value.
    */
   void reset();
 
   /**
-   * MCTSの評価値を更新する。
-   * @param value 評価値
+   * Updates the MCTS evaluation value.
+   * @param value Evaluation value
    */
   void update(float value);
 
   /**
-   * MCTSの評価値を設定する。
-   * @param value 評価値
+   * Sets the MCTS evaluation value.
+   * @param value Evaluation value
    */
   void setValue(float value);
 
   /**
-   * MCTSの評価値の平均を取得する。
-   * @param defaultValue 評価回数が0の場合に返す値
-   * @return 評価値の平均
+   * Gets the average MCTS evaluation value.
+   * @param defaultValue Value to return when the evaluation count is 0
+   * @return Average evaluation value
    */
   float getValue(float defaultValue);
 
   /**
-   * MCTSの評価値の信頼区間の下限を取得する。
-   * @param color 手番（COLOR_BLACKまたはCOLOR_WHITE）
-   * @param defaultValue 評価回数が0の場合に評価値とする値
-   * @return 評価値の信頼区間の下限
+   * Gets the lower confidence bound of the MCTS evaluation value.
+   * @param color Turn color (COLOR_BLACK or COLOR_WHITE)
+   * @param defaultValue Value to use as the evaluation value when the evaluation count is 0
+   * @return Lower confidence bound of the evaluation value
    */
   float getValueLCB(int8_t color, float defaultValue);
 
  private:
   /**
-   *  同期するためのミューテックス。
+   * Mutex for synchronization.
    */
   std::mutex _mutex;
 
   /**
-   * 評価値の合計。
+   * Sum of evaluation values.
    */
   float _value;
 
   /**
-   * 評価回数。
+   * Evaluation count.
    */
   int32_t _count;
 };

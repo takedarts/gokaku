@@ -5,79 +5,68 @@
 namespace deepshogi {
 
 /**
- * MCTSの探索に関するパラメータを管理するクラス。
+ * A class for managing parameters related to MCTS search.
  */
 class MctsParameter {
  public:
   /**
-   * パラメータオブジェクトを作成する。
-   * @param nyugyokuScoreBlack 先手番の入玉宣言に必要となる点数
-   * @param nyugyokuScoreWhite 後手番の入玉宣言に必要となる点数
-   * @param drawTurn 引き分けとなるまでの手数
-   * @param checkSearchDepth 詰み手筋の探索深さ
-   * @param checkSearchNode 詰み手筋の探索ノード数
-   * @param ucbConstant UCBの信頼上限に掛ける定数
-   * @param pucbConstantInit PUCBの信頼上限に掛ける定数の初期値
-   * @param pucbConstantBase PUCBの信頼上限に掛ける定数の変化値
+   * Creates a parameter object.
+   * @param nyugyokuScoreBlack Score required for black's entering-king declaration
+   * @param nyugyokuScoreWhite Score required for white's entering-king declaration
+   * @param drawTurn Number of moves until a draw
+   * @param pucbConstantInit Initial value of the constant multiplied by the PUCB confidence upper bound
+   * @param pucbConstantBase Rate-of-change value of the constant multiplied by the PUCB confidence upper bound
    */
   MctsParameter(
       int32_t nyugyokuScoreBlack, int32_t nyugyokuScoreWhite, int32_t drawTurn,
-      float ucbConstant, float pucbConstantInit, float pucbConstantBase);
+      float pucbConstantInit, float pucbConstantBase);
 
   /**
-   * パラメータオブジェクトをコピーする。
-   * @param other コピー元のパラメータオブジェクト
+   * Copies a parameter object.
+   * @param other The source parameter object to copy from
    */
   MctsParameter(const MctsParameter& other) = default;
 
   /**
-   * パラメータオブジェクトを破棄する。
+   * Destroys the parameter object.
    */
   virtual ~MctsParameter() = default;
 
   /**
-   * 先手番の入玉宣言に必要となる点数を取得する。
-   * @return 先手番の入玉宣言に必要となる点数
+   * Gets the score required for black's entering-king declaration.
+   * @return Score required for black's entering-king declaration
    */
   inline int32_t getNyugyokuScoreBlack() const {
     return _nyugyokuScoreBlack;
   }
 
   /**
-   * 後手番の入玉宣言に必要となる点数を取得する。
-   * @return 後手番の入玉宣言に必要となる点数
+   * Gets the score required for white's entering-king declaration.
+   * @return Score required for white's entering-king declaration
    */
   inline int32_t getNyugyokuScoreWhite() const {
     return _nyugyokuScoreWhite;
   }
 
   /**
-   * 引き分けとなるまでの手数を取得する。
-   * @return 引き分けとなるまでの手数
+   * Gets the number of moves until a draw.
+   * @return Number of moves until a draw
    */
   inline int32_t getDrawTurn() const {
     return _drawTurn;
   }
 
   /**
-   * UCBの信頼上限に掛ける定数を取得する。
-   * @return UCBの信頼上限に掛ける定数
-   */
-  inline float getUcbConstant() const {
-    return _ucbConstant;
-  }
-
-  /**
-   * PUCBの信頼上限に掛ける定数の初期値を取得する。
-   * @return PUCBの信頼上限に掛ける定数の初期値
+   * Gets the initial value of the constant multiplied by the PUCB confidence upper bound.
+   * @return Initial value of the constant multiplied by the PUCB confidence upper bound
    */
   inline float getPucbConstantInit() const {
     return _pucbConstantInit;
   }
 
   /**
-   * PUCBの信頼上限に掛ける定数の変化値を取得する。
-   * @return PUCBの信頼上限に掛ける定数の変化値
+   * Gets the rate-of-change value of the constant multiplied by the PUCB confidence upper bound.
+   * @return Rate-of-change value of the constant multiplied by the PUCB confidence upper bound
    */
   inline float getPucbConstantBase() const {
     return _pucbConstantBase;
@@ -85,32 +74,27 @@ class MctsParameter {
 
  private:
   /**
-   * 先手番の入玉宣言に必要となる点数。
+   * Score required for black's entering-king declaration.
    */
   int32_t _nyugyokuScoreBlack;
 
   /**
-   * 後手番の入玉宣言に必要となる点数。
+   * Score required for white's entering-king declaration.
    */
   int32_t _nyugyokuScoreWhite;
 
   /**
-   * 引き分けとなるまでの手数。
+   * Number of moves until a draw.
    */
   int32_t _drawTurn;
 
   /**
-   * UCBの信頼上限に掛ける定数。
-   */
-  float _ucbConstant;
-
-  /**
-   * PUCBの信頼上限に掛ける定数の初期値。
+   * Initial value of the constant multiplied by the PUCB confidence upper bound.
    */
   float _pucbConstantInit;
 
   /**
-   * PUCBの信頼上限に掛ける定数の変化値。
+   * Rate-of-change value of the constant multiplied by the PUCB confidence upper bound.
    */
   float _pucbConstantBase;
 };

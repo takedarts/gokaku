@@ -12,63 +12,63 @@
 namespace deepshogi {
 
 /**
- * モデルを使った推論を実行するクラス。
+ * A class that executes inference using a model.
  */
 class InferenceModel {
  public:
   /**
-   * 利用可能なGPUの番号を取得する。
-   * @return GPUの番号のリスト
+   * Returns the list of available GPU indices.
+   * @return List of GPU indices
    */
   static std::vector<std::int32_t> getAvailableGPUs();
   /**
-   * 実行環境で使用できるデバイスを取得する。
-   * @param gpu GPU番号
+   * Returns the device available in the current execution environment.
+   * @param gpu GPU index
    */
   static at::Device getDevice(int32_t gpu);
 
   /**
-   * 実行環境で使用できるデータ型を取得する。
-   * @param gpu GPU番号
-   * @param fp16 16bit精度で計算するならTrue
+   * Returns the scalar type available in the current execution environment.
+   * @param gpu GPU index
+   * @param fp16 True to compute with 16-bit precision
    */
   static at::ScalarType getScalarType(int32_t gpu, bool fp16);
 
   /**
-   * モデルオブジェクトを作成する。
-   * GPU番号に-1を指定するとCPUで計算するオブジェクトを生成する。
-   * @param filename モデルファイルのパス
-   * @param gpu GPU番号
-   * @param fp16 16bit精度で計算するならTrue
-   * @param deterministic 計算結果を再現可能にするならTrue
+   * Creates a model object.
+   * Specifying -1 for the GPU index creates an object that computes on the CPU.
+   * @param filename Path to the model file
+   * @param gpu GPU index
+   * @param fp16 True to compute with 16-bit precision
+   * @param deterministic True to make computation results reproducible
    */
   InferenceModel(std::string filename, int32_t gpu, bool fp16, bool deterministic);
 
   /**
-   * デストラクタ。
+   * Destructor.
    */
   virtual ~InferenceModel() = default;
 
   /**
-   * 推論を実行する。
-   * @param inputs 入力データ
-   * @param masks 出力データのマスク
-   * @param outputs 出力データ
-   * @param size 評価データの数
+   * Runs inference.
+   * @param inputs Input data
+   * @param masks Output data mask
+   * @param outputs Output data
+   * @param size Number of evaluation data items
    */
   void forward(int32_t* inputs, int32_t* masks, float* outputs, int32_t size);
 
   /**
-   * CUDAを使うならTrueを返す。
-   * @return CUDAを使うならTrue
+   * Returns True if using CUDA.
+   * @return True if using CUDA
    */
   inline bool isCuda() const {
     return _device.is_cuda();
   }
 
   /**
-   * CPUを使うならTrueを返す。
-   * @return CPUを使うならTrue
+   * Returns True if using CPU.
+   * @return True if using CPU
    */
   inline bool isCpu() const {
     return _cpu;
@@ -76,37 +76,37 @@ class InferenceModel {
 
  private:
   /**
-   * 入出力の同期を取るためのオブジェクト。
+   * Mutex for synchronizing I/O operations.
    */
   std::mutex _ioMutex;
 
   /**
-   * 計算時の同期を取るためのオブジェクト。
+   * Mutex for synchronizing computation.
    */
   std::mutex _computeMutex;
 
   /**
-   * 推論モデル。
+   * Inference model.
    */
   torch::jit::script::Module _model;
 
   /**
-   * 実行デバイス。
+   * Execution device.
    */
   at::Device _device;
 
   /**
-   * 計算で使用するデータ型。
+   * Data type used for computation.
    */
   at::ScalarType _dtype;
 
   /**
-   * ビットシフト用テンソル。
+   * Tensor for bit shifting.
    */
   torch::Tensor _bitShift;
 
   /**
-   * CPUで計算するならTrue。
+   * True if computing on CPU.
    */
   bool _cpu;
 };

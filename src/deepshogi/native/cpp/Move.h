@@ -9,119 +9,119 @@
 namespace deepshogi {
 
 /**
- * 着手の情報を管理するクラス。
+ * A class that manages move information.
  *
- * 着手は16ビットの整数で表され、以下のビット割り当てがされている。
- * - 0-6ビット目: 移動先の座標番号 (0-80)
- * - 7-13ビット目: 移動元の座標番号 (0-80)
- * - 14ビット目: 成りの有無 (0: 成らない, 1: 成る)
- * - 15ビット目: 常に0（無効な着手の場合は1）
+ * A move is represented as a 16-bit integer with the following bit layout:
+ * - Bits 0-6:  Destination square index (0-80)
+ * - Bits 7-13: Source square index (0-80)
+ * - Bit 14:    Promotion flag (0: no promotion, 1: promote)
+ * - Bit 15:    Always 0 (1 for invalid moves)
  *
- * 無効な着手の場合は負の値（通常は-1）が使用される。
+ * A negative value (typically -1) is used for invalid moves.
  */
 class Move {
  public:
   /**
-   * 無効な着手オブジェクトを作成する。
+   * Creates an invalid move object.
    */
   Move();
 
   /**
-   * 移動元と移動先の座標番号、成りの有無を指定してオブジェクトを作成する。
-   * @param src 移動元の座標番号
-   * @param dst 移動先の座標番号
-   * @param promote 成りの有無
+   * Creates an object with the specified source/destination square indices and promotion flag.
+   * @param src Source square index
+   * @param dst Destination square index
+   * @param promote Whether to promote
    */
   Move(const Position& src, const Position& dst, bool promote);
 
   /**
-   * 着手番号を指定してオブジェクトを作成する。
-   * @param move 着手番号
+   * Creates an object from the given move value.
+   * @param move Move value
    */
   Move(int16_t move);
 
   /**
-   * コピーコンストラクタ。
+   * Copy constructor.
    */
   Move(const Move& move) = default;
 
   /**
-   * オブジェクトを破棄する。
+   * Destroys the object.
    */
   virtual ~Move() = default;
 
   /**
-   * 着手の文字列表現を返す。
-   * @return 着手の文字列表現。
+   * Returns the string representation of the move.
+   * @return String representation of the move.
    */
   std::string toString() const;
 
   /**
-   * 移動元の座標を取得する。
-   * @return 移動元の座標
+   * Returns the source square.
+   * @return Source square
    */
   inline Position getSrc() const {
     return Position((_move >> 7) & 0x7F);
   }
 
   /**
-   * 移動先の座標を取得する。
-   * @return 移動先の座標
+   * Returns the destination square.
+   * @return Destination square
    */
   inline Position getDst() const {
     return Position((_move >> 0) & 0x7F);
   }
 
   /**
-   * 成りを含む着手であればtrueを返す。
-   * @return 成りを含む着手であればtrue
+   * Returns true if this move includes a promotion.
+   * @return True if this move includes a promotion
    */
   inline bool isPromote() const {
     return (_move >> 14) & 0x1;
   }
 
   /**
-   * 着手番号を返す。
-   * @return 着手番号
+   * Returns the move value.
+   * @return Move value
    */
   inline int16_t getValue() const {
     return _move;
   }
 
   /**
-   * 着手が有効であればtrueを返す。
-   * @return 着手が有効であればtrue
+   * Returns true if the move is valid.
+   * @return True if the move is valid
    */
   inline bool isValid() const {
     return _move >= 0;
   }
 
   /**
-   * 同じ着手であればtrueを返す。
+   * Returns true if the moves are equal.
    */
   inline bool operator==(const Move& move) const {
     return _move == move._move;
   }
 
   /**
-   * 異なる着手であればtrueを返す。
+   * Returns true if the moves are not equal.
    */
   inline bool operator!=(const Move& move) const {
     return _move != move._move;
   }
 
   /**
-   * この着手が指定された着手よりも小さいならばtrueを返す。
+   * Returns true if this move is less than the specified move.
    */
   inline bool operator<(const Move& move) const {
     return _move < move._move;
   }
 
   /**
-   * 着手オブジェクトの文字列表現を出力ストリームに書き込む。
-   * @param os 出力ストリーム。
-   * @param move 着手オブジェクト。
-   * @return 出力ストリーム。
+   * Writes the string representation of the move to the output stream.
+   * @param os Output stream.
+   * @param move Move object.
+   * @return Output stream.
    */
   friend std::ostream& operator<<(std::ostream& os, const Move& move) {
     os << move.toString();
@@ -130,12 +130,12 @@ class Move {
 
  private:
   /**
-   * この着手を表現する着手番号。
+   * Move value representing this move.
    */
   int16_t _move;
 };
 
-// 無効な着手を表す定数
+// Constant representing an invalid move
 const Move MOVE_INVALID(-1);
 
 }  // namespace deepshogi

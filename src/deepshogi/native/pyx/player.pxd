@@ -14,7 +14,7 @@ cdef extern from "cpp/Player.h" namespace "deepshogi":
             InferenceProcessor* processor, int32_t threads, int32_t searchMaxVisits,
             int32_t nyugyokuScoreBlack, int32_t nyugyokuScoreWhite, int32_t drawTurn,
             int32_t checkSearchDepth, int32_t checkSearchNode, int32_t checkNodeDepth,
-            float ucbConstant, float pucbConstantInit, float pucbConstantBase) except +
+            float pucbConstantInit, float pucbConstantBase) except +
         void initialize(const string& sfen) except +
         int32_t getColor() except +
         void play(const Move& move) except +

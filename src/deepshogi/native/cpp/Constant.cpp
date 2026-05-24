@@ -4,25 +4,25 @@
 
 namespace deepshogi {
 
-// 敵陣を表すビットボード
+// Bitboard representing the enemy territory
 const BitBoard BITBOARD_ENEMY_AREAS[2] = {
     BitBoard(0x00e070381c0e07L, 0x001c0e07),
     BitBoard(0x381c0e070381c0L, 0x070381c0),
 };
 
-// 歩を打てる場所を表すビットボード
+// Bitboard representing squares where a pawn can be dropped
 const BitBoard BITBOARD_PAWN_DROPABLES[2] = {
     BitBoard(0x3fdfeff7fbfdfeL, 0x07fbfdfe),
     BitBoard(0x1feff7fbfdfeffL, 0x03fdfeff),
 };
 
-// 桂を打てる場所を表すビットボード
+// Bitboard representing squares where a knight can be dropped
 const BitBoard BITBOARD_KNIGHT_DROPABLES[2] = {
     BitBoard(0x3f9fcfe7f3f9fcL, 0x07f3f9fc),
     BitBoard(0x0fe7f3f9fcfe7fL, 0x01fcfe7f),
 };
 
-// 歩の利きを表すビットボード
+// Bitboard representing pawn attack squares
 const BitBoard BITBOARD_PAWN_ATTACKS[2][81] = {
     {
         BitBoard(0x00000000000000L, 0x00000000),
@@ -192,7 +192,7 @@ const BitBoard BITBOARD_PAWN_ATTACKS[2][81] = {
     },
 };
 
-// 香の利きを表すビットボード
+// Bitboard representing lance attack squares
 const BitBoard BITBOARD_LANCE_ATTACKS[2][81] = {
     {
         BitBoard(0x00000000000000L, 0x00000000),
@@ -362,7 +362,7 @@ const BitBoard BITBOARD_LANCE_ATTACKS[2][81] = {
     },
 };
 
-// 桂の利きを表すビットボード
+// Bitboard representing knight attack squares
 const BitBoard BITBOARD_KNIGHT_ATTACKS[2][81] = {
     {
         BitBoard(0x00000000000000L, 0x00000000),
@@ -532,7 +532,7 @@ const BitBoard BITBOARD_KNIGHT_ATTACKS[2][81] = {
     },
 };
 
-// 銀の利きを表すビットボード
+// Bitboard representing silver attack squares
 const BitBoard BITBOARD_SILVER_ATTACKS[2][81] = {
     {
         BitBoard(0x00000000000400L, 0x00000000),
@@ -702,7 +702,7 @@ const BitBoard BITBOARD_SILVER_ATTACKS[2][81] = {
     },
 };
 
-// 金の利きを表すビットボード
+// Bitboard representing gold attack squares
 const BitBoard BITBOARD_GOLD_ATTACKS[2][81] = {
     {
         BitBoard(0x00000000000202L, 0x00000000),
@@ -872,7 +872,7 @@ const BitBoard BITBOARD_GOLD_ATTACKS[2][81] = {
     },
 };
 
-// 王の利きを表すビットボード
+// Bitboard representing king attack squares
 const BitBoard BITBOARD_KING_ATTACKS[81] = {
     BitBoard(0x00000000000602L, 0x00000000),
     BitBoard(0x00000000000e05L, 0x00000000),
@@ -957,9 +957,9 @@ const BitBoard BITBOARD_KING_ATTACKS[81] = {
     BitBoard(0x00000000000000L, 0x02030000),
 };
 
-// 長い利きを表すビットボード
-// 以下の方向の利きを表すビットボードを格納している
-// 0:上, 1:右上, 2:右, 3:右下, 4:下, 5:左下, 6:左, 7:左上
+// Bitboard representing long-range attack squares
+// Stores bitboards for attacks in the following directions:
+// 0:up, 1:upper-right, 2:right, 3:lower-right, 4:down, 5:lower-left, 6:left, 7:upper-left
 const BitBoard BITBOARD_LONG_ATTACKS[8][81] = {
     {
         BitBoard(0x00000000000000L, 0x00000000),
@@ -1627,9 +1627,9 @@ const BitBoard BITBOARD_LONG_ATTACKS[8][81] = {
     },
 };
 
-// 方向のインデックスを表す定数
-// 2つの座標の方向を表す整数値を格納している
-// 0:上, 1:右上, 2:右, 3:右下, 4:下, 5:左下, 6:左, 7:左上, 8:その他
+// Constants representing direction indices
+// Stores integer values representing the direction between two coordinates
+// 0:up, 1:upper-right, 2:right, 3:lower-right, 4:down, 5:lower-left, 6:left, 7:upper-left, 8:other
 const int DIRECTION_INDICES[81][81] = {
     {8, 4, 4, 4, 4, 4, 4, 4, 4, 6, 5, 8, 8, 8, 8, 8, 8, 8, 6, 8, 5, 8, 8, 8, 8, 8, 8, 6, 8, 8,
      5, 8, 8, 8, 8, 8, 6, 8, 8, 8, 5, 8, 8, 8, 8, 6, 8, 8, 8, 8, 5, 8, 8, 8, 6, 8, 8, 8, 8, 8,
@@ -1876,8 +1876,8 @@ const int DIRECTION_INDICES[81][81] = {
      1, 8, 2, 8, 8, 8, 8, 8, 8, 8, 1, 2, 0, 0, 0, 0, 0, 0, 0, 0, 8},
 };
 
-// 盤面のハッシュ値を計算するための定数
-// 手番、位置、駒の種類に対してランダムな64ビット整数値を格納している
+// Constants for computing the board hash value
+// Stores random 64-bit integer values for each turn, position, and piece type
 const uint64_t BOARD_HASH_VALUES[81][31] = {
     {0x0000000000000000ULL, 0x0cf32068ab74c73aULL, 0xd6159ef562476b43ULL, 0xe04cc1d9c1323723ULL,
      0x22e59eb4c08d9ac4ULL, 0xee7e5d3871565771ULL, 0x5fb53699d6ffc9adULL, 0x139680836535ce6cULL,

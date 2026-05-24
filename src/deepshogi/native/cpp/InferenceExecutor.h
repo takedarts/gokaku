@@ -13,120 +13,120 @@
 namespace deepshogi {
 
 /**
- * 推論が終了したときに呼び出されるコールバック関数の型。
+ * Type of the callback function called when inference completes.
  */
 typedef std::function<void(MctsNode*, const InferenceResult&)> InferenceExecutorCallback;
 
 /**
- * 盤面評価のための推論を実行するクラス。
+ * A class that executes inference for board evaluation.
  */
 class InferenceExecutor {
  public:
   /**
-   * 推論実行オブジェクトを生成する。
-   * @param model 推論モデルファイルのパス
-   * @param gpu 使用するGPUのID
-   * @param fp16 半精度浮動小数点を使用するならTrue
-   * @param deterministic 決定論的動作を行うならTrue
-   * @param batchSize バッチサイズ
-   * @param threads 実行するスレッド数
+   * Creates an inference executor object.
+   * @param model Path to the inference model file
+   * @param gpu ID of the GPU to use
+   * @param fp16 True to use half-precision floating point
+   * @param deterministic True to enable deterministic behavior
+   * @param batchSize Batch size
+   * @param threads Number of threads to run
    */
   InferenceExecutor(
       std::string model, int32_t gpu, bool fp16, bool deterministic,
       int32_t batchSize, int32_t threads);
 
   /**
-   * 推論管理オブジェクトを破棄する。
+   * Destroys the inference manager object.
    */
   virtual ~InferenceExecutor();
 
   /**
-   * 推論実行を予約する。
-   * 推論計算は非同期に実行されるため、この関数はすぐに返る。
-   * 推論計算が完了すると、ノードの評価値が更新される。
-   * @param node 推論を実行するノード
-   * @param callback 推論計算の完了を通知するコールバック関数
+   * Schedules an inference execution.
+   * The inference computation runs asynchronously, so this function returns immediately.
+   * When the computation completes, the node's evaluation value is updated.
+   * @param node Node to run inference on
+   * @param callback Callback function to notify when inference completes
    */
   void submit(MctsNode* node, InferenceExecutorCallback callback);
 
   /**
-   * 推論を同期的に実行する。
-   * @param inputs 入力データ
-   * @param masks 出力データのマスク
-   * @param outputs 出力データ
-   * @param size 評価データの数
+   * Runs inference synchronously.
+   * @param inputs Input data
+   * @param masks Output data mask
+   * @param outputs Output data
+   * @param size Number of evaluation data items
    */
   void execute(int32_t* inputs, int32_t* masks, float* outputs, int32_t size);
 
   /**
-   * 推論実行の予約のキューに入っている待機中の推論実行の数を返す。
-   * @return 推論実行の予約のキューに入っている待機中の推論実行の数
+   * Returns the number of pending inference executions in the submission queue.
+   * @return Number of pending inference executions in the queue
    */
   int32_t getQueueSize();
 
  private:
   /**
-   * モデル同期用のミューテックスオブジェクト。
+   * Mutex object for model synchronization.
    */
   std::mutex _modelMutex;
 
   /**
-   * スレッド同期用のミューテックスオブジェクト。
+   * Mutex object for thread synchronization.
    */
   std::mutex _threadMutex;
 
   /**
-   * 同期用の条件変数。
+   * Condition variable for synchronization.
    */
   std::condition_variable _condition;
 
   /**
-   * 推論モデルオブジェクト。
+   * Inference model object.
    */
   InferenceModel* _model;
 
   /**
-   * 推論モデルファイルのパス。
+   * Path to the inference model file.
    */
   std::string _modelFile;
 
   /**
-   * 使用するGPUのID。
+   * ID of the GPU to use.
    */
   int32_t _gpu;
 
   /**
-   * 半精度浮動小数点を使用するかどうか。
+   * Whether to use half-precision floating point.
    */
   bool _fp16;
 
   /**
-   * 決定論的動作を行うかどうか。
+   * Whether to enable deterministic behavior.
    */
   bool _deterministic;
 
   /**
-   * バッチサイズ。
+   * Batch size.
    */
   int32_t _batchSize;
 
   /**
-   * 推論を実行するためのスレッドオブジェクトの一覧。
+   * List of thread objects for running inference.
    */
   std::vector<std::thread> _threads;
 
   /**
-   * 推論処理を終了するならTrue。
+   * True to terminate inference processing.
    */
   bool _terminated;
 
   /**
-   * 推論実行の予約のキュー。
+   * Queue of scheduled inference executions.
    */
   std::vector<std::pair<MctsNode*, InferenceExecutorCallback>> _queue;
 
   /**
-   * スレッドで実行されるメソッド。
+   * Method executed on a thread.
    */
   void _run();
 };
