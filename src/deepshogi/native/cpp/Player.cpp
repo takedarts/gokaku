@@ -64,6 +64,7 @@ Player::Player(
 Player::~Player() {
   {
     std::lock_guard<std::mutex> lock(_mutex);
+    _canceled.store(true, std::memory_order_release);
     _terminated = true;
   }
 
@@ -485,7 +486,7 @@ void Player::_runExpand() {
       return;
     }
 
-    // If there is no next node to evaluate, continue to node evaluation
+    // If there is no next node to evaluate, proceed to node evaluation
     if (next_node == node) {
       break;
     }

@@ -92,7 +92,7 @@ def usi_candidate_to_string(candidate: Candidate, index: int) -> str:
         str: USI analysis result string
     '''
     nodes = candidate.visits
-    score = get_shogi_score(candidate.get_win_chance())
+    score = get_shogi_score(candidate.win_chance)
     text = f'info multipv {index} nodes {nodes} score cp {score}'
 
     if len(candidate.variations) > 0:
@@ -596,7 +596,7 @@ class USIEngine(object):
             return (True, '\n'.join(results), True)
 
         # If win rate is below threshold, judge as resignation
-        win_chance = candidates[0].get_win_chance()
+        win_chance = candidates[0].win_chance
 
         if (not ponder
                 and len(self.moves) > self.resign_turn
