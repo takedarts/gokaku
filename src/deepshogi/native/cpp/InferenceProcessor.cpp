@@ -15,18 +15,36 @@ namespace deepshogi {
 InferenceProcessor::InferenceProcessor(
     std::string model, std::vector<int32_t> gpus, bool fp16, bool deterministic,
     int32_t batchSize, int32_t threadsPerGpu, int32_t cacheSize)
-    : _mutex(),
+    : _cacheMutex(),
+      _queueMutex(),
+      _queueCondition(),
+      _queue(),
       _executors(),
-      _threadSize(static_cast<int32_t>(gpus.size()) * threadsPerGpu),
       _cacheSize(cacheSize),
       _cacheKeys(),
       _cacheResults(),
-      _gpus(gpus),
+      _terminated(false),
+      _threadSize(static_cast<int32_t>(gpus.size()) * threadsPerGpu),
       _batchSize(batchSize) {
   for (int32_t gpu : gpus) {
     _executors.emplace_back(std::make_unique<InferenceExecutor>(
-        model, gpu, fp16, deterministic, batchSize, threadsPerGpu));
+        this, model, gpu, fp16, deterministic, batchSize, threadsPerGpu));
   }
+}
+
+/**
+ * Destroys the inference manager object.
+ */
+InferenceProcessor::~InferenceProcessor() {
+  // Terminate inference processing
+  {
+    std::lock_guard<std::mutex> lock(_queueMutex);
+    _terminated = true;
+    _queueCondition.notify_all();
+  }
+
+  // Destroy inference executor objects
+  _executors.clear();
 }
 
 /**
@@ -42,12 +60,10 @@ void InferenceProcessor::submit(
   InferenceResult cached_result;
   // Flag indicating whether a cached inference result was found
   bool cached_result_found = false;
-  // Index of the inference executor object
-  int32_t executor_index;
 
   // Acquire the lock for synchronization
   {
-    std::lock_guard<std::mutex> lock(_mutex);
+    std::lock_guard<std::mutex> lock(_cacheMutex);
 
     // Check if a cached inference result exists
     // If found, save the cached result and set the flag
@@ -58,19 +74,6 @@ void InferenceProcessor::submit(
     if (it != _cacheResults.end()) {
       cached_result = it->second;
       cached_result_found = true;
-    }
-
-    // Select the least-used inference executor object
-    executor_index = 0;
-    size_t min_queue_size = _executors[0]->getQueueSize();
-
-    for (size_t i = 1; i < _executors.size(); i++) {
-      size_t queue_size = _executors[i]->getQueueSize();
-
-      if (queue_size < min_queue_size) {
-        executor_index = static_cast<int32_t>(i);
-        min_queue_size = queue_size;
-      }
     }
   }
 
@@ -85,7 +88,7 @@ void InferenceProcessor::submit(
   auto exec_callback = [this, node, callback](MctsNode*, const InferenceResult& result) {
     // Acquire the lock for synchronization
     {
-      std::lock_guard<std::mutex> lock(_mutex);
+      std::lock_guard<std::mutex> lock(_cacheMutex);
 
       // Check if the result is already in the cache
       // If not, save it to the cache
@@ -111,8 +114,12 @@ void InferenceProcessor::submit(
     callback(node);
   };
 
-  // Schedule inference execution on the executor object
-  _executors[executor_index]->submit(node, exec_callback);
+  // Add the node and callback function to the inference reservation queue
+  {
+    std::lock_guard<std::mutex> lock(_queueMutex);
+    _queue.emplace(node, exec_callback);
+    _queueCondition.notify_one();
+  }
 }
 
 /**

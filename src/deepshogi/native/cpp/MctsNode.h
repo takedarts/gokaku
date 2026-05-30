@@ -3,6 +3,7 @@
 #include <atomic>
 #include <condition_variable>
 #include <cstdint>
+#include <functional>
 #include <map>
 #include <queue>
 #include <set>
@@ -59,13 +60,17 @@ class MctsNode {
    * - No legal moves exist
    * - A checkmate move sequence has been found by checkmate search
    * - This is not the root node, and an entering-king declaration is possible or the draw move count has been reached
+   * Returns nullptr if search is canceled.
    * @param equally true to equalize the search visit count
    * @param width Search width (0 means automatic adjustment)
    * @param temperature Temperature parameter for search
    * @param noise Strength of Gumbel noise for search
+   * @param isCanceled Function to check if the search is canceled
    * @return Next node object to evaluate
    */
-  MctsNode* pickupNextNode(bool equally, int32_t width, float temperature, float noise);
+  MctsNode* pickupNextNode(
+      bool equally, int32_t width, float temperature, float noise,
+      std::function<bool()> isCanceled);
 
   /**
    * Performs checkmate search.
@@ -286,7 +291,7 @@ class MctsNode {
   /**
    * Visit count.
    */
-  int32_t _visits;
+  std::atomic<int32_t> _visits;
 
   /**
    * Playout count.

@@ -21,6 +21,11 @@ namespace deepshogi {
  * A class that manages inference execution for board evaluation.
  */
 class InferenceProcessor {
+ private:
+  // Allow InferenceExecutor class to access the inference reservation queue,
+  // so InferenceExecutor class is declared as a friend class.
+  friend class InferenceExecutor;
+
  public:
   /**
    * Creates an inference manager object.
@@ -39,7 +44,7 @@ class InferenceProcessor {
   /**
    * Destroys the inference manager object.
    */
-  virtual ~InferenceProcessor() = default;
+  virtual ~InferenceProcessor();
 
   /**
    * Schedules an inference execution.
@@ -82,21 +87,45 @@ class InferenceProcessor {
     return _threadSize;
   }
 
+  /**
+   * Returns the efficiency of inference.
+   * @return Efficiency of inference
+   */
+  inline float getEfficiency() const {
+    float total_efficiency = 0.0f;
+
+    for (const auto& executor : _executors) {
+      total_efficiency += executor->getEfficiency();
+    }
+
+    return total_efficiency / static_cast<float>(_executors.size());
+  }
+
  private:
   /**
-   * Mutex object for synchronization.
+   * Mutex object for synchronizing cache access.
    */
-  std::mutex _mutex;
+  std::mutex _cacheMutex;
+
+  /**
+   * Mutex object for synchronizing inference execution reservation queue access.
+   */
+  std::mutex _queueMutex;
+
+  /**
+   * Condition variable for inference execution reservation queue.
+   */
+  std::condition_variable _queueCondition;
+
+  /**
+   * Queue for inference execution reservation.
+   */
+  std::queue<std::pair<MctsNode*, InferenceExecutorCallback>> _queue;
 
   /**
    * List of inference executor objects.
    */
   std::vector<std::unique_ptr<InferenceExecutor>> _executors;
-
-  /**
-   * Number of threads used for inference.
-   */
-  int32_t _threadSize;
 
   /**
    * Cache size for inference results.
@@ -116,9 +145,14 @@ class InferenceProcessor {
   std::map<BoardHash, InferenceResult> _cacheResults;
 
   /**
-   * List of GPU IDs to use.
+   * True to terminate.
    */
-  std::vector<int32_t> _gpus;
+  bool _terminated;
+
+  /**
+   * Number of threads used for inference.
+   */
+  int32_t _threadSize;
 
   /**
    * Batch size.

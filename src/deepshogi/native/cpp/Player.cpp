@@ -50,6 +50,7 @@ Player::Player(
       _paused(false),
       _stopped(true),
       _terminated(false),
+      _canceled(false),
       _evaluatingNodes(),
       _checkingNodes() {
   _root->initialize(DEFAULT_SFEN);
@@ -81,6 +82,7 @@ void Player::initialize(const std::string& sfen) {
 
   // Pause the threads
   _paused = true;
+  _canceled.store(true, std::memory_order_release);
   _stopCondition.wait(lock, [this]() {
     return _runnings == 0 && _evaluatingNodes.empty() && _checkingNodes.empty();
   });
@@ -97,6 +99,7 @@ void Player::initialize(const std::string& sfen) {
 
   // Resume the threads
   _paused = false;
+  _canceled.store(false, std::memory_order_release);
   _searchCondition.notify_one();
 }
 
@@ -118,6 +121,7 @@ void Player::play(const Move& move) {
 
   // Pause the threads
   _paused = true;
+  _canceled.store(true, std::memory_order_release);
   _stopCondition.wait(lock, [this]() {
     return _runnings == 0 && _evaluatingNodes.empty() && _checkingNodes.empty();
   });
@@ -137,6 +141,7 @@ void Player::play(const Move& move) {
 
   // Resume the threads
   _paused = false;
+  _canceled.store(false, std::memory_order_release);
   _searchCondition.notify_one();
 }
 
@@ -154,6 +159,7 @@ void Player::startEvaluation(
 
   // Pause the threads
   _paused = true;
+  _canceled.store(true, std::memory_order_release);
   _stopCondition.wait(lock, [this]() {
     return _runnings == 0 && _evaluatingNodes.empty() && _checkingNodes.empty();
   });
@@ -169,6 +175,7 @@ void Player::startEvaluation(
 
   // Resume the threads
   _paused = false;
+  _canceled.store(false, std::memory_order_release);
   _searchCondition.notify_one();
 }
 
@@ -210,6 +217,7 @@ std::vector<Candidate> Player::getCandidates() {
 
   // Pause the threads
   _paused = true;
+  _canceled.store(true, std::memory_order_release);
   _stopCondition.wait(lock, [this]() {
     return _runnings == 0 && _evaluatingNodes.empty() && _checkingNodes.empty();
   });
@@ -260,6 +268,7 @@ std::vector<Candidate> Player::getCandidates() {
 
   // Resume the threads
   _paused = false;
+  _canceled.store(false, std::memory_order_release);
   _searchCondition.notify_one();
 
   return candidates;
@@ -284,6 +293,7 @@ std::string Player::toString() {
 
   // Pause the threads
   _paused = true;
+  _canceled.store(true, std::memory_order_release);
   _stopCondition.wait(lock, [this]() {
     return _runnings == 0 && _evaluatingNodes.empty() && _checkingNodes.empty();
   });
@@ -322,6 +332,7 @@ std::string Player::toString() {
 
   // Resume the threads
   _paused = false;
+  _canceled.store(false, std::memory_order_release);
   _searchCondition.notify_one();
 
   return ss.str();
@@ -466,10 +477,16 @@ void Player::_runExpand() {
     // Get the next node to evaluate
     node = next_node;
     next_node = node->pickupNextNode(
-        search_equally, search_width, search_temperature, search_noise);
+        search_equally, search_width, search_temperature, search_noise,
+        [this]() { return _canceled.load(std::memory_order_acquire); });
 
-    // If the next node to evaluate does not exist, end the search
+    // If the search is canceled, terminate the search
     if (next_node == nullptr) {
+      return;
+    }
+
+    // If there is no next node to evaluate, continue to node evaluation
+    if (next_node == node) {
       break;
     }
 

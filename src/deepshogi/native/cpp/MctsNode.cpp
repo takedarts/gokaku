@@ -90,54 +90,63 @@ void MctsNode::applyInferenceResult(
  * - No legal moves exist
  * - A checkmate move sequence has been found by checkmate search
  * - This is not the root node, and an entering-king declaration is possible or the draw move count has been reached
+ * Returns nullptr if search is canceled.
  * @param equally true to equalize the search visit count
  * @param width Search width (0 means automatic adjustment)
  * @param temperature Temperature parameter for search
  * @param noise Strength of Gumbel noise for search
- * @param rootNode true if this node is the root node
+ * @param isCanceled Function to check if the search is canceled
  * @return Next node object to evaluate
  */
-MctsNode* MctsNode::pickupNextNode(bool equally, int32_t width, float temperature, float noise) {
+MctsNode* MctsNode::pickupNextNode(
+    bool equally, int32_t width, float temperature, float noise,
+    std::function<bool()> isCanceled) {
   std::unique_lock<std::shared_mutex> lock(_mutex);
-
-  // Increment the visit count for reaching this node
-  _visits += 1;
 
   // If this node is being evaluated, wait for evaluation to complete
   if (_evaluating) {
     _condition.wait(lock, [this] { return !_evaluating; });
   }
 
-  // If already evaluated, return the next node to evaluate
+  // If this node has already been evaluated, return the next node to evaluate
   if (_evaluated) {
-    // If a next node to evaluate exists, return it
-    // The playout count is incremented by the terminal node
+    // If search is canceled, return nullptr
+    if (isCanceled()) {
+      return nullptr;
+    }
+
+    // If there is a next node to evaluate, return it
     if (!_policies.empty()) {
       return _pickupNextNode(equally, width, temperature, noise);
     }
-    // Otherwise, only increment the playout count and return nullptr
-    else {
-      MctsNode* current_node = this;
 
-      while (current_node != nullptr) {
-        current_node->_playouts.fetch_add(1, std::memory_order_relaxed);
-        current_node = current_node->_parent;
-      }
+    // If this node is a leaf node, increment the visit count and playout count
+    MctsNode* current_node = this;
 
-      return nullptr;
+    while (current_node != nullptr) {
+      current_node->_visits.fetch_add(1, std::memory_order_relaxed);
+      current_node->_playouts.fetch_add(1, std::memory_order_relaxed);
+      current_node = current_node->_parent;
     }
+
+    return this;
   }
 
-  // Reached an unevaluated node, so increment the playout count
+  // When reaching an unevaluated leaf node, increment the visit count and playout count
+  _visits.fetch_add(1, std::memory_order_relaxed);
   _playouts.fetch_add(1, std::memory_order_relaxed);
 
-  if (!_firstChild) {
-    MctsNode* parent = _parent;
+  // Increment the visit count and playout count of parent nodes
+  MctsNode* parent = _parent;
 
-    while (parent) {
+  while (parent) {
+    parent->_visits.fetch_add(1, std::memory_order_relaxed);
+
+    if (!_firstChild) {
       parent->_playouts.fetch_add(1, std::memory_order_relaxed);
-      parent = parent->_parent;
     }
+
+    parent = parent->_parent;
   }
 
   // If no legal moves exist, set this node's state to terminal (loss)
@@ -146,7 +155,7 @@ MctsNode* MctsNode::pickupNextNode(bool equally, int32_t width, float temperatur
     _evaluated = true;
     _policies.clear();
 
-    return nullptr;
+    return this;
   }
 
   // If not the root node and an entering-king declaration is possible, set this node's state to terminal (win)
@@ -155,7 +164,7 @@ MctsNode* MctsNode::pickupNextNode(bool equally, int32_t width, float temperatur
     _evaluated = true;
     _policies.clear();
 
-    return nullptr;
+    return this;
   }
 
   // If not the root node and the maximum move count has been reached, set this node's state to terminal (draw)
@@ -164,7 +173,7 @@ MctsNode* MctsNode::pickupNextNode(bool equally, int32_t width, float temperatur
     _evaluated = true;
     _policies.clear();
 
-    return nullptr;
+    return this;
   }
 
   // Search for a 5-move checkmate sequence
@@ -179,13 +188,13 @@ MctsNode* MctsNode::pickupNextNode(bool equally, int32_t width, float temperatur
     _evaluated = true;
     _policies.clear();
 
-    return nullptr;
+    return this;
   }
 
   // Set this node's state to evaluating
   _evaluating = true;
 
-  return nullptr;
+  return this;
 }
 
 /**
@@ -379,8 +388,7 @@ void MctsNode::removeChild(const Move& move) {
  * @return Visit count
  */
 int32_t MctsNode::getVisits() {
-  std::shared_lock<std::shared_mutex> lock(_mutex);
-  return _visits;
+  return _visits.load(std::memory_order_relaxed);
 }
 
 /**
@@ -415,12 +423,13 @@ float MctsNode::getMctsValueLCB() {
 float MctsNode::getPriorityByPUCB(int32_t totalVisits) {
   std::shared_lock<std::shared_mutex> lock(_mutex);
 
+  int32_t visits = _visits.load(std::memory_order_relaxed);
   float pucb_constant_base = _manager->getParameter().getPucbConstantBase();
   float pucb_constant_init = _manager->getParameter().getPucbConstantInit();
   float value = _mctsValue.getValue(_nodeValue) * OPPOSITE_COLOR(_board.getColor());
   float c_pucb_inc = std::log((1 + totalVisits + pucb_constant_base) / pucb_constant_base);
   float c_pucb = pucb_constant_init * (1.0f + c_pucb_inc);
-  float ucb = _probability * std::sqrt((float)totalVisits) / (1 + _visits);
+  float ucb = _probability * std::sqrt((float)totalVisits) / (1 + visits);
 
   return value + c_pucb * ucb;
 }
@@ -518,7 +527,7 @@ void MctsNode::_resetNode() {
   _parent = nullptr;
   _children.clear();
 
-  _visits = 0;
+  _visits.store(0, std::memory_order_relaxed);
   _playouts.store(0, std::memory_order_relaxed);
   _mctsValue.reset();
 
@@ -619,7 +628,7 @@ MctsNode* MctsNode::_pickupNextNode(bool equally, int32_t width, float temperatu
       if (lesser_board) {
         _policies.erase(_policies.begin() + max_index);
 
-        return nullptr;
+        return this;
       }
 
       // Register the candidate to add for evaluation in the waiting list
@@ -678,8 +687,9 @@ MctsNode* MctsNode::_pickupNextNode(bool equally, int32_t width, float temperatu
   }
 
   // Return the node with the highest priority as the next search target
+  int32_t total_visits = _visits.load(std::memory_order_relaxed);
+  float max_priority = -std::numeric_limits<float>::infinity();
   MctsNode* max_node = children[0].first;
-  float max_priority = -1.0;
 
   for (std::pair<MctsNode*, float> child : children) {
     // Calculate priority
@@ -694,7 +704,7 @@ MctsNode* MctsNode::_pickupNextNode(bool equally, int32_t width, float temperatu
     }
     // Otherwise, calculate priority based on PUCB
     else {
-      priority = child.first->getPriorityByPUCB(_visits);
+      priority = child.first->getPriorityByPUCB(total_visits);
     }
 
     // Keep the highest-priority node

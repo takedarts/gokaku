@@ -1,5 +1,7 @@
 #include "InferenceExecutor.h"
 
+#include "InferenceProcessor.h"
+
 namespace deepshogi {
 
 constexpr int32_t DIR_H = 0;    // Move: drop
@@ -255,7 +257,8 @@ static void getOutputMask(const Board* board, int32_t* mask) {
 
 /**
  * Creates an inference executor object.
- * @param model Path to the inference model file
+ * @param processor Inference manager object
+ * @param file Path to the inference model file
  * @param gpu ID of the GPU to use
  * @param fp16 True to use half-precision floating point
  * @param deterministic True to enable deterministic behavior
@@ -263,22 +266,22 @@ static void getOutputMask(const Board* board, int32_t* mask) {
  * @param threads Number of threads to run
  */
 InferenceExecutor::InferenceExecutor(
-    std::string model, int32_t gpu, bool fp16, bool deterministic,
-    int32_t batchSize, int32_t threads)
-    : _modelMutex(),
-      _threadMutex(),
-      _condition(),
+    InferenceProcessor* processor, std::string file, int32_t gpu, bool fp16,
+    bool deterministic, int32_t batchSize, int32_t threads)
+    : _mutex(),
+      _processor(processor),
       _model(nullptr),
-      _modelFile(model),
+      _file(file),
       _gpu(gpu),
       _fp16(fp16),
       _deterministic(deterministic),
       _batchSize(batchSize),
       _threads(threads),
       _terminated(false),
-      _queue() {
+      _efficiencies(threads) {
   for (int32_t i = 0; i < threads; i++) {
-    _threads[i] = std::thread(&InferenceExecutor::_run, this);
+    _threads[i] = std::thread(&InferenceExecutor::_run, this, i);
+    _efficiencies[i].store(0.0f, std::memory_order_relaxed);
   }
 }
 
@@ -286,14 +289,6 @@ InferenceExecutor::InferenceExecutor(
  * Destroys the inference manager object.
  */
 InferenceExecutor::~InferenceExecutor() {
-  // Terminate inference processing
-  {
-    std::lock_guard<std::mutex> lock(_threadMutex);
-    _terminated = true;
-  }
-
-  _condition.notify_all();
-
   // Wait for threads to finish
   for (auto& thread : _threads) {
     thread.join();
@@ -301,26 +296,13 @@ InferenceExecutor::~InferenceExecutor() {
 
   // Destroy the inference model object
   {
-    std::lock_guard<std::mutex> lock(_modelMutex);
+    std::lock_guard<std::mutex> lock(_mutex);
 
     if (_model != nullptr) {
       delete _model;
       _model = nullptr;
     }
   }
-}
-
-/**
- * Schedules an inference execution.
- * The inference computation runs asynchronously, so this function returns immediately.
- * When the computation completes, the node's evaluation value is updated.
- * @param node Node to run inference on
- * @param callback Callback function to notify when inference completes
- */
-void InferenceExecutor::submit(MctsNode* node, InferenceExecutorCallback callback) {
-  std::lock_guard<std::mutex> lock(_threadMutex);
-  _queue.emplace_back(node, callback);
-  _condition.notify_one();
 }
 
 /**
@@ -339,17 +321,17 @@ void InferenceExecutor::execute(int32_t* inputs, int32_t* masks, float* outputs,
   InferenceModel* model = nullptr;
 
   {
-    std::lock_guard<std::mutex> lock(_modelMutex);
+    std::lock_guard<std::mutex> lock(_mutex);
 
     if (_model == nullptr) {
-      _model = new InferenceModel(_modelFile, _gpu, _fp16, _deterministic);
+      _model = new InferenceModel(_file, _gpu, _fp16, _deterministic);
     }
 
     model = _model;
   }
 
   // For non-CPU devices, run inference with a fixed batch size
-  if (!_model->isCpu()) {
+  if (!_model->isCpu() && size < _batchSize) {
     std::vector<int32_t> input_buffer(_batchSize * MODEL_INPUT_PACK_SIZE);
     std::vector<int32_t> mask_buffer(_batchSize * MODEL_OUTPUT_PACK_SIZE);
     std::vector<float> output_buffer(_batchSize * MODEL_OUTPUT_SIZE);
@@ -364,18 +346,10 @@ void InferenceExecutor::execute(int32_t* inputs, int32_t* masks, float* outputs,
 }
 
 /**
- * Returns the number of pending inference executions in the submission queue.
- * @return Number of pending inference executions in the queue
- */
-int32_t InferenceExecutor::getQueueSize() {
-  std::lock_guard<std::mutex> lock(_threadMutex);
-  return static_cast<int32_t>(_queue.size());
-}
-
-/**
  * Method executed on a thread.
+ * @param threadIndex Thread index
  */
-void InferenceExecutor::_run() {
+void InferenceExecutor::_run(int32_t threadIndex) {
   // Set the device to use
   torch::DeviceGuard device_guard(InferenceModel::getDevice(_gpu));
 
@@ -386,10 +360,10 @@ void InferenceExecutor::_run() {
 
   // Create the model object if it has not been created yet
   {
-    std::lock_guard<std::mutex> lock(_modelMutex);
+    std::lock_guard<std::mutex> lock(_mutex);
 
     if (_model == nullptr) {
-      _model = new InferenceModel(_modelFile, _gpu, _fp16, _deterministic);
+      _model = new InferenceModel(_file, _gpu, _fp16, _deterministic);
     }
   }
 
@@ -401,15 +375,15 @@ void InferenceExecutor::_run() {
 
     {
       // Acquire the lock for synchronization
-      std::unique_lock<std::mutex> lock(_threadMutex);
+      std::unique_lock<std::mutex> lock(_processor->_queueMutex);
 
       // Wait if there are no scheduled inference executions
       // [stop] If a stop request is received and the queue is empty, exit the wait
       // [inference] If there are scheduled inference executions, exit the wait
-      _condition.wait(lock, [this] {
-        if (_terminated && _queue.empty()) {
+      _processor->_queueCondition.wait(lock, [this] {
+        if (_processor->_terminated && _processor->_queue.empty()) {
           return true;
-        } else if (!_queue.empty()) {
+        } else if (!_processor->_queue.empty()) {
           return true;
         } else {
           return false;
@@ -417,15 +391,18 @@ void InferenceExecutor::_run() {
       });
 
       // Exit the loop if inference processing should terminate
-      if (_terminated && _queue.empty()) {
+      if (_processor->_terminated && _processor->_queue.empty()) {
         break;
       }
 
       // Dequeue scheduled inference executions
-      while (!_queue.empty() && batch.size() < _batchSize) {
-        batch.push_back(_queue.back());
-        _queue.pop_back();
+      while (!_processor->_queue.empty() && batch.size() < _batchSize) {
+        batch.push_back(_processor->_queue.front());
+        _processor->_queue.pop();
       }
+
+      // Notify other threads that the queue contents have been updated
+      _processor->_queueCondition.notify_all();
     }
 
     // Initialize the input and mask data buffers
@@ -448,6 +425,13 @@ void InferenceExecutor::_run() {
     int32_t batch_size = (_model->isCpu()) ? static_cast<int32_t>(batch.size()) : _batchSize;
 
     _model->forward(input_buffer.data(), mask_buffer.data(), output_buffer.data(), batch_size);
+
+    // Calculate and store the inference efficiency
+    float efficiency = static_cast<float>(batch.size()) / static_cast<float>(batch_size);
+    float old_efficiency = _efficiencies[threadIndex].load(std::memory_order_relaxed);
+    float new_efficiency = old_efficiency * 0.99f + efficiency * 0.01f;
+
+    _efficiencies[threadIndex].store(new_efficiency, std::memory_order_relaxed);
 
     // Apply inference results to nodes and invoke callbacks
     for (size_t i = 0; i < batch.size(); i++) {

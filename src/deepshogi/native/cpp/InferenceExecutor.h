@@ -12,6 +12,8 @@
 
 namespace deepshogi {
 
+class InferenceProcessor;
+
 /**
  * Type of the callback function called when inference completes.
  */
@@ -24,7 +26,8 @@ class InferenceExecutor {
  public:
   /**
    * Creates an inference executor object.
-   * @param model Path to the inference model file
+   * @param processor Inference manager object
+   * @param file Path to the inference model file
    * @param gpu ID of the GPU to use
    * @param fp16 True to use half-precision floating point
    * @param deterministic True to enable deterministic behavior
@@ -32,22 +35,13 @@ class InferenceExecutor {
    * @param threads Number of threads to run
    */
   InferenceExecutor(
-      std::string model, int32_t gpu, bool fp16, bool deterministic,
-      int32_t batchSize, int32_t threads);
+      InferenceProcessor* processor, std::string file, int32_t gpu, bool fp16,
+      bool deterministic, int32_t batchSize, int32_t threads);
 
   /**
    * Destroys the inference manager object.
    */
   virtual ~InferenceExecutor();
-
-  /**
-   * Schedules an inference execution.
-   * The inference computation runs asynchronously, so this function returns immediately.
-   * When the computation completes, the node's evaluation value is updated.
-   * @param node Node to run inference on
-   * @param callback Callback function to notify when inference completes
-   */
-  void submit(MctsNode* node, InferenceExecutorCallback callback);
 
   /**
    * Runs inference synchronously.
@@ -59,26 +53,29 @@ class InferenceExecutor {
   void execute(int32_t* inputs, int32_t* masks, float* outputs, int32_t size);
 
   /**
-   * Returns the number of pending inference executions in the submission queue.
-   * @return Number of pending inference executions in the queue
+   * Gets the inference efficiency.
+   * @return Inference efficiency
    */
-  int32_t getQueueSize();
+  inline float getEfficiency() const {
+    float total_efficiency = 0.0f;
+
+    for (const auto& efficiency : _efficiencies) {
+      total_efficiency += efficiency.load(std::memory_order_relaxed);
+    }
+
+    return total_efficiency / static_cast<float>(_efficiencies.size());
+  }
 
  private:
   /**
    * Mutex object for model synchronization.
    */
-  std::mutex _modelMutex;
+  std::mutex _mutex;
 
   /**
-   * Mutex object for thread synchronization.
+   * Inference manager object.
    */
-  std::mutex _threadMutex;
-
-  /**
-   * Condition variable for synchronization.
-   */
-  std::condition_variable _condition;
+  InferenceProcessor* _processor;
 
   /**
    * Inference model object.
@@ -88,7 +85,7 @@ class InferenceExecutor {
   /**
    * Path to the inference model file.
    */
-  std::string _modelFile;
+  std::string _file;
 
   /**
    * ID of the GPU to use.
@@ -121,14 +118,15 @@ class InferenceExecutor {
   bool _terminated;
 
   /**
-   * Queue of scheduled inference executions.
+   * Statistical information on inference efficiency.
    */
-  std::vector<std::pair<MctsNode*, InferenceExecutorCallback>> _queue;
+  std::vector<std::atomic<float>> _efficiencies;
 
   /**
    * Method executed on a thread.
+   * @param threadIndex Thread index
    */
-  void _run();
+  void _run(int32_t threadIndex);
 };
 
 }  // namespace deepshogi
