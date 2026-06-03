@@ -23,5 +23,6 @@ cdef extern from "cpp/Player.h" namespace "deepshogi":
         void waitEvaluation(
             int32_t visits, int32_t playouts, float timelimit, bool stop) except + nogil
         vector[Candidate] getCandidates() except +
+        int32_t getVisits() except +
         void copyBoardTo(Board* board) except +
         string toString() except +

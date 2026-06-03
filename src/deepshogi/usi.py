@@ -1,5 +1,6 @@
 import logging
 import sys
+import time
 from threading import Thread
 from typing import Any, Callable, Dict, List, TextIO, Tuple
 
@@ -7,12 +8,13 @@ from .board import Board
 from .config import (AUTHOR, BOARD_SIZE, COLOR_BLACK, COLOR_WHITE,
                      DEFAULT_CHECK_NODE_DEPTH, DEFAULT_CHECK_SEARCH_DEPTH,
                      DEFAULT_CHECK_SEARCH_NODE, DEFAULT_DRAW_TURN,
-                     DEFAULT_INITIAL_SFEN, DEFAULT_NYUGYOKU_SCORES,
-                     DEFAULT_PUCB_CONSTANT_BASE, DEFAULT_PUCB_CONSTANT_INIT,
-                     NAME, PIECE_HAND_BISHOP, PIECE_HAND_GOLD,
-                     PIECE_HAND_KNIGHT, PIECE_HAND_LANCE, PIECE_HAND_PAWN,
-                     PIECE_HAND_ROOK, PIECE_HAND_SILVER, VERSION,
-                     get_color_name, get_opposite_color, get_shogi_score)
+                     DEFAULT_INITIAL_SFEN, DEFAULT_MAX_VISITS,
+                     DEFAULT_NYUGYOKU_SCORES, DEFAULT_PUCB_CONSTANT_BASE,
+                     DEFAULT_PUCB_CONSTANT_INIT, NAME, PIECE_HAND_BISHOP,
+                     PIECE_HAND_GOLD, PIECE_HAND_KNIGHT, PIECE_HAND_LANCE,
+                     PIECE_HAND_PAWN, PIECE_HAND_ROOK, PIECE_HAND_SILVER,
+                     VERSION, get_color_name, get_opposite_color,
+                     get_shogi_score)
 from .exception import ShogiException
 from .player import Candidate, Player
 from .processor import Processor
@@ -96,8 +98,9 @@ def usi_candidate_to_string(candidate: Candidate, index: int) -> str:
     text = f'info multipv {index} nodes {nodes} score cp {score}'
 
     if len(candidate.variations) > 0:
+        depth = len(candidate.variations) - 1
         pv = ' '.join(usi_move_to_string(s, d, p) for s, d, p in candidate.variations)
-        text += f' pv {pv}'
+        text += f' depth {depth} pv {pv}'
 
     return text
 
@@ -127,6 +130,7 @@ class USIEngine(object):
         check_node_depth: int = DEFAULT_CHECK_NODE_DEPTH,
         pucb_constant_init: float = DEFAULT_PUCB_CONSTANT_INIT,
         pucb_constant_base: float = DEFAULT_PUCB_CONSTANT_BASE,
+        max_visits: int = DEFAULT_MAX_VISITS,
         client_name: str = NAME,
         client_version: str = VERSION,
         client_author: str = AUTHOR,
@@ -172,6 +176,7 @@ class USIEngine(object):
         self.check_node_depth = check_node_depth
         self.pucb_constant_init = pucb_constant_init
         self.pucb_constant_base = pucb_constant_base
+        self.max_visits = max_visits
 
         self.visits = visits
         self.playouts = playouts
@@ -209,6 +214,7 @@ class USIEngine(object):
                                  lambda v: str(round(v * 100)), lambda s: float(s) / 100),
             'PucbConstantBase': ('spin default {} min 0', 'pucb_constant_base',
                                  lambda v: str(round(v)), lambda s: float(s)),
+            'MaxVisits': ('spin default {} min 1', 'max_visits', str, int),
             'NyugyokuRule': ('combo default {} var 27 var 24', 'nyugyoku_scores',
                              lambda v: '24' if v == (31, 31) else '27',
                              lambda s: (31, 31) if s == '24' else DEFAULT_NYUGYOKU_SCORES),
@@ -388,6 +394,7 @@ class USIEngine(object):
             self.player = Player(
                 processor=self.processor,
                 threads=self.threads,
+                max_visits=self.max_visits,
                 nyugyoku_scores=self.nyugyoku_scores,
                 draw_turn=self.draw_turn,
                 check_search_depth=self.check_search_depth,
@@ -486,6 +493,11 @@ class USIEngine(object):
         if self.player is None:
             raise ShogiException('player is not initialized')
 
+        # Record information for calculating NPS if returning analysis results
+        if analyze:
+            prev_nodes = self.player.get_visits()
+            prev_time = time.time()
+
         # Parse arguments
         index = 0
         ponder = False
@@ -550,8 +562,8 @@ class USIEngine(object):
                 get_color_name(self.player.get_color()))
             return (True, 'bestmove win', False)
 
-        # If ponder is specified in arguments, set visits to 100,000,000
-        visits = 100_000_000 if ponder else self.visits
+        # If ponder is specified in arguments, set visits to max_visits
+        visits = self.max_visits if ponder else self.visits
 
         # Calculate move
         # If it's the initial turn and ponder is not specified, make a random move
@@ -587,9 +599,14 @@ class USIEngine(object):
 
         # Create analysis result string
         if analyze:
+            nodes = self.player.get_visits()
+            elapsed_time = time.time() - prev_time
+            nps = round((nodes - prev_nodes) / max(elapsed_time, 0.1))
+
             results.extend(
                 usi_candidate_to_string(candidate, i + 1)
                 for i, candidate in enumerate(candidates))
+            results.append(f'info nodes {nodes} nps {nps}')
 
         # If ponder, do not return bestmove
         if ponder:

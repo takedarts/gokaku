@@ -286,6 +286,15 @@ std::vector<Candidate> Player::getCandidates() {
 }
 
 /**
+ * Gets the visit count of the root node.
+ * @return Visit count of the root node
+ */
+int32_t Player::getVisits() {
+  std::unique_lock<std::mutex> lock(_mutex);
+  return _root->getVisits();
+}
+
+/**
  * Copies the board state to the specified board object.
  * @param board Board object
  */

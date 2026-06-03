@@ -443,6 +443,13 @@ class Player(object):
 
         return board
 
+    def get_visits(self) -> int:
+        '''Return the number of visits to the root node.
+        Returns:
+            int: Number of visits to the root node
+        '''
+        return self.native.get_visits()
+
     def __str__(self) -> str:
         '''Return the string representation.
         Returns:

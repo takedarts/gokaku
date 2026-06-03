@@ -93,6 +93,12 @@ class Player {
   std::vector<Candidate> getCandidates();
 
   /**
+   * Gets the visit count of the root node.
+   * @return Visit count of the root node
+   */
+  int32_t getVisits();
+
+  /**
    * Copies the board state to the specified board object.
    * @param board Board object
    */

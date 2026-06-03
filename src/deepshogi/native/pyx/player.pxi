@@ -135,6 +135,13 @@ cdef class NativePlayer:
 
         return results
 
+    def get_visits(self) -> int:
+        '''Gets the number of visits to the root node.
+        Returns:
+            int: Number of visits to the root node
+        '''
+        return self.player.getVisits()
+
     def copy_board_to(self, board: NativeBoard) -> None:  # type: ignore
         '''Copies the board state to the specified board object.
         Args:
