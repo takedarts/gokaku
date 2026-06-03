@@ -137,6 +137,11 @@ class Player {
   std::condition_variable _stopCondition;
 
   /**
+   * Condition variable for waiting until search count and playout count are satisfied.
+   */
+  std::condition_variable _waitCondition;
+
+  /**
    * Object that performs inference.
    */
   InferenceProcessor* _processor;

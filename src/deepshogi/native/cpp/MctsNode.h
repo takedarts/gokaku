@@ -304,6 +304,18 @@ class MctsNode {
   MctsValue _mctsValue;
 
   /**
+   * Number of times this node has been selected in MCTS.
+   * This variable is updated by the parent node when this node is selected by the parent.
+   */
+  std::atomic<int32_t> _mctsSelects;
+
+  /**
+   * Number of times exploration has been executed at this node in MCTS.
+   * This variable is updated by this node when expanding the search tree.
+   */
+  std::atomic<int32_t> _mctsProceeds;
+
+  /**
    * Checkmate move sequence.
    */
   std::vector<Move> _checkmateMoves;

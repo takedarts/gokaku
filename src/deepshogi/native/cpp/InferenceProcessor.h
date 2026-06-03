@@ -88,17 +88,25 @@ class InferenceProcessor {
   }
 
   /**
-   * Returns the efficiency of inference.
-   * @return Efficiency of inference
+   * Returns the batch fill rate for inference.
+   * @return Batch fill rate for inference
    */
-  inline float getEfficiency() const {
-    float total_efficiency = 0.0f;
+  inline float getBatchFillRate() const {
+    float total_fill_rate = 0.0f;
 
     for (const auto& executor : _executors) {
-      total_efficiency += executor->getEfficiency();
+      total_fill_rate += executor->getBatchFillRate();
     }
 
-    return total_efficiency / static_cast<float>(_executors.size());
+    return total_fill_rate / static_cast<float>(_executors.size());
+  }
+
+  /**
+   * Returns the cache hit rate for inference.
+   * @return Cache hit rate for inference
+   */
+  inline float getCacheHitRate() const {
+    return _cacheHitRate.load(std::memory_order_relaxed);
   }
 
  private:
@@ -158,6 +166,11 @@ class InferenceProcessor {
    * Batch size.
    */
   int32_t _batchSize;
+
+  /**
+   * Cache hit rate for inference.
+   */
+  std::atomic<float> _cacheHitRate;
 };
 
 }  // namespace deepshogi

@@ -22,4 +22,5 @@ cdef extern from "cpp/InferenceProcessor.h" namespace "deepshogi":
             int32_t batchSize, int32_t threadsPerGpu, int32_t cacheSize) except +
         float predict(Board* board) except +
         void execute(int32_t* inputs, int32_t* masks, float* outputs, int32_t size) except +
-        float getEfficiency() except +
+        float getBatchFillRate() except +
+        float getCacheHitRate() except +

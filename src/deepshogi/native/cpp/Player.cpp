@@ -30,6 +30,7 @@ Player::Player(
       _searchCondition(),
       _updateCondition(),
       _stopCondition(),
+      _waitCondition(),
       _processor(processor),
       _pnsearch(checkSearchNode, threads),
       _threadPool(threads),
@@ -193,16 +194,25 @@ void Player::waitEvaluation(int32_t visits, int32_t playouts, float timelimit, b
   // If 0 or more is specified for visit count or playout count,
   // wait until the root node's visit count reaches 1 or more
   if (visits > 0 || playouts > 0) {
-    _stopCondition.wait(lock, [this]() {
+    _waitCondition.wait(lock, [this]() {
       return _root->getVisits() > 0;
     });
   }
 
-  // Wait until the specified visit count and playout count are reached
+  // Wait until one of the following conditions is met
+  // [Condition 1] Both the visit count and playout count of the root node reach the specified values
+  // [Condition 2] The root node discovers a checkmate sequence
+  // [Condition 3] The specified time has elapsed
   std::chrono::milliseconds timeout(static_cast<int32_t>(timelimit * 1000.0f));
 
-  _stopCondition.wait_for(lock, timeout, [this, visits, playouts]() {
-    return _root->getVisits() >= visits && _root->getPlayouts() >= playouts;
+  _waitCondition.wait_for(lock, timeout, [this, visits, playouts]() {
+    if (_root->getVisits() >= visits && _root->getPlayouts() >= playouts) {
+      return true;
+    } else if (!_root->getCheckmateMoves().empty()) {
+      return true;
+    } else {
+      return false;
+    }
   });
 
   // Stop the search
@@ -499,6 +509,10 @@ void Player::_runExpand() {
     depth += 1;
   }
 
+  // The visit and playout count have been updated by the last executed `node->pickupNextNode()`
+  // Notify the waiting thread that the visit and playout count have been updated
+  _waitCondition.notify_all();
+
   // If not yet evaluated
   if (!node->isEvaluated()) {
     // Register the node as a target in the board evaluation inference model
@@ -528,12 +542,18 @@ void Player::_runExpand() {
  * Executes checkmate search.
  */
 void Player::_runCheckmateSearch(MctsNode* node) {
+  // Use the PN search engine to search for long-sequence checkmate moves
   PnSearchEngine* engine = _pnsearch.acquire();
   int32_t remain_turn = node->getBoard().getDrawTurn() - node->getBoard().getTurn() + 1;
   int32_t search_depth = std::min(_checkSearchDepth, remain_turn);
 
   node->searchCheckmateMoves(engine, search_depth);
   _pnsearch.release(engine);
+
+  // If a checkmate sequence is found in the root node, notify the waiting thread
+  if (node == _root && !node->getCheckmateMoves().empty()) {
+    _waitCondition.notify_all();
+  }
 }
 
 /**

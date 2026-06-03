@@ -34,6 +34,8 @@ MctsNode::MctsNode(MctsManager* manager)
       _visits(0),
       _playouts(0),
       _mctsValue(),
+      _mctsSelects(0),
+      _mctsProceeds(0),
       _checkmateMoves(),
       _checkmateMoveSearched(false),
       _waitingPolicies(),
@@ -108,10 +110,29 @@ MctsNode* MctsNode::pickupNextNode(
     _condition.wait(lock, [this] { return !_evaluating; });
   }
 
+  // Increment the visit count `_mctsProceeds`
+  // If this is the root node, increment `_mctsSelects` for itself
+  _mctsProceeds.fetch_add(1, std::memory_order_relaxed);
+
+  if (_parent == nullptr) {
+    _mctsSelects.fetch_add(1, std::memory_order_relaxed);
+  }
+
   // If this node has already been evaluated, return the next node to evaluate
   if (_evaluated) {
-    // If search is canceled, return nullptr
+    // If the search is canceled, handle it
     if (isCanceled()) {
+      // The variables `_mctsSelects` and `_mctsProceeds` have already been incremented
+      // Cancel the changes to these variables for this node and its parent nodes
+      MctsNode* current_node = this;
+
+      while (current_node != nullptr) {
+        current_node->_mctsSelects.fetch_sub(1, std::memory_order_relaxed);
+        current_node->_mctsProceeds.fetch_sub(1, std::memory_order_relaxed);
+        current_node = current_node->_parent;
+      }
+
+      // If the search is canceled, return nullptr
       return nullptr;
     }
 
@@ -423,7 +444,7 @@ float MctsNode::getMctsValueLCB() {
 float MctsNode::getPriorityByPUCB(int32_t totalVisits) {
   std::shared_lock<std::shared_mutex> lock(_mutex);
 
-  int32_t visits = _visits.load(std::memory_order_relaxed);
+  int32_t visits = _mctsSelects.load(std::memory_order_relaxed);
   float pucb_constant_base = _manager->getParameter().getPucbConstantBase();
   float pucb_constant_init = _manager->getParameter().getPucbConstantInit();
   float value = _mctsValue.getValue(_nodeValue) * OPPOSITE_COLOR(_board.getColor());
@@ -530,6 +551,8 @@ void MctsNode::_resetNode() {
   _visits.store(0, std::memory_order_relaxed);
   _playouts.store(0, std::memory_order_relaxed);
   _mctsValue.reset();
+  _mctsSelects.store(0, std::memory_order_relaxed);
+  _mctsProceeds.store(0, std::memory_order_relaxed);
 
   _checkmateMoves.clear();
   _checkmateMoveSearched = false;
@@ -653,6 +676,7 @@ MctsNode* MctsNode::_pickupNextNode(bool equally, int32_t width, float temperatu
     // If the candidate is not yet registered, create a new child node and return it as the next search target
     // Tentatively set the node evaluation value to the minimum evaluation value
     if (_children.find(policy_index) == _children.end()) {
+      // Create a new child node
       MctsNode* node = _manager->createNode();
 
       node->_resetNode();
@@ -665,6 +689,10 @@ MctsNode* MctsNode::_pickupNextNode(bool equally, int32_t width, float temperatu
       node->_firstChild = (_children.size() == 0);
       _children[policy_index] = node;
 
+      // Increment visit count
+      node->_mctsSelects.fetch_add(1, std::memory_order_relaxed);
+
+      // Return the new child node as the next search target
       return node;
     }
   }
@@ -687,7 +715,7 @@ MctsNode* MctsNode::_pickupNextNode(bool equally, int32_t width, float temperatu
   }
 
   // Return the node with the highest priority as the next search target
-  int32_t total_visits = _visits.load(std::memory_order_relaxed);
+  int32_t total_visits = _mctsProceeds.load(std::memory_order_relaxed);
   float max_priority = -std::numeric_limits<float>::infinity();
   MctsNode* max_node = children[0].first;
 
@@ -698,7 +726,7 @@ MctsNode* MctsNode::_pickupNextNode(bool equally, int32_t width, float temperatu
     // If equally-distributed search is set,
     // calculate priority based on visit count (if equal, consider the evaluation value)
     if (equally) {
-      float visits = (float)child.first->getVisits();
+      float visits = static_cast<float>(child.first->_mctsSelects.load(std::memory_order_relaxed));
       float value = child.first->getMctsValue() * _board.getColor();
       priority = 1.0f / (visits + 1 - value * 0.5f);
     }
@@ -713,6 +741,9 @@ MctsNode* MctsNode::_pickupNextNode(bool equally, int32_t width, float temperatu
       max_priority = priority;
     }
   }
+
+  // Increment visit count
+  max_node->_mctsSelects.fetch_add(1, std::memory_order_relaxed);
 
   // Return the node with the highest priority as the next search target
   return max_node;

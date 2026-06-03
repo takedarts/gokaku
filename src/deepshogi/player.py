@@ -409,7 +409,12 @@ class Player(object):
 
         # Output logs
         if LOGGER.isEnabledFor(logging.DEBUG):
-            LOGGER.debug('Evaluation: %d visits', sum(c.visits for c in candidates))
+            LOGGER.debug(
+                'Evaluation: %d visits, %d playouts (batch fill rate=%.2f, cache hit rate=%.2f)',
+                sum(c.visits for c in candidates),
+                sum(c.playouts for c in candidates),
+                self.processor.get_batch_fill_rate(),
+                self.processor.get_cache_hit_rate())
             for candidate in candidates:
                 LOGGER.debug(candidate)
 
