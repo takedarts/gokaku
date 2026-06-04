@@ -130,22 +130,22 @@ python src/run.py --fp16 --batch-size 16 b4c256-900.rt.model
 ### Running in CUDA-enabled Environments
 A Docker image for running Gokaku is available, which makes it easy to use Gokaku (TensorRT is not supported).
 
-To run Docker version of Gokaku using GPU, you need to have NVIDIA drivers compatible with CUDA Version 13.0 or later and NVIDIA Container Toolkit installed.
+To run Docker version of Gokaku using GPU, you need to have NVIDIA drivers compatible with CUDA Version 12.6 or later and NVIDIA Container Toolkit installed.
 If you can access the GPU from Docker by running the following command, you can run Docker version of Gokaku using GPU:
 ```
-docker run --rm -i --gpus all pytorch/pytorch:2.12.0-cuda13.0-cudnn9-runtime nvidia-smi
+docker run --rm -i --gpus all pytorch/pytorch:2.12.0-cuda12.6-cudnn9-runtime nvidia-smi
 ```
 
 When running it for the first time, you need to download the Docker image.
-The Docker image intended for use with CUDA, `takedarts/gokaku:v2.3-cuda13.0`, is about 3 GB in size, so the download may take some time.
+The Docker image intended for use with CUDA, `takedarts/gokaku:v2.3-cuda12.6`, is about 4 GB in size, so the download may take some time.
 I recommend downloading the Docker image in advance by running the following command:
 ```
-docker pull takedarts/gokaku:v2.3-cuda13.0
+docker pull takedarts/gokaku:v2.3-cuda12.6
 ```
 
 You can run the Gokaku Docker image by executing the following command in an environment where CUDA is available (You can download the model file from [here](https://github.com/takedarts/gokaku/releases/tag/v2.3)):
 ```
-docker run -iq --rm --gpus all -v .:/workspace takedarts/gokaku:v2.3-cuda13.0 /opt/run.sh <model_file>
+docker run -iq --rm --gpus all -v .:/workspace takedarts/gokaku:v2.3-cuda12.6 /opt/run.sh <model_file>
 ```
 Use the `--gpus` option to specify the GPUs to use, and mount the current directory to the container's `/workspace` using `-v .:/workspace`.
 Place the model file in the current directory and specify its path as `<model_file>`.
@@ -153,7 +153,7 @@ Place the model file in the current directory and specify its path as `<model_fi
 You can also specify options after the execution command.
 If you add `--help` to the execution command, a list of available options will be displayed:
 ```
-docker run -iq --rm --gpus all -v .:/workspace takedarts/gokaku:v2.3-cuda13.0 /opt/run.sh --help
+docker run -iq --rm --gpus all -v .:/workspace takedarts/gokaku:v2.3-cuda12.6 /opt/run.sh --help
 ```
 
 ### Running on CPU
