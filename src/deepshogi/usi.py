@@ -493,11 +493,6 @@ class USIEngine(object):
         if self.player is None:
             raise ShogiException('player is not initialized')
 
-        # Record information for calculating NPS if returning analysis results
-        if analyze:
-            prev_nodes = self.player.get_visits()
-            prev_time = time.time()
-
         # Parse arguments
         index = 0
         ponder = False
@@ -565,6 +560,10 @@ class USIEngine(object):
         # If ponder is specified in arguments, set visits to max_visits
         visits = self.max_visits if ponder else self.visits
 
+        # 探索開始前の状態を記録する
+        prev_time = time.time()
+        prev_nodes = self.player.get_visits() if analyze else 0
+
         # Calculate move
         # If it's the initial turn and ponder is not specified, make a random move
         # Otherwise, calculate the move using the evaluation function
@@ -594,13 +593,19 @@ class USIEngine(object):
         if candidates[0].src == -1:
             raise ShogiException('no candidates')
 
+        # 探索にかかった時間を計算する
+        elapsed_time = time.time() - prev_time
+
+        # ponderが指定されている場合はtimeoutの時間が経過するまで待機する
+        if ponder:
+            time.sleep(max(timelimit - elapsed_time, 0.0))
+
         # Create output
         results: List[str] = []
 
         # Create analysis result string
         if analyze:
             nodes = self.player.get_visits()
-            elapsed_time = time.time() - prev_time
             nps = round((nodes - prev_nodes) / max(elapsed_time, 0.1))
 
             results.extend(
