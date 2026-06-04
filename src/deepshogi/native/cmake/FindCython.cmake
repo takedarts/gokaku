@@ -43,4 +43,6 @@ find_program( CYTHON_EXECUTABLE
   HINTS ${_python_path}
 )
 
-mark_as_advanced( CYTHON_EXECUTABLE )
+if( USE_TORCH_TENSORRT )
+  mark_as_advanced( CYTHON_EXECUTABLE )
+endif()

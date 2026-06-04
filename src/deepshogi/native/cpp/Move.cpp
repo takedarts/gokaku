@@ -14,9 +14,9 @@ Move::Move()
 }
 
 /**
- * Creates a move object with source and destination coordinates and promotion flag.
- * @param src Source position index
- * @param dst Destination position index
+ * Creates an object with the specified source/destination square indices and promotion flag.
+ * @param src Source square index
+ * @param dst Destination square index
  * @param promote Whether to promote
  */
 Move::Move(const Position& src, const Position& dst, bool promote)
@@ -26,15 +26,15 @@ Move::Move(const Position& src, const Position& dst, bool promote)
 }
 
 /**
- * Creates a move object with the specified move number.
- * @param move Move number
+ * Creates an object from the given move value.
+ * @param move Move value
  */
 Move::Move(int16_t move)
     : _move(move) {
 }
 
 /**
- * Returns the string representation of this move.
+ * Returns the string representation of the move.
  * @return String representation of the move.
  */
 std::string Move::toString() const {

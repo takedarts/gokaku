@@ -4,7 +4,7 @@
 # Program name
 NAME = 'Gokaku'
 # Version number
-VERSION = '2.2'
+VERSION = '2.3'
 # Author name
 AUTHOR = 'Atsushi Takeda'
 
@@ -168,14 +168,8 @@ MODEL_INPUT_SIZE = MODEL_FEATURES * BOARD_SIZE * BOARD_SIZE + MODEL_INFOS
 MODEL_INPUT_PACK_SIZE = (MODEL_INPUT_SIZE + 31) // 32 + 3
 # Size of data output by the model
 MODEL_OUTPUT_SIZE = MODEL_PREDICTIONS * BOARD_SIZE * BOARD_SIZE + MODEL_VALUES
-
-################################################################
-# Search algorithm settings
-################################################################
-# Search algorithm: UCB
-SEARCH_UCB = 0
-# Search algorithm: PUCB
-SEARCH_PUCB = 1
+# Size of data output by the model (mask) when embedded as int32
+MODEL_OUTPUT_PACK_SIZE = (MODEL_OUTPUT_SIZE + 31) // 32
 
 ################################################################
 # Default values
@@ -196,12 +190,14 @@ DEFAULT_NYUGYOKU_SCORES = (28, 27)
 DEFAULT_DRAW_TURN = 512
 # Default maximum number of visits for search
 DEFAULT_MAX_VISITS = 1_000_000
-# Constant multiplied to UCB upper confidence bound
-DEFAULT_UCB_CONSTANT = 1.4
 # Initial value applied to PUCB upper confidence bound
-DEFAULT_PUCB_CONSTANT_INIT = 1.2
+DEFAULT_PUCB_CONSTANT_INIT = 1.6
 # Base value applied to PUCB upper confidence bound
-DEFAULT_PUCB_CONSTANT_BASE = 18200.0
+DEFAULT_PUCB_CONSTANT_BASE = 3200.0
+# Default number of threads per GPU
+DEFAULT_THREADS_PER_GPU = 2
+# Default batch size for board evaluation calculation
+DEFAULT_BATCH_SIZE = 32
 
 ################################################################
 # Logging settings

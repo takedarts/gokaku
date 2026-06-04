@@ -3,7 +3,7 @@
 namespace deepshogi {
 
 /**
- * Creates an object of the class that manages PN search engine objects.
+ * Constructs a PnSearchManager object.
  * @param nodes Maximum number of nodes for the search
  * @param size Number of PN search engines to pool
  */
@@ -19,7 +19,7 @@ PnSearchManager::PnSearchManager(int32_t nodes, int32_t size)
 }
 
 /**
- * Destroys an object of the class that manages PN search engine objects.
+ * Destroys the PnSearchManager object.
  */
 PnSearchManager::~PnSearchManager() {
   for (size_t i = 0; i < _availableEngines.size(); ++i) {
@@ -29,8 +29,8 @@ PnSearchManager::~PnSearchManager() {
 
 /**
  * Acquires a PN search engine object.
- * If no PN search engine object is available in the pool, blocks the calling thread.
- * @return Pointer to a PN search engine object
+ * Blocks the calling thread if no PN search engine is available in the pool.
+ * @return Pointer to the PN search engine object
  */
 PnSearchEngine* PnSearchManager::acquire() {
   std::unique_lock<std::mutex> lock(_mutex);
@@ -42,7 +42,7 @@ PnSearchEngine* PnSearchManager::acquire() {
 }
 
 /**
- * Releases a PN search engine object.
+ * Releases a PN search engine object back to the pool.
  * @param engine Pointer to the PN search engine object to release
  */
 void PnSearchManager::release(PnSearchEngine* engine) {

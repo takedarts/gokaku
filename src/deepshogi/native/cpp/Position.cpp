@@ -5,7 +5,7 @@
 namespace deepshogi {
 
 /**
- * Creates an object representing an invalid position.
+ * Creates an object representing an invalid coordinate.
  */
 Position::Position()
     : _index(-1) {
@@ -21,16 +21,16 @@ Position::Position(int8_t x, int8_t y)
 }
 
 /**
- * Creates an object with the specified position index.
- * @param index Position index.
+ * Creates an object with the specified coordinate index.
+ * @param index Coordinate index.
  */
 Position::Position(int8_t index)
     : _index(index) {
 }
 
 /**
- * Returns the string representation of the position.
- * @return String representation of the position.
+ * Returns the string representation of the coordinate.
+ * @return String representation of the coordinate.
  */
 std::string Position::toString() const {
   if (_index < 0) {

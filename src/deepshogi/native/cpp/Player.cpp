@@ -1,184 +1,218 @@
 #include "Player.h"
 
-#include <algorithm>
-#include <cmath>
-#include <map>
+#include <sstream>
 
 namespace deepshogi {
 
+// SFEN of the initial board used in the Player class constructor
+constexpr char DEFAULT_SFEN[] = "lnsgkgsnl/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL b - 1";
+
 /**
- * Create a player object.
+ * Creates a player object.
  * @param processor Object that performs inference
  * @param threads Number of threads
- * @param nyugyokuScoreBlack Points required for black's entering king declaration
- * @param nyugyokuScoreWhite Points required for white's entering king declaration
- * @param drawTurn Number of moves until a draw
- * @param checkSearchDepth Depth for mate search
- * @param checkSearchNode Number of nodes for mate search
- * @param ucbConstant Constant multiplied to UCB upper confidence bound
- * @param pucbConstantInit Initial value applied to PUCB upper confidence bound
- * @param pucbConstantBase Base value applied to PUCB upper confidence bound
- * @param evalLeafOnly True if only leaf nodes are evaluated
- * @param maxVisits Maximum number of visits for search
+ * @param searchMaxVisits Maximum visit count for a node
+ * @param nyugyokuScoreBlack Score required for first-player nyugyoku declaration
+ * @param nyugyokuScoreWhite Score required for second-player nyugyoku declaration
+ * @param drawTurn Number of moves until draw
+ * @param checkSearchDepth Search depth for checkmate sequences
+ * @param checkSearchNode Number of search nodes for checkmate sequences
+ * @param checkNodeDepth Maximum depth of nodes to perform checkmate search
+ * @param pucbConstantInit Initial value of the constant multiplied by the PUCB confidence upper bound
+ * @param pucbConstantBase Change value of the constant multiplied by the PUCB confidence upper bound
  */
 Player::Player(
-    Processor* processor, int32_t threads,
+    InferenceProcessor* processor, int32_t threads, int32_t searchMaxVisits,
     int32_t nyugyokuScoreBlack, int32_t nyugyokuScoreWhite, int32_t drawTurn,
-    int32_t checkSearchDepth, int32_t checkSearchNode,
-    float ucbConstant, float pucbConstantInit, float pucbConstantBase,
-    bool evalLeafOnly, int32_t maxVisits)
+    int32_t checkSearchDepth, int32_t checkSearchNode, int32_t checkNodeDepth,
+    float pucbConstantInit, float pucbConstantBase)
     : _mutex(),
-      _condition(),
-      _nodeManager(NodeParameter(
-          processor, nyugyokuScoreBlack, nyugyokuScoreWhite, drawTurn,
-          ucbConstant, pucbConstantInit, pucbConstantBase)),
+      _searchCondition(),
+      _updateCondition(),
+      _stopCondition(),
+      _waitCondition(),
+      _processor(processor),
+      _pnsearch(checkSearchNode, threads),
       _threadPool(threads),
-      _thread(),
-      _pnSearchManager(checkSearchNode, threads),
-      _root(_nodeManager.createNode()),
-      _evalLeafOnly(evalLeafOnly),
-      _maxVisits(maxVisits),
+      _searchThread(),
+      _updateThread(),
+      _manager(MctsParameter(
+          nyugyokuScoreBlack, nyugyokuScoreWhite, drawTurn,
+          pucbConstantInit, pucbConstantBase)),
+      _root(_manager.createNode()),
+      _searchMaxVisits(searchMaxVisits),
       _checkSearchDepth(checkSearchDepth),
-      _searchVisits(0),
-      _searchPlayouts(0),
+      _checkNodeDepth(checkNodeDepth),
       _searchEqually(false),
-      _searchAlgorithm(SEARCH_PUCB),
       _searchCandidateWidth(0),
-      _searchCheckNodeDepth(0),
-      _searchTemperature(1.0f),
+      _searchTemperature(0.0f),
       _searchNoise(0.0f),
       _runnings(0),
       _paused(false),
       _stopped(true),
-      _terminated(false) {
-  _thread.reset(new std::thread([this]() { this->_run(); }));
-  _root->initialize("lnsgkgsnl/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL b - 1");
+      _terminated(false),
+      _canceled(false),
+      _evaluatingNodes(),
+      _checkingNodes() {
+  _root->initialize(DEFAULT_SFEN);
+  _searchThread = std::thread(&Player::_runSearch, this);
+  _updateThread = std::thread(&Player::_runUpdate, this);
 }
 
 /**
- * Destroy the player object.
+ * Destroys the player object.
  */
 Player::~Player() {
   {
-    std::unique_lock<std::mutex> lock(_mutex);
+    std::lock_guard<std::mutex> lock(_mutex);
+    _canceled.store(true, std::memory_order_release);
     _terminated = true;
-    _condition.notify_all();
-    _condition.wait(lock, [this]() { return _runnings == 0; });
   }
 
-  _thread->join();
+  _searchCondition.notify_one();
+  _updateCondition.notify_one();
+  _searchThread.join();
+  _updateThread.join();
 }
 
 /**
- * Initialize the state of the player object.
- * @param sfen Initial position SFEN
+ * Initializes the state of the player object.
+ * @param sfen SFEN of the initial position
  */
 void Player::initialize(const std::string& sfen) {
   std::unique_lock<std::mutex> lock(_mutex);
 
-  // Pause the thread
+  // Pause the threads
   _paused = true;
-  _condition.wait(lock, [this]() { return _runnings == 0; });
+  _canceled.store(true, std::memory_order_release);
+  _stopCondition.wait(lock, [this]() {
+    return _runnings == 0 && _evaluatingNodes.empty() && _checkingNodes.empty();
+  });
 
   // Save the current root node
-  Node* old_root = _root;
+  MctsNode* old_root = _root;
 
   // Set the initial node as the root node
-  _root = _nodeManager.createNode();
+  _root = _manager.createNode();
   _root->initialize(sfen);
 
-  // Release nodes other than the root node
-  _releaseNode(old_root);
+  // Release the search tree including the old root node
+  _manager.releaseTree(old_root);
 
-  // Resume the thread
+  // Resume the threads
   _paused = false;
-  _condition.notify_all();
+  _canceled.store(false, std::memory_order_release);
+  _searchCondition.notify_one();
 }
 
 /**
- * Get the next turn.
- * @return Turn
+ * Gets the next turn color.
+ * @return Turn color
  */
 int32_t Player::getColor() {
-  return _root->getColor();
+  std::lock_guard<std::mutex> lock(_mutex);
+  return _root->getBoard().getColor();
 }
 
 /**
- * Move a piece.
- * @param move Information of the piece to move
+ * Moves a piece according to the specified move.
+ * @param move Information about the piece to move
  */
 void Player::play(const Move& move) {
   std::unique_lock<std::mutex> lock(_mutex);
 
-  // Pause the thread
+  // Pause the threads
   _paused = true;
-  _condition.wait(lock, [this]() { return _runnings == 0; });
+  _canceled.store(true, std::memory_order_release);
+  _stopCondition.wait(lock, [this]() {
+    return _runnings == 0 && _evaluatingNodes.empty() && _checkingNodes.empty();
+  });
 
   // Save the current root node
-  Node* old_root = _root;
+  MctsNode* old_root = _root;
 
   // Set the new root node
   _root = old_root->getChild(move);
+  _root->setAsRootNode();
+
+  // Detach the new root node from the old root node
+  old_root->removeChild(move);
 
   // Release nodes other than the root node
-  _releaseNode(old_root);
+  _manager.releaseTree(old_root);
 
-  // Resume the thread
+  // Resume the threads
   _paused = false;
-  _condition.notify_all();
+  _canceled.store(false, std::memory_order_release);
+  _searchCondition.notify_one();
 }
 
 /**
- * Start board evaluation.
- * The search process is executed in a separate thread.
- * @param equally True to make the number of searches equal, false to use UCB or PUCB
- * @param algorithm Search algorithm
- * @param candidateWidth Search width for candidate moves (if 0, the width is automatically adjusted)
- * @param checkNodeDepth Maximum depth of nodes for mate search
+ * Starts board evaluation.
+ * Search processing is executed on a separate thread.
+ * @param equally true to equalize search visit count, false to use UCB or PUCB
+ * @param candidateWidth Search width for candidate moves (0 means automatic adjustment)
  * @param temperature Temperature parameter for search
  * @param noise Strength of Gumbel noise for search
  */
 void Player::startEvaluation(
-    bool equally, int32_t algorithm, int32_t candidateWidth, int32_t checkNodeDepth,
-    float temperature, float noise) {
+    bool equally, int32_t candidateWidth, float temperature, float noise) {
   std::unique_lock<std::mutex> lock(_mutex);
 
-  // Pause the thread
+  // Pause the threads
   _paused = true;
-  _condition.wait(lock, [this]() { return _runnings == 0; });
+  _canceled.store(true, std::memory_order_release);
+  _stopCondition.wait(lock, [this]() {
+    return _runnings == 0 && _evaluatingNodes.empty() && _checkingNodes.empty();
+  });
 
-  // Change the search settings
-  _searchVisits = _root->getVisits();
-  _searchPlayouts = _root->getPlayouts();
+  // Update the search settings
   _searchEqually = equally;
-  _searchAlgorithm = algorithm;
   _searchCandidateWidth = candidateWidth;
-  _searchCheckNodeDepth = checkNodeDepth;
   _searchTemperature = temperature;
   _searchNoise = noise;
 
   // Set to running state
   _stopped = false;
 
-  // Resume the thread
+  // Resume the threads
   _paused = false;
-  _condition.notify_all();
+  _canceled.store(false, std::memory_order_release);
+  _searchCondition.notify_one();
 }
 
 /**
- * Wait until the configured board evaluation process is finished.
- * @param visits Number of search visits
- * @param playouts Number of search playouts
+ * Waits until the search completes.
+ * @param visits Search visit count
+ * @param playouts Search playout count
  * @param timelimit Time to wait (seconds)
- * @param stop True to stop the search
+ * @param stop true to stop the search
  */
 void Player::waitEvaluation(int32_t visits, int32_t playouts, float timelimit, bool stop) {
   std::unique_lock<std::mutex> lock(_mutex);
 
-  // Wait until the specified number of visits and playouts is reached
+  // If 0 or more is specified for visit count or playout count,
+  // wait until the root node's visit count reaches 1 or more
+  if (visits > 0 || playouts > 0) {
+    _waitCondition.wait(lock, [this]() {
+      return _root->getVisits() > 0;
+    });
+  }
+
+  // Wait until one of the following conditions is met
+  // [Condition 1] Both the visit count and playout count of the root node reach the specified values
+  // [Condition 2] The root node discovers a checkmate sequence
+  // [Condition 3] The specified time has elapsed
   std::chrono::milliseconds timeout(static_cast<int32_t>(timelimit * 1000.0f));
-  _condition.wait_for(lock, timeout, [this, visits, playouts]() {
-    return _searchVisits >= visits && _searchPlayouts >= playouts;
+
+  _waitCondition.wait_for(lock, timeout, [this, visits, playouts]() {
+    if (_root->getVisits() >= visits && _root->getPlayouts() >= playouts) {
+      return true;
+    } else if (!_root->getCheckmateMoves().empty()) {
+      return true;
+    } else {
+      return false;
+    }
   });
 
   // Stop the search
@@ -186,268 +220,410 @@ void Player::waitEvaluation(int32_t visits, int32_t playouts, float timelimit, b
 }
 
 /**
- * Get the list of candidate moves.
+ * Gets the list of candidate moves.
  * @return List of candidate moves
  */
 std::vector<Candidate> Player::getCandidates() {
   std::unique_lock<std::mutex> lock(_mutex);
 
-  // Pause the thread
+  // Pause the threads
   _paused = true;
-  _condition.wait(lock, [this]() { return _runnings == 0; });
+  _canceled.store(true, std::memory_order_release);
+  _stopCondition.wait(lock, [this]() {
+    return _runnings == 0 && _evaluatingNodes.empty() && _checkingNodes.empty();
+  });
 
-  // Create the list of candidate moves
+  // Build the list of candidate moves
   std::vector<Candidate> candidates;
 
-  // If there is a mate move, only the mate move is considered as a candidate
+  // If a checkmate move exists, use only the checkmate move as the candidate
   std::vector<Move> checkmate_moves = _root->getCheckmateMoves();
 
   if (!checkmate_moves.empty()) {
     candidates.emplace_back(
-        checkmate_moves[0], _root->getColor(),
+        checkmate_moves[0], _root->getBoard().getColor(),
         _root->getVisits() - 1, _root->getPlayouts(),
-        1.0f, _root->getColor(), _root->getColor(), checkmate_moves);
+        1.0f, _root->getBoard().getColor(),
+        checkmate_moves);
   }
-  // If there is no mate move, the list of child nodes is considered as candidates
-  // If a child node has a mate move, set the evaluation value to opponent's win
-  // If there is no mate move, set the evaluation value to node's value * 0.999
+  // If no checkmate sequence exists, use the child node list as candidates
+  // If a child node has a checkmate sequence, set the evaluation value to opponent win
   else {
-    for (Node* node : _root->getChildren()) {
+    for (MctsNode* node : _root->getChildren()) {
       if (!node->getCheckmateMoves().empty()) {
         candidates.emplace_back(
-            node->getMove(), _root->getColor(), node->getVisits(), node->getPlayouts(),
-            node->getPolicy(), node->getColor(), node->getColor(), node->getVariations());
+            node->getMove(), _root->getBoard().getColor(),
+            node->getVisits(), node->getPlayouts(),
+            node->getProbability(), node->getBoard().getColor(),
+            node->getVariations());
       } else {
         candidates.emplace_back(
-            node->getMove(), _root->getColor(), node->getVisits(), node->getPlayouts(),
-            node->getPolicy(), node->getValue(), node->getMinimax(), node->getVariations());
+            node->getMove(), _root->getBoard().getColor(),
+            node->getVisits(), node->getPlayouts(),
+            node->getProbability(), node->getMctsValue(),
+            node->getVariations());
       }
     }
   }
 
-  // If there are no candidate moves, add a move from the PolicyNetwork
+  // If no candidates exist, add a move based on PolicyNetwork
   if (candidates.empty()) {
-    candidates.emplace_back(
-        _root->getPolicyMove(), _root->getColor(), 0, 0,
-        1.0f, _root->getValue(), _root->getMinimax());
+    Move policy_move = _root->getPolicyMove();
+
+    if (policy_move != MOVE_INVALID) {
+      candidates.emplace_back(
+          _root->getPolicyMove(), _root->getBoard().getColor(),
+          0, 0, 1.0f, _root->getMctsValue());
+    }
   }
 
-  // Resume the thread
+  // Resume the threads
   _paused = false;
-  _condition.notify_all();
+  _canceled.store(false, std::memory_order_release);
+  _searchCondition.notify_one();
 
   return candidates;
 }
 
 /**
- * Copy the board state to the specified board object.
+ * Gets the visit count of the root node.
+ * @return Visit count of the root node
+ */
+int32_t Player::getVisits() {
+  std::unique_lock<std::mutex> lock(_mutex);
+  return _root->getVisits();
+}
+
+/**
+ * Copies the board state to the specified board object.
  * @param board Board object
  */
 void Player::copyBoardTo(Board* board) {
   std::unique_lock<std::mutex> lock(_mutex);
-  _root->copyBoardTo(board);
+  board->copyFrom(&_root->getBoard());
 }
 
 /**
- * Get the search tree debug information.
+ * Gets a string representing the state of the player object.
+ * @return String representing the state of the player object
  */
-std::string Player::getDebugInfo() {
+std::string Player::toString() {
   std::unique_lock<std::mutex> lock(_mutex);
+  std::stringstream ss;
 
-  // Pause the thread
+  // Pause the threads
   _paused = true;
-  _condition.wait(lock, [this]() { return _runnings == 0; });
+  _canceled.store(true, std::memory_order_release);
+  _stopCondition.wait(lock, [this]() {
+    return _runnings == 0 && _evaluatingNodes.empty() && _checkingNodes.empty();
+  });
 
-  // Create debug information by traversing the search tree in depth-first order
-  std::vector<std::pair<Node*, std::string>> stack = {{_root, ""}};
-  std::ostringstream output;
+  // Convert the board state to a string
+  ss << "--- Board ---" << std::endl
+     << _root->getBoard() << std::endl;
 
+  // Traverse the search tree in depth-first order and convert the current state to a string
+  std::vector<std::pair<MctsNode*, std::string>> stack = {{_root, ""}};
+
+  ss << "--- Nodes ---" << std::endl;
   while (!stack.empty()) {
-    Node* current = stack.back().first;
+    MctsNode* current = stack.back().first;
     std::string prefix = stack.back().second;
     stack.pop_back();
 
     Move move = current->getMove();
-    output << prefix
-           << "Move: " << move
-           << "Color: " << current->getColor() << " "
-           << "Visits: " << current->getVisits() << " "
-           << "Playouts: " << current->getPlayouts() << " "
-           << "Policy: " << current->getPolicy() << " "
-           << "Value: " << current->getValue() << " "
-           << "Minimax: " << current->getMinimax()
-           << std::endl;
+    char color = (current->getBoard().getColor() == COLOR_BLACK) ? 'B' : 'W';
+    ss << prefix
+       << "Color=" << color << ", "
+       << "Move=" << move << ", "
+       << "Prob=" << std::fixed << std::setprecision(2) << current->getProbability() << ", "
+       << "Value=" << std::fixed << std::setprecision(2) << current->getNodeValue() << ", "
+       << "Visits=" << current->getVisits() << ", "
+       << "Playouts=" << current->getPlayouts() << ", "
+       << "MctsValue=" << std::fixed << std::setprecision(2) << current->getMctsValue() << ", "
+       << "Checkmate=" << (!current->getCheckmateMoves().empty() ? "Yes" : "No")
+       << std::endl;
 
-    std::vector<Node*> children = current->getChildren();
+    std::vector<MctsNode*> children = current->getChildren();
     for (auto it = children.rbegin(); it != children.rend(); ++it) {
       stack.emplace_back(*it, prefix + "  ");
     }
   }
 
-  // Resume the thread
+  // Resume the threads
   _paused = false;
-  _condition.notify_all();
+  _canceled.store(false, std::memory_order_release);
+  _searchCondition.notify_one();
 
-  return output.str();
+  return ss.str();
 }
 
 /**
- * Start the search process.
+ * Executes search.
  */
-void Player::_run() {
+void Player::_runSearch() {
+  // Calculate the maximum number of evaluating nodes
+  const int32_t max_evaluating_size =
+      _processor->getBatchSize() * _processor->getThreadSize() * 10;
+
+  // Create a variable to save the root node pointer
+  // Used to detect changes in the root node
+  MctsNode* last_root_node = nullptr;
+
   while (true) {
+    // Node for which to execute checkmate search
+    MctsNode* checkmate_search_node = nullptr;
+
     {
       std::unique_lock<std::mutex> lock(_mutex);
-      _condition.wait(lock, [this]() {
-        if (_terminated) {
+
+      // Wait until search processing becomes executable
+      // Conditions for search processing to become executable (any of the following):
+      // - [Stop] Termination is requested, no running threads,
+      //   no evaluating nodes, no checkmate-search-waiting nodes
+      // - [Checkmate search] There are checkmate-search-waiting nodes
+      // - [Move search] No termination, stop, or pause request,
+      //   running thread count < thread pool size,
+      //   evaluating node count < max evaluating node count, search count < max visit count
+      _searchCondition.wait(lock, [this, max_evaluating_size]() {
+        if (_terminated && _runnings == 0 &&
+            _evaluatingNodes.empty() && _checkingNodes.empty()) {
+          return true;
+        } else if (!_checkingNodes.empty()) {
           return true;
         } else if (
-            !_stopped &&
-            !_paused &&
+            !_terminated && !_stopped && !_paused &&
             _runnings < _threadPool.getSize() &&
-            _searchVisits < _maxVisits) {
+            _evaluatingNodes.size() < max_evaluating_size &&
+            _root->getVisits() < _searchMaxVisits) {
           return true;
         } else {
           return false;
         }
       });
 
-      if (_terminated) {
+      // If the stop condition is met, exit the loop
+      if (_terminated && _runnings == 0 &&
+          _evaluatingNodes.empty() && _checkingNodes.empty()) {
         break;
       }
 
+      // If the root node has changed,
+      // add nodes up to the specified depth that have not yet had checkmate search performed
+      // to the checkmate search waiting queue
+      if (last_root_node != _root) {
+        last_root_node = _root;
+
+        // Check all nodes up to the specified depth using depth-first search
+        std::vector<std::pair<MctsNode*, int32_t>> stack = {{_root, 0}};
+
+        while (!stack.empty()) {
+          MctsNode* node = stack.back().first;
+          int32_t depth = stack.back().second;
+          stack.pop_back();
+
+          if (depth < _checkNodeDepth && !node->isCheckmateSearched()) {
+            _checkingNodes.push(node);
+          }
+
+          if (depth + 1 < _checkNodeDepth) {
+            for (MctsNode* child : node->getChildren()) {
+              stack.emplace_back(child, depth + 1);
+            }
+          }
+        }
+      }
+
+      // If there are checkmate-search-waiting nodes, extract one
+      if (!_checkingNodes.empty()) {
+        checkmate_search_node = _checkingNodes.front();
+        _checkingNodes.pop();
+      }
+
+      // Otherwise, execute search processing
       _runnings += 1;
-      _searchVisits += 1;
-      _condition.notify_all();
     }
 
-    _threadPool.submit([this]() {
-      int32_t playouts = _evaluate();
-      std::unique_lock<std::mutex> lock(_mutex);
-      _searchPlayouts += playouts;
-      _runnings -= 1;
-      _condition.notify_all();
-    });
+    // If there is a checkmate search node, register the checkmate search processing in the thread pool
+    if (checkmate_search_node != nullptr) {
+      _threadPool.submit([this, checkmate_search_node]() {
+        _runCheckmateSearch(checkmate_search_node);
+
+        {
+          std::unique_lock<std::mutex> lock(_mutex);
+          _runnings -= 1;
+        }
+
+        _searchCondition.notify_one();
+        _updateCondition.notify_one();
+        _stopCondition.notify_all();
+      });
+    }
+    // Otherwise, register the search tree expansion processing in the thread pool
+    else {
+      _threadPool.submit([this]() {
+        _runExpand();
+
+        {
+          std::unique_lock<std::mutex> lock(_mutex);
+          _runnings -= 1;
+        }
+
+        _searchCondition.notify_one();
+        _updateCondition.notify_one();
+        _stopCondition.notify_all();
+      });
+    }
   }
 }
 
 /**
- * Execute the search.
- * @return Number of playouts
+ * Expands the search tree.
  */
-int32_t Player::_evaluate() {
-  std::vector<Node*> nodes = {_root};
+void Player::_runExpand() {
+  // Copy the search settings to local variables
   bool search_equally = _searchEqually;
   int32_t search_width = _searchCandidateWidth;
-  int32_t search_algorithm = _searchAlgorithm;
-  int32_t search_check_node_depth = _searchCheckNodeDepth;
   float search_temperature = _searchTemperature;
   float search_noise = _searchNoise;
-  int32_t playouts = 0;
 
-  // Acquire the mate search engine object
-  PnSearchEngine* pn_search_engine = _pnSearchManager.acquire();
+  // Start search from the root node
+  // Traverse the search tree while getting the next node to evaluate
+  MctsNode* node = nullptr;
+  MctsNode* next_node = _root;
+  int32_t depth = 0;
 
   while (true) {
-    NodeResult result = nodes.back()->evaluate(
-        search_equally, search_width, search_algorithm,
-        pn_search_engine, search_check_node_depth > 0 ? _checkSearchDepth : 0,
-        search_temperature, search_noise);
+    // Get the next node to evaluate
+    node = next_node;
+    next_node = node->pickupNextNode(
+        search_equally, search_width, search_temperature, search_noise,
+        [this]() { return _canceled.load(std::memory_order_acquire); });
 
-    // Update the evaluation value of the node
-    // If the leaf node is reached (playout count is 1), update the evaluation value
-    // Start updating from the leaf node and update the minimax evaluation value if necessary
-    if (result.getPlayouts() == 1) {
-      bool minimax_update = true;
-
-      for (int32_t i = (int32_t)nodes.size() - 1; i >= 0; i--) {
-        std::vector<Node*> children = nodes[i]->getChildren();
-        int32_t color = nodes[i]->getColor();
-        float minimax_value = result.getValue();
-
-        if (!minimax_update) {
-          minimax_value = nodes[i]->getMinimax();
-        } else if (children.size() > 1) {
-          float value = -2.0f;
-
-          for (Node* child : children) {
-            float child_minimax = child->getMinimax() * color;
-
-            if (value < child_minimax) {
-              value = child_minimax;
-            }
-          }
-
-          minimax_value = value * color;
-
-          if (std::fabs(minimax_value - nodes[i]->getMinimax()) < 1e-6) {
-            minimax_update = false;
-          }
-        }
-
-        nodes[i]->updateValue(result.getValue(), minimax_value);
-      }
+    // If the search is canceled, terminate the search
+    if (next_node == nullptr) {
+      return;
     }
 
-    // If only leaf nodes are evaluated and child nodes are created for a leaf node,
-    // cancel the evaluation value registered in the parent node
-    if (_evalLeafOnly && result.getPlayouts() == -1) {
-      for (Node* node : nodes) {
-        node->cancelValue(result.getValue());
-      }
-    }
-
-    // Update the node's playout count
-    for (Node* node : nodes) {
-      node->setPlayouts(node->getPlayouts() + result.getPlayouts());
-    }
-
-    // Update the playout count for this search
-    playouts += result.getPlayouts();
-
-    // If a child node exists, set it as the next node
-    if (result.getNode() != nullptr) {
-      nodes.push_back(result.getNode());
-    } else {
+    // If there is no next node to evaluate, proceed to node evaluation
+    if (next_node == node) {
       break;
     }
 
-    // Update the configuration items
-    search_equally = 0;
+    // Update the search settings
+    search_equally = false;
     search_width = 0;
-    search_algorithm = SEARCH_PUCB;
-    search_check_node_depth -= 1;
     search_temperature = 1.0f;
     search_noise = 0.0f;
+    depth += 1;
   }
 
-  // Return the mate search engine object
-  _pnSearchManager.release(pn_search_engine);
+  // The visit and playout count have been updated by the last executed `node->pickupNextNode()`
+  // Notify the waiting thread that the visit and playout count have been updated
+  _waitCondition.notify_all();
 
-  // Return the number of playouts
-  return playouts;
+  // If not yet evaluated
+  if (!node->isEvaluated()) {
+    // Register the node as a target in the board evaluation inference model
+    _processor->submit(node, [this](MctsNode* node) {
+      std::unique_lock<std::mutex> lock(_mutex);
+      _updateCondition.notify_one();
+    });
+
+    // If the node is shallower than the specified depth and checkmate search has not been performed,
+    // add the node to the checkmate search waiting queue
+    if (depth < _checkNodeDepth && !node->isCheckmateSearched()) {
+      std::unique_lock<std::mutex> lock(_mutex);
+      _checkingNodes.push(node);
+      _searchCondition.notify_one();
+    }
+  }
+
+  // Add the node to the list of evaluating nodes
+  {
+    std::unique_lock<std::mutex> lock(_mutex);
+    _evaluatingNodes.push(node);
+    _updateCondition.notify_one();
+  }
 }
 
 /**
- * Release node objects other than the root node.
- * @param node Node object to release
+ * Executes checkmate search.
  */
-void Player::_releaseNode(Node* node) {
-  std::vector<Node*> stack = {node};
+void Player::_runCheckmateSearch(MctsNode* node) {
+  // Use the PN search engine to search for long-sequence checkmate moves
+  PnSearchEngine* engine = _pnsearch.acquire();
+  int32_t remain_turn = node->getBoard().getDrawTurn() - node->getBoard().getTurn() + 1;
+  int32_t search_depth = std::min(_checkSearchDepth, remain_turn);
 
-  while (!stack.empty()) {
-    Node* current = stack.back();
-    stack.pop_back();
+  node->searchCheckmateMoves(engine, search_depth);
+  _pnsearch.release(engine);
 
-    if (current == _root) {
-      continue;
+  // If a checkmate sequence is found in the root node, notify the waiting thread
+  if (node == _root && !node->getCheckmateMoves().empty()) {
+    _waitCondition.notify_all();
+  }
+}
+
+/**
+ * Updates node state.
+ */
+void Player::_runUpdate() {
+  while (true) {
+    std::vector<MctsNode*> finished_nodes;
+
+    {
+      std::unique_lock<std::mutex> lock(_mutex);
+
+      // Wait until update processing becomes executable
+      // Conditions for update processing to become executable (any of the following):
+      // - [Stop] Termination is requested, no running threads,
+      //   no evaluating nodes, no checkmate-search-waiting nodes
+      // - [Evaluation] There are evaluating nodes and their evaluation is complete
+      _updateCondition.wait(lock, [this]() {
+        if (_terminated && _runnings == 0 &&
+            _evaluatingNodes.empty() && _checkingNodes.empty()) {
+          return true;
+        } else if (
+            !_evaluatingNodes.empty() && _evaluatingNodes.front()->isEvaluated()) {
+          return true;
+        } else {
+          return false;
+        }
+      });
+
+      // If the stop condition is met, exit the loop
+      if (_terminated && _runnings == 0 &&
+          _evaluatingNodes.empty() && _checkingNodes.empty()) {
+        break;
+      }
+
+      // Extract evaluated nodes
+      while (!_evaluatingNodes.empty() && _evaluatingNodes.front()->isEvaluated()) {
+        finished_nodes.push_back(_evaluatingNodes.front());
+        _evaluatingNodes.pop();
+      }
     }
 
-    for (Node* child : current->getChildren()) {
-      stack.push_back(child);
+    // Update statistics of evaluated nodes
+    // For nodes where a checkmate sequence has been found, set the evaluation value to NodeValue
+    for (MctsNode* node : finished_nodes) {
+      float mcts_value = node->getNodeValue();
+      MctsNode* current_node = node;
+
+      while (current_node != nullptr) {
+        if (!current_node->getCheckmateMoves().empty()) {
+          mcts_value = current_node->getNodeValue();
+        }
+
+        current_node->updateMctsValue(mcts_value);
+        current_node = current_node->getParent();
+      }
     }
 
-    _nodeManager.releaseNode(current);
+    // Notify the search processing
+    _searchCondition.notify_one();
+    _stopCondition.notify_all();
   }
 }
 

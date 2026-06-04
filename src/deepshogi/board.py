@@ -5,6 +5,7 @@ import numpy as np
 from .config import (BOARD_SIZE, COLOR_BLACK, COLOR_NONE, DEFAULT_DRAW_TURN,
                      DEFAULT_INITIAL_SFEN, DEFAULT_NYUGYOKU_SCORES,
                      PIECE_BLACK_BEGIN, PIECE_PROMOTE, PIECE_WHITE_BEGIN)
+from .exception import ShogiException
 from .native import NativeBoard
 
 
@@ -15,7 +16,7 @@ def is_hand_position(pos: Tuple[int, int]) -> bool:
     Returns:
         bool: True if it is a hand piece position
     '''
-    return pos[0] >= BOARD_SIZE
+    return pos[0] == BOARD_SIZE
 
 
 class Board(object):
@@ -61,7 +62,12 @@ class Board(object):
         if piece is not None and not is_hand_position(src):
             promote = (self.get_piece(src) != piece)
 
-        return self.native.play(src, dst, promote)
+        try:
+            return self.native.play(src, dst, promote)
+        except ValueError as e:
+            raise ShogiException(
+                'Invalid move:'
+                f' src={src}, dst={dst}, promote={promote}, piece={piece}') from e
 
     def undo(
         self,
@@ -92,13 +98,6 @@ class Board(object):
             int: Number of moves
         '''
         return self.native.get_turn()
-
-    def get_hash(self) -> int:
-        '''Get the hash value of the board.
-        Returns:
-            int: Hash value of the board
-        '''
-        return self.native.get_hash()
 
     def get_piece(self, pos: Tuple[int, int]) -> int:
         '''Get the piece at the specified coordinates.

@@ -2,18 +2,20 @@
 
 #include <algorithm>
 #include <cmath>
+#include <map>
+#include <set>
 #include <sstream>
 
 #include "PnSearchEngine.h"
 
 namespace deepshogi {
 
-// Maximum value to set for PN search nodes
+// Maximum value to set in PN search nodes
 static constexpr int32_t MAX_VALUE = 0xffffff;
 
 /**
- * Creates a PN search node object.
- * Initializes it as a node representing an unsolved leaf node.
+ * Constructs a PN search node object.
+ * Initializes the node as a terminal node representing a non-checkmate state.
  */
 PnSearchNode::PnSearchNode()
     : _board(),
@@ -26,12 +28,12 @@ PnSearchNode::PnSearchNode()
 }
 
 /**
- * Initializes this node as a leaf node with the specified board information.
+ * Initializes this node as a terminal node with the specified board state.
  * @param board Board object
  * @param depth Depth of the node
  */
 void PnSearchNode::initialize(const Board* board, int32_t depth) {
-  // Copy the board and set values for an unsolved leaf node
+  // Copy the board and set values for a terminal node representing non-checkmate
   _board.copyFrom(board);
   _depth = depth;
   _children.clear();
@@ -40,16 +42,16 @@ void PnSearchNode::initialize(const Board* board, int32_t depth) {
   _step = MAX_VALUE;
   _size = 1;
 
-  // If the maximum number of moves is reached, mark as unsolved
+  // Treat as non-checkmate if the maximum number of moves has been reached
   if (_board.getTurn() >= _board.getDrawTurn()) {
     return;
   }
 
   // Set PN/DN values
   if (_depth % 2 == 0) {
-    // For the turn to give check
-    // If check can be given: PN=1, DN=number of legal moves, step=max value
-    // If check cannot be given: PN=max value, DN=0, step=max value
+    // Checking side's turn
+    // Can deliver check: PN=1, DN=number of legal moves, moves to checkmate=max
+    // Cannot deliver check: PN=max, DN=0, moves to checkmate=max
     std::vector<Move> legal_moves = _board.getLegalMoves(false, true);
 
     if (!legal_moves.empty()) {
@@ -62,13 +64,25 @@ void PnSearchNode::initialize(const Board* board, int32_t depth) {
       _step = MAX_VALUE;
     }
   } else {
-    // For the turn to escape from check
-    // If escape is possible: PN=number of legal moves, DN=1, step=max value
-    // If escape is impossible: PN=0, DN=max value, step=1
+    // Evading side's turn
+    // Can evade check: PN=number of legal moves, DN=1, moves to checkmate=max
+    // Cannot evade check: PN=0, DN=max, moves to checkmate=1
+    // Moves that drop a piece in hand to the same square are counted as one move even if the piece type differs
     std::vector<Move> legal_moves = _board.getLegalMoves(false, false);
 
     if (!legal_moves.empty()) {
-      _pn = (int32_t)legal_moves.size();
+      std::set<Position> unique_hand_moves;
+      int32_t board_move_count = 0;
+
+      for (Move& move : legal_moves) {
+        if (move.getSrc().getX() == BOARD_SIZE) {
+          unique_hand_moves.insert(move.getDst());
+        } else {
+          board_move_count++;
+        }
+      }
+
+      _pn = board_move_count + (int32_t)unique_hand_moves.size();
       _dn = 1;
       _step = MAX_VALUE;
     } else {
@@ -80,30 +94,30 @@ void PnSearchNode::initialize(const Board* board, int32_t depth) {
 }
 
 /**
- * Expands the node and generates child nodes.
+ * Expands the node to generate child nodes.
  * @param engine PN search engine object
- * @return true if the node was expanded successfully
+ * @return true if the node was successfully expanded
  */
 bool PnSearchNode::expand(PnSearchEngine* engine) {
   // Clear child nodes
   _children.clear();
 
   // Determine the rule for generating legal moves
-  // If depth is even: turn to give check (generate only moves that give check)
-  // If depth is odd: turn to escape from check (generate moves other than check)
+  // Even depth: checking side's turn (generate only checking moves)
+  // Odd depth: evading side's turn (also generate non-checking moves)
   bool checkmate = (_depth % 2 == 0) ? true : false;
 
-  // Register child nodes for each legal move
+  // Register child nodes
   Board board;
 
   for (Move& move : _board.getLegalMoves(false, checkmate)) {
-    // Create a new board
+    // Create a board state
     board.copyFrom(&_board);
     board.play(move);
 
-    // Get the node object
-    // If a node with the same board exists in the cache, return that node
-    // If the maximum number of nodes is reached, return nullptr
+    // Retrieve the node object
+    // If a node with the same board state exists in the cache, return that node
+    // If the maximum number of nodes has been reached, return nullptr
     PnSearchNode* child_node = engine->_getNode(&board, _depth + 1);
 
     if (child_node == nullptr) {
@@ -111,13 +125,13 @@ bool PnSearchNode::expand(PnSearchEngine* engine) {
     }
 
     // Set the depth of the child node
-    // If a node with the same board exists in the cache,
-    // and its depth is greater than `depth + 1`, adjust the depth to `depth + 1`
+    // If a node with the same board state exists in the node cache,
+    // and its depth is greater than depth + 1, correct the depth to depth + 1
     if (child_node->_depth > _depth + 1) {
       child_node->_depth = _depth + 1;
     }
 
-    // Add to the list of child nodes
+    // Add to the child node list
     _children.push_back(std::make_pair(move, child_node));
   }
 
@@ -126,10 +140,10 @@ bool PnSearchNode::expand(PnSearchEngine* engine) {
 
 /**
  * Updates the PN/DN values of this node.
- * @param depth_limit the depth limit
+ * @param depth_limit Depth limit
  */
 void PnSearchNode::update(int32_t depth_limit) {
-  // If the depth limit is reached, mark as unsolved
+  // Treat as non-checkmate if the depth limit is reached
   if (_depth >= depth_limit) {
     _pn = MAX_VALUE;
     _dn = 0;
@@ -138,11 +152,9 @@ void PnSearchNode::update(int32_t depth_limit) {
     return;
   }
 
-  // If it's the turn to give check
-  // PN value is the minimum of the PN values of the child nodes,
-  // DN value is the sum of the DN values of the child nodes,
-  // The number of moves to checkmate is the minimum of the number of moves
-  // to checkmate of the child nodes + 1
+  // Checking side's turn
+  // PN value is the minimum of children's PN values, DN value is the sum of children's DN values,
+  // and moves to checkmate is the minimum of children's moves to checkmate + 1
   if (_depth % 2 == 0) {
     _pn = MAX_VALUE;
     _dn = 0;
@@ -152,63 +164,84 @@ void PnSearchNode::update(int32_t depth_limit) {
     for (auto& child_pair : _children) {
       PnSearchNode* child = child_pair.second;
 
+      // PN value is the minimum of children's PN values
       if (child->_pn < _pn) {
         _pn = child->_pn;
       }
 
+      // DN value is the sum of children's DN values
       _dn = std::min(_dn + child->_dn, MAX_VALUE);
 
+      // Moves to checkmate is the minimum of children's moves to checkmate + 1
       if (_step > child->_step + 1) {
         _step = child->_step + 1;
       }
 
+      // Node size is the sum of children's sizes
       _size = std::min(_size + child->_size, MAX_VALUE);
     }
   }
-  // If it's the turn to escape from check
-  // PN value is the sum of the PN values of the child nodes,
-  // DN value is the minimum of the DN values of the child nodes,
-  // The number of moves to checkmate is the maximum of the number of moves
-  // to checkmate of the child nodes + 1
+  // Evading side's turn
+  // PN value is the sum of children's PN values, DN value is the minimum of children's DN values,
+  // and moves to checkmate is the maximum of children's moves to checkmate + 1.
+  // When computing the sum of children's PN values, if multiple moves drop a piece to the same square,
+  // only the maximum PN value among those child nodes is added to the sum.
   else {
+    std::map<Position, int32_t> hand_move_pns;
     _pn = 0;
     _dn = MAX_VALUE;
     _step = 1;
     _size = 1;
 
-    for (auto& child_pair : _children) {
-      PnSearchNode* child = child_pair.second;
+    for (auto& [move, child] : _children) {
+      // When multiple moves drop a piece to the same square, add only the maximum PN value to the sum
+      if (move.getSrc().getX() == BOARD_SIZE) {
+        Position dst = move.getDst();
 
-      _pn = std::min(_pn + child->_pn, MAX_VALUE);
+        if (hand_move_pns.find(dst) == hand_move_pns.end()) {
+          _pn = std::min(_pn + child->_pn, MAX_VALUE);
+          hand_move_pns[dst] = child->_pn;
+        } else if (child->_pn > hand_move_pns[dst]) {
+          _pn = std::min(_pn + child->_pn - hand_move_pns[dst], MAX_VALUE);
+          hand_move_pns[dst] = child->_pn;
+        }
+      }
+      // For moves that move a piece on the board, add the PN value directly to the sum
+      else {
+        _pn = std::min(_pn + child->_pn, MAX_VALUE);
+      }
 
+      // DN value is the minimum of children's DN values
       if (child->_dn < _dn) {
         _dn = child->_dn;
       }
 
+      // Moves to checkmate is the maximum of children's moves to checkmate + 1
       if (_step < child->_step + 1) {
         _step = child->_step + 1;
       }
 
+      // Node size is the sum of children's sizes
       _size = std::min(_size + child->_size, MAX_VALUE);
     }
   }
 }
 
 /**
- * Gets the next child node to search.
- * Returns nullptr if this node is a leaf node.
- * For attacking positions, returns the child node with minimum "PN value + log(search count)".
- * For defending positions, returns the child node with minimum "DN value + log(search count)".
- * Considering search count reduces search bias
- * and increases the likelihood of finding checkmates with fewer moves.
- * @return pointer to the next child node to search
+ * Returns the next child node to search.
+ * Returns nullptr if this node is a terminal node.
+ * For the checking side, returns the child node with the minimum "PN value + log(search count)".
+ * For the evading side, returns the child node with the minimum "DN value + log(search count)".
+ * Computing priority with the search count reduces search bias
+ * and increases the chance of finding shorter checkmate sequences.
+ * @return Pointer to the next child node to search
  */
 PnSearchNode* PnSearchNode::getNextNode() {
   PnSearchNode* next_node = nullptr;
 
   if (_depth % 2 == 0) {
-    // Find the child node with the minimum PN value among the nodes whose checkmate/escape status is not yet determined
-    // To consider the number of explorations, add the logarithm of the number of explorations to the PN value as the priority
+    // Find the child node with the minimum PN value among undecided nodes
+    // Use PN value plus log of search count as priority to account for search frequency
     float max_priority = 0.0f;
 
     for (auto& [move, child] : _children) {
@@ -224,10 +257,8 @@ PnSearchNode* PnSearchNode::getNextNode() {
       }
     }
   } else {
-    // Find the child node with the minimum DN value among the nodes
-    // whose checkmate/escape status is not yet determined
-    // To consider the number of explorations,
-    // add the logarithm of the number of explorations to the DN value as the priority
+    // Find the child node with the minimum DN value among undecided nodes
+    // Use DN value plus log of search count as priority to account for search frequency
     float max_priority = 0.0f;
 
     for (auto& [move, child] : _children) {
@@ -248,17 +279,16 @@ PnSearchNode* PnSearchNode::getNextNode() {
 }
 
 /**
- * Gets the move and child node that lead to checkmate.
- * Returns nullptr if no child node leads to checkmate.
- * @return a pair of the move and child node
+ * Returns the move and child node for the checkmate sequence.
+ * Returns nullptr if no child node forming a checkmate sequence exists.
+ * @return Pair of the checkmate move and child node
  */
 std::pair<Move, PnSearchNode*> PnSearchNode::getCheckmateNode() {
   PnSearchNode* checkmate_node = nullptr;
   Move checkmate_move(MOVE_INVALID);
 
   if (_depth % 2 == 0) {
-    // If it's the turn to give check,
-    // find the child node with PN value 0 and the minimum number of moves to checkmate
+    // For the checking side's turn, find the child node with PN=0 and minimum moves
     int32_t min_step = MAX_VALUE;
 
     for (auto& child_pair : _children) {
@@ -271,8 +301,7 @@ std::pair<Move, PnSearchNode*> PnSearchNode::getCheckmateNode() {
       }
     }
   } else {
-    // If it's the turn to escape from check,
-    // find the child node with PN value 0 and the maximum number of moves to checkmate
+    // For the evading side's turn, find the child node with PN=0 and maximum moves
     int32_t max_step = 0;
 
     for (auto& child_pair : _children) {
@@ -291,8 +320,8 @@ std::pair<Move, PnSearchNode*> PnSearchNode::getCheckmateNode() {
 
 /**
  * Replaces the specified child node with a new child node.
- * @param targetNode the child node to replace
- * @param newNode the new child node
+ * @param targetNode Child node to replace
+ * @param newNode New child node
  */
 void PnSearchNode::replaceChildNode(PnSearchNode* targetNode, PnSearchNode* newNode) {
   for (auto& [move, child] : _children) {
@@ -304,8 +333,8 @@ void PnSearchNode::replaceChildNode(PnSearchNode* targetNode, PnSearchNode* newN
 }
 
 /**
- * Gets the node information as a string.
- * @return the string representation of the node information
+ * Returns the node information as a string.
+ * @return String representation of the node information
  */
 std::string PnSearchNode::toString() const {
   std::stringstream ss;

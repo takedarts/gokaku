@@ -11,32 +11,34 @@
 namespace deepshogi {
 
 /**
- * Thread management class.
+ * Thread pool class.
  */
 class ThreadPool {
  public:
   /**
-   * Create thread management object.
+   * Constructs a thread pool object.
    * @param threads Number of threads
    */
   ThreadPool(int32_t threads);
 
   /**
-   * Destroy thread management object.
+   * Destroys the thread pool object.
    */
   virtual ~ThreadPool();
 
   /**
-   * Register a task to execute.
-   * @param task Task
+   * Submits a task for execution.
+   * @param task Task to execute
    */
   void submit(std::function<void()> task);
 
   /**
-   * Return number of threads.
+   * Returns the number of threads.
    * @return Number of threads
    */
-  int32_t getSize();
+  inline int32_t getSize() const {
+    return static_cast<int32_t>(_threads.size());
+  }
 
  private:
   /**
@@ -55,17 +57,17 @@ class ThreadPool {
   std::vector<std::thread> _threads;
 
   /**
-   * List of waiting tasks.
+   * Queue of pending tasks.
    */
   std::queue<std::function<void()>> _tasks;
 
   /**
-   * True if operation is stopped.
+   * True if the pool should stop.
    */
   bool _terminated;
 
   /**
-   * Execute search.
+   * Worker function executed by each thread.
    */
   void _run();
 };

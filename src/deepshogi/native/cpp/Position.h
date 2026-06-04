@@ -9,19 +9,21 @@
 namespace deepshogi {
 
 /**
- * A class representing coordinates on the board.
+ * A class representing a coordinate on the board.
  *
- * The X and Y coordinates have (0, 0) at the top-right, with X increasing rightward and Y increasing downward.
+ * The X and Y coordinates use the top-right corner as (0, 0),
+ * with X increasing to the right and Y increasing downward.
  *   (8, 0), ... (2, 0), (1, 0), (0, 0)
  *   (8, 1), ... (2, 1), (1, 1), (0, 1)
  *   ...
  *   (8, 8), ... (2, 8), (1, 8), (0, 8)
  *
- * The index used as the internal representation is assigned from top-right in row-major order.
- *   index = Y coordinate * BOARD_SIZE + X coordinate
+ * The coordinate index used as the internal representation is assigned
+ * in column-major order from the top-right.
+ *   index = Y * BOARD_SIZE + X
  *
- * The index is represented as an 8-bit integer (int8_t).
- * Invalid coordinates are represented by a negative index value (typically -1).
+ * The coordinate index is represented as an 8-bit integer (int8_t).
+ * An invalid coordinate is represented by a negative index (typically -1).
  */
 class Position {
  public:
@@ -38,13 +40,13 @@ class Position {
   Position(int8_t x, int8_t y);
 
   /**
-   * Creates an object with the specified index.
-   * @param index Index.
+   * Creates an object with the specified coordinate index.
+   * @param index Coordinate index.
    */
   Position(int8_t index);
 
   /**
-   * Creates an object by copying the specified coordinates.
+   * Creates an object by copying the specified coordinate.
    */
   Position(const Position& other) = default;
 
@@ -54,14 +56,14 @@ class Position {
   virtual ~Position() = default;
 
   /**
-   * Returns the string representation of the coordinates.
-   * @return String representation of the coordinates.
+   * Returns the string representation of the coordinate.
+   * @return String representation of the coordinate.
    */
   std::string toString() const;
 
   /**
-   * Returns the index of the coordinates.
-   * @return Index of the coordinates.
+   * Returns the coordinate index.
+   * @return Coordinate index.
    */
   inline int8_t getIndex() const {
     return _index;
@@ -84,8 +86,8 @@ class Position {
   }
 
   /**
-   * Returns whether the coordinates are valid.
-   * @return True if the coordinates are valid, false otherwise.
+   * Returns whether the coordinate is valid.
+   * @return true if the coordinate is valid, false otherwise.
    */
   inline bool isValid() const {
     return _index >= 0;
@@ -106,14 +108,14 @@ class Position {
   }
 
   /**
-   * Returns whether this coordinate is less than the specified coordinate.
+   * Returns true if this coordinate is less than the specified coordinate.
    */
   inline bool operator<(const Position& other) const {
     return _index < other._index;
   }
 
   /**
-   * Writes the string representation of the coordinates to the output stream.
+   * Writes the string representation of a coordinate object to an output stream.
    * @param os Output stream.
    * @param position Coordinate object.
    * @return Output stream.
@@ -125,12 +127,12 @@ class Position {
 
  private:
   /**
-   * Index of the coordinates.
+   * Coordinate index.
    */
   int8_t _index;
 };
 
-// Object representing invalid coordinates
+// Object representing an invalid coordinate
 const Position POSITION_INVALID = Position(-1);
 
 }  // namespace deepshogi

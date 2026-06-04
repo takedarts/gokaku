@@ -11,5 +11,4 @@ cdef extern from "cpp/Candidate.h" namespace "deepshogi":
         int32_t getPlayouts() const
         float getPolicy() const
         float getValue() const
-        float getMinimax() const
         vector[Move] getVariations() const

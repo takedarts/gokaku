@@ -3,7 +3,7 @@
 namespace deepshogi {
 
 /**
- * Create thread management object.
+ * Constructs a thread pool object.
  * @param threads Number of threads
  */
 ThreadPool::ThreadPool(int32_t threads)
@@ -18,14 +18,15 @@ ThreadPool::ThreadPool(int32_t threads)
 }
 
 /**
- * Destroy thread management object.
+ * Destroys the thread pool object.
  */
 ThreadPool::~ThreadPool() {
   {
-    std::unique_lock<std::mutex> lock(_mutex);
+    std::lock_guard<std::mutex> lock(_mutex);
     _terminated = true;
-    _condition.notify_all();
   }
+
+  _condition.notify_all();
 
   for (auto& thread : _threads) {
     thread.join();
@@ -33,12 +34,12 @@ ThreadPool::~ThreadPool() {
 }
 
 /**
- * Register a task to execute.
- * @param task Task
+ * Submits a task for execution.
+ * @param task Task to execute
  */
 void ThreadPool::submit(std::function<void()> task) {
   {
-    std::unique_lock<std::mutex> lock(_mutex);
+    std::lock_guard<std::mutex> lock(_mutex);
     _tasks.push(task);
   }
 
@@ -46,7 +47,7 @@ void ThreadPool::submit(std::function<void()> task) {
 }
 
 /**
- * Execute search.
+ * Worker function executed by each thread.
  */
 void ThreadPool::_run() {
   while (true) {
@@ -66,14 +67,6 @@ void ThreadPool::_run() {
 
     task();
   }
-}
-
-/**
- * Return number of threads.
- * @return Number of threads
- */
-int32_t ThreadPool::getSize() {
-  return (int32_t)_threads.size();
 }
 
 }  // namespace deepshogi

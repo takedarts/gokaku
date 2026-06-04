@@ -1,114 +1,125 @@
 #pragma once
 
+#include <atomic>
 #include <condition_variable>
 #include <cstdint>
-#include <functional>
 #include <mutex>
-#include <thread>
-#include <tuple>
+#include <queue>
+#include <string>
 #include <vector>
 
 #include "Board.h"
 #include "Candidate.h"
-#include "Config.h"
-#include "Node.h"
-#include "NodeManager.h"
+#include "InferenceProcessor.h"
+#include "MctsManager.h"
+#include "MctsNode.h"
 #include "PnSearchManager.h"
-#include "Processor.h"
 #include "ThreadPool.h"
 
 namespace deepshogi {
 
 /**
- * Class representing a player who progresses the game.
+ * Class that selects the next move as a player.
  */
 class Player {
  public:
   /**
-   * Create a player object.
+   * Creates a player object.
    * @param processor Object that performs inference
    * @param threads Number of threads
-   * @param nyugyokuScoreBlack Points required for black's entering king declaration
-   * @param nyugyokuScoreWhite Points required for white's entering king declaration
-   * @param drawTurn Number of moves until a draw
-   * @param checkSearchDepth Depth for mate search
-   * @param checkSearchNode Number of nodes for mate search
-   * @param ucbConstant Constant multiplied to UCB upper confidence bound
-   * @param pucbConstantInit Initial value applied to PUCB upper confidence bound
-   * @param pucbConstantBase Base value applied to PUCB upper confidence bound
-   * @param evalLeafOnly True if only leaf nodes are evaluated
-   * @param maxVisits Maximum number of visits for search
+   * @param searchMaxVisits Maximum visit count for a node
+   * @param nyugyokuScoreBlack Score required for first-player nyugyoku declaration
+   * @param nyugyokuScoreWhite Score required for second-player nyugyoku declaration
+   * @param drawTurn Number of moves until draw
+   * @param checkSearchDepth Search depth for checkmate sequences
+   * @param checkSearchNode Number of search nodes for checkmate sequences
+   * @param checkNodeDepth Maximum depth of nodes to perform checkmate search
+   * @param pucbConstantInit Initial value of the constant multiplied by the PUCB confidence upper bound
+   * @param pucbConstantBase Change value of the constant multiplied by the PUCB confidence upper bound
    */
   Player(
-      Processor* processor, int32_t threads,
+      InferenceProcessor* processor, int32_t threads, int32_t searchMaxVisits,
       int32_t nyugyokuScoreBlack, int32_t nyugyokuScoreWhite, int32_t drawTurn,
-      int32_t checkSearchDepth, int32_t checkSearchNode,
-      float ucbConstant, float pucbConstantInit, float pucbConstantBase,
-      bool evalLeafOnly, int32_t maxVisits);
+      int32_t checkSearchDepth, int32_t checkSearchNode, int32_t checkNodeDepth,
+      float pucbConstantInit, float pucbConstantBase);
 
   /**
-   * Destroy the player object.
+   * Destroys the player object.
    */
   virtual ~Player();
 
   /**
-   * Initialize the state of the player object.
-   * @param sfen Initial position SFEN
+   * Initializes the state of the player object.
+   * @param sfen SFEN of the initial position
    */
   void initialize(const std::string& sfen);
 
   /**
-   * Get the next turn.
-   * @return Turn
+   * Gets the next turn color.
+   * @return Turn color
    */
   int32_t getColor();
 
   /**
-   * Move a piece.
-   * @param move Information of the piece to move
+   * Moves a piece according to the specified move.
+   * @param move Information about the piece to move
    */
   void play(const Move& move);
 
   /**
-   * Start board evaluation.
-   * The search process is executed in a separate thread.
-   * @param equally True to make the number of searches equal, false to use UCB or PUCB
-   * @param algorithm Search algorithm
-   * @param candidateWidth Search width for candidate moves (if 0, the width is automatically adjusted)
-   * @param checkNodeDepth Maximum depth of nodes for mate search
+   * Starts board evaluation.
+   * Search processing is executed on a separate thread.
+   * @param equally true to equalize search visit count, false to use UCB or PUCB
+   * @param candidateWidth Search width for candidate moves (0 means automatic adjustment)
    * @param temperature Temperature parameter for search
    * @param noise Strength of Gumbel noise for search
    */
   void startEvaluation(
-      bool equally, int32_t algorithm, int32_t candidateWidth, int32_t checkNodeDepth,
-      float temperature, float noise);
+      bool equally, int32_t candidateWidth, float temperature, float noise);
 
   /**
-   * Wait until the search is finished.
-   * @param visits Number of search visits
-   * @param playouts Number of search playouts
+   * Waits until the search completes.
+   * @param visits Search visit count
+   * @param playouts Search playout count
    * @param timelimit Time to wait (seconds)
-   * @param stop True to stop the search
+   * @param stop true to stop the search
    */
   void waitEvaluation(int32_t visits, int32_t playouts, float timelimit, bool stop);
 
   /**
-   * Get the list of candidate moves.
+   * Gets the list of candidate moves.
    * @return List of candidate moves
    */
   std::vector<Candidate> getCandidates();
 
   /**
-   * Copy the board state to the specified board object.
+   * Gets the visit count of the root node.
+   * @return Visit count of the root node
+   */
+  int32_t getVisits();
+
+  /**
+   * Copies the board state to the specified board object.
    * @param board Board object
    */
   void copyBoardTo(Board* board);
 
   /**
-   * Get the debug information string of the search tree.
-   * @return Debug information string
+   * Gets a string representing the state of the player object.
+   * @return String representing the state of the player object
    */
-  std::string getDebugInfo();
+  std::string toString();
+
+  /**
+   * Writes the state of the player object to an output stream.
+   * @param os Output stream
+   * @param player Player object
+   * @return Output stream
+   */
+  friend std::ostream& operator<<(std::ostream& os, Player& player) {
+    os << player.toString();
+    return os;
+  }
 
  private:
   /**
@@ -117,14 +128,34 @@ class Player {
   std::mutex _mutex;
 
   /**
-   * Condition variable for synchronization.
+   * Condition variable for triggering search.
    */
-  std::condition_variable _condition;
+  std::condition_variable _searchCondition;
 
   /**
-   * Object that manages search nodes.
+   * Condition variable for triggering node update processing.
    */
-  NodeManager _nodeManager;
+  std::condition_variable _updateCondition;
+
+  /**
+   * Condition variable for waiting for termination.
+   */
+  std::condition_variable _stopCondition;
+
+  /**
+   * Condition variable for waiting until search count and playout count are satisfied.
+   */
+  std::condition_variable _waitCondition;
+
+  /**
+   * Object that performs inference.
+   */
+  InferenceProcessor* _processor;
+
+  /**
+   * Object that manages the checkmate search engine.
+   */
+  PnSearchManager _pnsearch;
 
   /**
    * Thread management object.
@@ -132,64 +163,49 @@ class Player {
   ThreadPool _threadPool;
 
   /**
-   * Thread that executes the search.
+   * Thread that manages search state.
    */
-  std::unique_ptr<std::thread> _thread;
+  std::thread _searchThread;
 
   /**
-   * Object that manages the mate search engine.
+   * Thread that updates node state.
    */
-  PnSearchManager _pnSearchManager;
+  std::thread _updateThread;
+
+  /**
+   * Object that manages search nodes.
+   */
+  MctsManager _manager;
 
   /**
    * Root node.
    */
-  Node* _root;
+  MctsNode* _root;
 
   /**
-   * True if only leaf nodes are evaluated.
+   * Maximum visit count for a node.
    */
-  bool _evalLeafOnly;
+  int32_t _searchMaxVisits;
 
   /**
-   * Maximum number of visits for search.
-   */
-  int32_t _maxVisits;
-
-  /**
-   * Depth of long mate sequences.
+   * Depth for long-sequence checkmate search.
    */
   int32_t _checkSearchDepth;
 
   /**
-   * Number of search visits.
+   * Maximum depth of nodes to perform checkmate search.
    */
-  int32_t _searchVisits;
+  int32_t _checkNodeDepth;
 
   /**
-   * Number of search playouts.
-   */
-  int32_t _searchPlayouts;
-
-  /**
-   * True if the number of searches is made equal.
+   * true to equalize search visit count.
    */
   bool _searchEqually;
-
-  /**
-   * Search algorithm.
-   */
-  int32_t _searchAlgorithm;
 
   /**
    * Search width for candidate moves.
    */
   int32_t _searchCandidateWidth;
-
-  /**
-   * Maximum depth of nodes for mate search.
-   */
-  int32_t _searchCheckNodeDepth;
 
   /**
    * Temperature parameter for search.
@@ -207,36 +223,55 @@ class Player {
   int32_t _runnings;
 
   /**
-   * True if the search is paused.
+   * true if the search is paused.
    */
   bool _paused;
 
   /**
-   * True if the search is stopped.
+   * true if the search is stopped.
    */
   bool _stopped;
 
   /**
-   * True if the search is terminated.
+   * true if the search is terminated.
    */
   bool _terminated;
 
   /**
-   * Start the search process.
+   * true if the search is canceled.
    */
-  void _run();
+  std::atomic<bool> _canceled;
 
   /**
-   * Execute the search.
-   * @return Number of playouts
+   * List of node objects being evaluated.
    */
-  int32_t _evaluate();
+  std::queue<MctsNode*> _evaluatingNodes;
 
   /**
-   * Release node objects other than the root node.
-   * @param node Node object to release
+   * List of node objects to perform checkmate search.
    */
-  void _releaseNode(Node* node);
+  std::queue<MctsNode*> _checkingNodes;
+
+  /**
+   * Executes search.
+   */
+  void _runSearch();
+
+  /**
+   * Expands the search tree.
+   */
+  void _runExpand();
+
+  /**
+   * Executes checkmate search.
+   * @param node Node object to perform checkmate search
+   */
+  void _runCheckmateSearch(MctsNode* node);
+
+  /**
+   * Updates node state.
+   */
+  void _runUpdate();
 };
 
 }  // namespace deepshogi

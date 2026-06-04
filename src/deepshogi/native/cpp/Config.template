@@ -6,9 +6,9 @@
 #define COLOR_WHITE  (${COLOR_WHITE})
 #define COLOR_NONE   (${COLOR_NONE})
 
-// Macro to get the opponent's color
+// Macro to get opponent's turn
 #define OPPOSITE_COLOR(c)  (c * -1)
-// Macro to get the relative color
+// Macro to get relative turn
 #define RELATIVE_COLOR(c1, c2)  (c1 * c2)
 
 // Piece values (corresponds to cshogi piece numbers)
@@ -65,8 +65,4 @@
 #define MODEL_INPUT_SIZE        (${MODEL_INPUT_SIZE})
 #define MODEL_INPUT_PACK_SIZE   (${MODEL_INPUT_PACK_SIZE})
 #define MODEL_OUTPUT_SIZE       (${MODEL_OUTPUT_SIZE})
-
-// Search algorithm: UCB
-#define SEARCH_UCB   (${SEARCH_UCB})
-// Search algorithm: PUCB
-#define SEARCH_PUCB  (${SEARCH_PUCB})
+#define MODEL_OUTPUT_PACK_SIZE  (${MODEL_OUTPUT_PACK_SIZE})

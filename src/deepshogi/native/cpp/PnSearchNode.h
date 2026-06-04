@@ -9,171 +9,169 @@ namespace deepshogi {
 class PnSearchEngine;
 
 /**
- * A class representing a search node in the PN search algorithm.
+ * Class representing a search node in the PN search algorithm.
  */
 class PnSearchNode {
  public:
   /**
-   * Creates a PnSearchNode object.
-   * Initializes it as a leaf node representing an unsolved position.
+   * Constructs a PN search node object.
+   * Initializes the node as a terminal node representing a non-checkmate state.
    */
   PnSearchNode();
 
   /**
-   * Deletes the copy constructor.
+   * Deleted copy constructor.
    */
   PnSearchNode(const PnSearchNode& node) = delete;
 
   /**
-   * Destroys the PnSearchNode object.
+   * Destroys the PN search node object.
    */
   virtual ~PnSearchNode() = default;
 
   /**
-   * Initializes this node as a leaf node with the specified board information.
+   * Initializes this node as a terminal node with the specified board state.
    * @param board Board object
    * @param depth Depth of the node
    */
   void initialize(const Board* board, int32_t depth);
 
   /**
-   * Expands the node and generates child nodes.
+   * Expands the node to generate child nodes.
    * @param engine PN search engine object
-   * @return true if the node was expanded successfully
+   * @return true if the node was successfully expanded
    */
   bool expand(PnSearchEngine* engine);
 
   /**
    * Updates the PN/DN values of this node.
-   * @param depth_limit the depth limit
+   * @param depth_limit Depth limit
    */
   void update(int32_t depth_limit);
 
   /**
-   * Gets the next child node to search.
-   * Returns nullptr if this node is a leaf node.
-   * For attacking positions, returns the child node with minimum "PN value + log(search count)".
-   * For defending positions, returns the child node with minimum "DN value + log(search count)".
-   * Considering search count reduces search bias
-   * and increases the likelihood of finding checkmates with fewer moves.
-   * @return pointer to the next child node to search
+   * Returns the next child node to search.
+   * Returns nullptr if this node is a terminal node.
+   * For the checking side, returns the child node with the minimum "PN value + log(search count)".
+   * For the evading side, returns the child node with the minimum "DN value + log(search count)".
+   * Computing priority with the search count reduces search bias
+   * and increases the chance of finding shorter checkmate sequences.
+   * @return Pointer to the next child node to search
    */
   PnSearchNode* getNextNode();
 
   /**
-   * Gets the move and child node that lead to checkmate.
-   * Returns nullptr if no child node leads to checkmate.
-   * @return a pair of the move and child node
+   * Returns the move and child node for the checkmate sequence.
+   * Returns nullptr if no child node forming a checkmate sequence exists.
+   * @return Pair of the checkmate move and child node
    */
   std::pair<Move, PnSearchNode*> getCheckmateNode();
 
   /**
    * Replaces the specified child node with a new child node.
-   * @param targetNode the child node to replace
-   * @param newNode the new child node
+   * @param targetNode Child node to replace
+   * @param newNode New child node
    */
   void replaceChildNode(PnSearchNode* targetNode, PnSearchNode* newNode);
 
   /**
-   * Gets the node information as a string.
-   * @return the string representation of the node information
+   * Returns the node information as a string.
+   * @return String representation of the node information
    */
   std::string toString() const;
 
   /**
-   * Gets the depth of the node.
-   * @return the depth of the node
+   * Returns the depth of the node.
+   * @return Depth of the node
    */
   inline int32_t getDepth() const {
     return _depth;
   }
 
   /**
-   * Gets the PN value.
-   * @return the PN value
+   * Returns the PN value.
+   * @return PN value
    */
   inline int32_t getPn() const {
     return _pn;
   }
 
   /**
-   * Gets the DN value.
-   * @return the DN value
+   * Returns the DN value.
+   * @return DN value
    */
   inline int32_t getDn() const {
     return _dn;
   }
 
   /**
-   * Gets the number of moves to checkmate.
-   * @return the number of moves to checkmate
+   * Returns the number of moves to checkmate.
+   * @return Number of moves to checkmate
    */
   inline int32_t getStep() const {
     return _step;
   }
 
   /**
-   * Gets the size of the node.
-   * @return the size of the node
+   * Returns the size of the node.
+   * @return Size of the node
    */
   inline int32_t getSize() const {
     return _size;
   }
 
   /**
-   * Returns true if this node is a subordinate node of the specified node.
-   * A subordinate node means a node with the same piece placement on the board,
-   * and the same or fewer pieces in hand for all types.
-   * The turn of the side giving check becomes the evaluation target turn.
-   * @param node the node to compare against
-   * @return true if this is a subordinate node
+   * Returns true if this node is the same as or inferior to the specified node.
+   * An inferior node has the same board piece arrangement and the same or fewer
+   * pieces in hand for every piece type.
+   * The side delivering check is the turn evaluated.
+   * @param node Node to compare against
+   * @return true if this node is equal to or inferior to the specified node
    */
-  inline bool isLesserThan(const PnSearchNode* node) const {
-    // Turn of the attacking side: verify board piece placement is the same
-    // and own hand pieces are the same or fewer
+  inline bool isLesserThanOrEqual(const PnSearchNode* node) const {
+    // Checking side's turn: verify that the board piece arrangement is the same and own pieces in hand are the same or fewer
     if (_depth % 2 == 1) {
-      return _board.isLesserThan(node->_board, _board.getColor());
+      return _board.isLesserThanOrEqual(node->_board, _board.getColor());
     }
-    // Turn of the defending side: verify board piece placement is the same
-    // and opponent's hand pieces are the same or fewer
+    // Evading side's turn: verify that the board piece arrangement is the same and opponent's pieces in hand are the same or fewer
     else {
-      return _board.isLesserThan(node->_board, OPPOSITE_COLOR(_board.getColor()));
+      return _board.isLesserThanOrEqual(node->_board, OPPOSITE_COLOR(_board.getColor()));
     }
   }
 
  private:
   /**
-   * The board object.
+   * Board object.
    */
   Board _board;
 
   /**
-   * The depth of the node.
+   * Depth of the node.
    */
   int32_t _depth;
 
   /**
-   * The list of child nodes.
+   * List of child nodes.
    */
   std::vector<std::pair<Move, PnSearchNode*>> _children;
 
   /**
-   * The PN value.
+   * PN value.
    */
   int32_t _pn;
 
   /**
-   * The DN value.
+   * DN value.
    */
   int32_t _dn;
 
   /**
-   * The number of moves to checkmate.
+   * Number of moves to checkmate.
    */
   int32_t _step;
 
   /**
-   * The size of the node.
+   * Size of the node.
    */
   int32_t _size;
 };

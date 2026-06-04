@@ -9,88 +9,87 @@ namespace deepshogi {
 static const PnSearchNode END_NODE = PnSearchNode();
 
 /**
- * Creates a PN search engine object.
- * @param nodes Maximum number of nodes for search
+ * Constructs a PN search engine object.
+ * @param nodeSize Maximum number of nodes for the search
  */
-PnSearchEngine::PnSearchEngine(int32_t nodes)
-    : _nodes(std::make_unique<PnSearchNode[]>(nodes)),
-      _nodeSize(nodes),
+PnSearchEngine::PnSearchEngine(int32_t nodeSize)
+    : _nodes(nodeSize),
+      _nodeSize(nodeSize),
       _nodeCount(0),
       _nodeCache() {
 }
 
 /**
- * Searches for checkmate sequences and returns the move sequence.
+ * Searches for a checkmate sequence and returns the move sequence.
  * Returns an empty array if no checkmate sequence is found.
- * @param board Board information
- * @param depth Depth to search
- * @return Move sequence of the checkmate
+ * @param board Object holding the board state
+ * @param depth Search depth
+ * @return Move sequence for the checkmate
  */
 std::vector<Move> PnSearchEngine::getCheckmateMoves(const Board* board, int32_t depth) {
-  // Search depth must be an odd number
+  // Search depth must be odd
   depth = std::max((depth % 2 == 0) ? depth + 1 : depth, 1);
 
-  // Reset node pool
+  // Reset the node pool
   _nodeCount = 0;
   _nodeCache.clear();
 
-  // Create root node
+  // Create the root node
   PnSearchNode* root = _getNode(board, 0);
 
-  // Execute search
+  // Run the search
   std::vector<PnSearchNode*> parents;
 
-  // Continue searching until checkmate or non-checkmate is found
-  // However, terminate if maximum search count is reached
+  // Continue searching until checkmate or non-checkmate is determined
+  // Stop if the maximum number of search iterations is reached
   while (root->getPn() != 0 && root->getDn() != 0) {
-    // Search from root node to leaf node
+    // Traverse from the root node down to a terminal node
     PnSearchNode* node = root;
     PnSearchNode* next_node = node->getNextNode();
 
     parents.clear();
 
-    // Continue until reaching a leaf node
+    // Descend until a terminal node is reached
     while (next_node != nullptr) {
-      // Add current node to parent list to detect loops
+      // Add the current node to the parent list to detect loops
       parents.push_back(node);
 
-      // If the next search node is a subordinate node of any parent node,
-      // replace the next search node with a non-checkmate node
+      // If the next node is equal to or inferior to any ancestor node,
+      // replace it with the terminal non-checkmate node
       if (std::any_of(parents.begin(), parents.end(), [next_node](PnSearchNode* parent) {
-            return next_node->isLesserThan(parent);
+            return next_node->isLesserThanOrEqual(parent);
           })) {
         node->replaceChildNode(next_node, const_cast<PnSearchNode*>(&END_NODE));
         next_node = const_cast<PnSearchNode*>(&END_NODE);
       }
 
-      // Move to next node
+      // Move to the next node
       node = next_node;
       next_node = node->getNextNode();
     }
 
-    // Expand node if next search node is not checkmate/non-checkmate
+    // If the current node is not a checkmate/non-checkmate node, expand it
     if (node->getPn() != 0 && node->getDn() != 0) {
       // Expand the node
-      // Node expansion failure means maximum search nodes reached,
-      // so terminate search if expansion fails
+      // A failure to expand means the maximum node count has been reached,
+      // so terminate the search
       if (!node->expand(this)) {
         break;
       }
 
-      // Update PN/DN values of leaf node
+      // Update the PN/DN values of the terminal node
       node->update(depth);
     }
 
-    // Update PN/DN values of parent nodes
-    // Parent PN/DN values must be updated even if leaf node is checkmate/non-checkmate.
-    // Reflect the result of the leaf node in the root node's PN/DN values
-    //  by updating the parent nodes' PN/DN values.
+    // Update the PN/DN values of ancestor nodes
+    // Even if the terminal node is a checkmate/non-checkmate node, the ancestors must still be updated.
+    // Updating ancestors propagates the terminal node result up to the root node.
     for (auto it = parents.rbegin(); it != parents.rend(); it++) {
       (*it)->update(depth);
     }
   }
 
-  // Retrieve checkmate move sequence
+  // Retrieve the checkmate move sequence
   std::vector<Move> checkmate_moves;
   PnSearchNode* node = root;
 
@@ -110,14 +109,14 @@ std::vector<Move> PnSearchEngine::getCheckmateMoves(const Board* board, int32_t 
 
 /**
  * Retrieves a new search node.
- * If a node for the same board exists in the cache, it returns that node.
- * Returns nullptr if the maximum number of nodes is reached.
- * @param board Board information
+ * Returns the cached node if one with the same board state exists.
+ * Returns nullptr if the maximum number of nodes has been reached.
+ * @param board Board state to search
  * @param depth Current search depth
  * @return Pointer to the search node
  */
 PnSearchNode* PnSearchEngine::_getNode(const Board* board, int32_t depth) {
-  // Return nullptr if the maximum number of nodes is reached
+  // Return nullptr if the maximum node count has been reached
   if (_nodeCount >= _nodeSize) {
     return nullptr;
   }
@@ -126,7 +125,7 @@ PnSearchNode* PnSearchEngine::_getNode(const Board* board, int32_t depth) {
   PnSearchNode* node = nullptr;
 
   // Check the node cache
-  uint64_t node_key = board->getHash();
+  BoardHash node_key(board);
   auto it = _nodeCache.find(node_key);
 
   // If the node exists in the cache

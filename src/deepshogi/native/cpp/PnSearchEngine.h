@@ -2,28 +2,28 @@
 
 #include <cstdint>
 #include <map>
-#include <memory>
 #include <vector>
 
 #include "Board.h"
+#include "BoardHash.h"
 #include "Move.h"
 #include "PnSearchNode.h"
 
 namespace deepshogi {
 
 /**
- * Engine class for searching checkmate sequences using the PN search algorithm.
+ * Engine class that searches for checkmate sequences using the PN search algorithm.
  */
 class PnSearchEngine {
  public:
   /**
-   * Creates a PN search engine object.
-   * @param nodes Maximum number of nodes for search
+   * Constructs a PN search engine object.
+   * @param nodeSize Maximum number of nodes for the search
    */
-  PnSearchEngine(int32_t nodes);
+  PnSearchEngine(int32_t nodeSize);
 
   /**
-   * Deletes the copy constructor.
+   * Deleted copy constructor.
    */
   PnSearchEngine(const PnSearchEngine& engine) = delete;
 
@@ -33,11 +33,11 @@ class PnSearchEngine {
   virtual ~PnSearchEngine() = default;
 
   /**
-   * Searches for checkmate sequences and returns the move sequence.
+   * Searches for a checkmate sequence and returns the move sequence.
    * Returns an empty array if no checkmate sequence is found.
-   * @param board Board information
-   * @param depth Depth to search
-   * @return Move sequence for checkmate
+   * @param board Object holding the board state
+   * @param depth Search depth
+   * @return Move sequence for the checkmate
    */
   std::vector<Move> getCheckmateMoves(const Board* board, int32_t depth);
 
@@ -45,7 +45,7 @@ class PnSearchEngine {
   /**
    * Array of search nodes.
    */
-  std::unique_ptr<PnSearchNode[]> _nodes;
+  std::vector<PnSearchNode> _nodes;
 
   /**
    * Number of search nodes.
@@ -60,20 +60,20 @@ class PnSearchEngine {
   /**
    * Cache of search nodes.
    */
-  std::map<uint64_t, PnSearchNode*> _nodeCache;
+  std::map<BoardHash, PnSearchNode*> _nodeCache;
 
   /**
    * Retrieves a new search node.
-   * If a node for the same board exists in the cache, it returns that node.
-   * If the maximum number of nodes is reached, it returns nullptr.
-   * @param board Board information for the search
+   * Returns the cached node if one with the same board state exists.
+   * Returns nullptr if the maximum number of nodes has been reached.
+   * @param board Board state to search
    * @param depth Current search depth
    * @return Pointer to the search node
    */
   PnSearchNode* _getNode(const Board* board, int32_t depth);
 
-  // The expand function of the PnSearchNode class calls the _getNode function of the PnSearchEngine class,
-  // so the expand function of the PnSearchNode class is declared as a friend function.
+  // PnSearchNode::expand() calls PnSearchEngine::_getNode(), so
+  // PnSearchNode::expand() is declared as a friend function.
   friend bool PnSearchNode::expand(PnSearchEngine* engine);
 };
 

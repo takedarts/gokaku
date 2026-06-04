@@ -9,15 +9,15 @@
 namespace deepshogi {
 
 /**
- * Class to manage move information.
+ * A class that manages move information.
  *
- * A move is represented as a 16-bit integer with the following bit allocation:
- * - Bits 0-6: Destination coordinate number (0-80)
- * - Bits 7-13: Source coordinate number (0-80)
- * - Bit 14: Promotion flag (0: no promotion, 1: promotion)
- * - Bit 15: Always 0 (1 for invalid moves)
+ * A move is represented as a 16-bit integer with the following bit layout:
+ * - Bits 0-6:  Destination square index (0-80)
+ * - Bits 7-13: Source square index (0-80)
+ * - Bit 14:    Promotion flag (0: no promotion, 1: promote)
+ * - Bit 15:    Always 0 (1 for invalid moves)
  *
- * For invalid moves, a negative value (typically -1) is used.
+ * A negative value (typically -1) is used for invalid moves.
  */
 class Move {
  public:
@@ -27,16 +27,16 @@ class Move {
   Move();
 
   /**
-   * Creates an object by specifying the source and destination coordinate numbers and promotion flag.
-   * @param src Source coordinate number
-   * @param dst Destination coordinate number
-   * @param promote Promotion flag
+   * Creates an object with the specified source/destination square indices and promotion flag.
+   * @param src Source square index
+   * @param dst Destination square index
+   * @param promote Whether to promote
    */
   Move(const Position& src, const Position& dst, bool promote);
 
   /**
-   * Creates an object by specifying a move number.
-   * @param move Move number
+   * Creates an object from the given move value.
+   * @param move Move value
    */
   Move(int16_t move);
 
@@ -46,7 +46,7 @@ class Move {
   Move(const Move& move) = default;
 
   /**
-   * Destructs the object.
+   * Destroys the object.
    */
   virtual ~Move() = default;
 
@@ -57,32 +57,32 @@ class Move {
   std::string toString() const;
 
   /**
-   * Gets the source coordinate.
-   * @return Source coordinate
+   * Returns the source square.
+   * @return Source square
    */
   inline Position getSrc() const {
     return Position((_move >> 7) & 0x7F);
   }
 
   /**
-   * Gets the destination coordinate.
-   * @return Destination coordinate
+   * Returns the destination square.
+   * @return Destination square
    */
   inline Position getDst() const {
     return Position((_move >> 0) & 0x7F);
   }
 
   /**
-   * Returns true if the move includes promotion.
-   * @return true if the move includes promotion
+   * Returns true if this move includes a promotion.
+   * @return True if this move includes a promotion
    */
   inline bool isPromote() const {
     return (_move >> 14) & 0x1;
   }
 
   /**
-   * Returns the move number.
-   * @return Move number
+   * Returns the move value.
+   * @return Move value
    */
   inline int16_t getValue() const {
     return _move;
@@ -90,21 +90,21 @@ class Move {
 
   /**
    * Returns true if the move is valid.
-   * @return true if the move is valid
+   * @return True if the move is valid
    */
   inline bool isValid() const {
     return _move >= 0;
   }
 
   /**
-   * Returns true if the moves are the same.
+   * Returns true if the moves are equal.
    */
   inline bool operator==(const Move& move) const {
     return _move == move._move;
   }
 
   /**
-   * Returns true if the moves are different.
+   * Returns true if the moves are not equal.
    */
   inline bool operator!=(const Move& move) const {
     return _move != move._move;
@@ -118,7 +118,7 @@ class Move {
   }
 
   /**
-   * Writes the string representation of the move object to the output stream.
+   * Writes the string representation of the move to the output stream.
    * @param os Output stream.
    * @param move Move object.
    * @return Output stream.
@@ -130,7 +130,7 @@ class Move {
 
  private:
   /**
-   * The move number representing this move.
+   * Move value representing this move.
    */
   int16_t _move;
 };
