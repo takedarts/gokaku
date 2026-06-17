@@ -79,10 +79,23 @@ class Candidate(object):
         if math.isnan(self.value):
             raise ShogiException('value is NaN')
 
-        self.win_chance = self.value * self.color * 0.5 + 0.5
-
         self.value_lcb = value - color * 1.96 * 0.5 / (visits + 1)**0.5
-        self.win_chance_lcb = self.value_lcb * self.color * 0.5 + 0.5
+
+    @property
+    def win_chance(self) -> float:
+        '''Returns the win rate.
+        Returns:
+            float: Win rate
+        '''
+        return self.value * self.color * 0.5 + 0.5
+
+    @property
+    def win_chance_lcb(self) -> float:
+        '''Returns the lower confidence bound of the win rate.
+        Returns:
+            float: Lower confidence bound of the win rate
+        '''
+        return self.value_lcb * self.color * 0.5 + 0.5
 
     def __str__(self) -> str:
         return (
