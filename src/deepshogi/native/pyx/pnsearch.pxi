@@ -29,9 +29,9 @@ cdef class NativePnSearch:
         Returns an empty list if no checkmate sequence is found.
         Args:
             board (NativeBoard): Board object
-            depth (int): Maximum search depth
+            depth (int): Initial depth, rounded to odd; shared nodes may increase it.
         Returns:
-            List[Tuple[Tuple[int, int], Tuple[int, int], bool]]: List of moves in the checkmate sequence
+            List[Tuple[Tuple[int, int], Tuple[int, int], bool]]: Checkmating moves.
         '''
         cdef vector[Move] moves = self.engine.getCheckmateMoves(board.board, depth)
 

@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <ostream>
 #include <string>
+#include <type_traits>
 #include <vector>
 
 #include "BitBoard.h"
@@ -13,20 +14,21 @@
 namespace deepshogi {
 
 /**
- * A class that holds board state information.
+ * Hold the board position.
  */
 class Board {
  private:
   /**
-   * A class for computing hash values of the board.
-   * Declared as a friend class of Board to allow access to its private members.
+   * Calculate position hashes.
+   * Allow hash classes to access private board members.
    */
   friend class BoardHash;
+  friend class InferenceHash;
 
  public:
   /**
-   * Constructs a board object.
-   * No pieces are placed on the board.
+   * Construct a board object.
+   * Do not place any pieces on the board.
    */
   Board();
 
@@ -73,23 +75,43 @@ class Board {
 
   /**
    * Returns the list of legal moves for the current board state.
-   * @param removeUnpromote If true, removes non-promotion moves for pawn, bishop, rook, and lance on the 2nd rank
+   * @param removeUnpromote If true, removes non-promotion moves for pawn, bishop, rook, and lance
+   * on the 2nd rank
    * @param checkOnly If true, returns only moves that cause check
    * @return List of legal moves
    */
   std::vector<Move> getLegalMoves(bool removeUnpromote, bool checkOnly) const;
 
   /**
-   * Returns the sequence of moves leading to checkmate for the current board state.
-   * @param depth Depth of the checkmate search
-   * @return Sequence of moves leading to checkmate
+   * Generate legal moves while reusing the existing capacity.
+   * @param moves std::vector<Move>& output vector, whose contents are replaced.
+   * @param removeUnpromote bool flag to omit selected unpromoted moves.
+   * @param checkOnly bool flag to generate only checking moves.
+   * @return void
+   */
+  void getLegalMoves(std::vector<Move>& moves, bool removeUnpromote, bool checkOnly) const;
+
+  /**
+   * Return a checkmating move sequence for the current position.
+   * @param depth Checkmate search depth.
+   * @return Checkmating move sequence.
    */
   std::vector<Move> getCheckmateMoves(int32_t depth) const;
 
   /**
-   * Returns true if an entering-king declaration is possible.
-   * @param color The color of the declaring side
-   * @return true if an entering-king declaration is possible
+   * Return the piece score, counting major pieces as five and minor pieces as one.
+   * If nyugyoku is true, count only pieces in enemy territory and in hand.
+   * If nyugyoku is false, count all pieces except the king.
+   * @param color Color to score.
+   * @param nyugyoku True to count only pieces in enemy territory and in hand.
+   * @return Total piece score.
+   */
+  int8_t getScore(int8_t color, bool nyugyoku) const;
+
+  /**
+   * Return true if an entering-king victory can be declared.
+   * @param color Declaring color.
+   * @return True if an entering-king victory can be declared.
    */
   bool isNyugyoku(int8_t color) const;
 
@@ -156,81 +178,10 @@ class Board {
   }
 
   /**
-   * Returns true if this board is equal to or inferior to the given board.
-   * An inferior board is one where the current player and piece positions on the board are the same,
-   * and the number of each type of held piece is equal or fewer.
-   * Whether the piece positions on the board are the same is checked by comparing hash values.
-   * (Hash collisions are considered extremely rare in practice and are ignored here.)
-   * To check the held piece condition, verify that the set of positions where bits are set
-   * in the held piece bit representation is a subset of the other board's set.
-   * @param other The board to compare against
-   * @param color The color to evaluate
-   * @return true if this board is equal to or inferior to the given board
-   */
-  inline bool isLesserThanOrEqual(const Board& other, int8_t color) const {
-    // If the current player differs, consider the boards different
-    if (_color != other._color) {
-      return false;
-    }
-
-    // If the board hash values differ, consider the piece positions different
-    if (_cellHash != other._cellHash) {
-      return false;
-    }
-
-    // If the piece positions differ, return false
-    if (_colorBitBoards[0] != other._colorBitBoards[0] ||
-        _colorBitBoards[1] != other._colorBitBoards[1]) {
-      return false;
-    }
-
-    // Verify that the set of bit positions set in the held piece bit representation
-    // is a subset of the other board's set
-    int8_t color_idx = (color == COLOR_BLACK) ? 0 : 1;
-
-    return (_handBits[color_idx] & other._handBits[color_idx]) == _handBits[color_idx];
-  }
-
-  /**
-   * Returns true if this board is strictly inferior to the given board.
-   * @param other The board to compare against
-   * @param color The color to evaluate
-   * @return true if this board is strictly inferior to the given board
-   */
-  inline bool isLesserThan(const Board& other, int8_t color) const {
-    // If the current player differs, consider the boards different
-    if (_color != other._color) {
-      return false;
-    }
-
-    // If the board hash values differ, consider the piece positions different
-    if (_cellHash != other._cellHash) {
-      return false;
-    }
-
-    // If the piece positions differ, return false
-    if (_colorBitBoards[0] != other._colorBitBoards[0] ||
-        _colorBitBoards[1] != other._colorBitBoards[1]) {
-      return false;
-    }
-
-    // If the held piece bit representations are the same, the held piece counts are also the same
-    if (_handBits[0] == other._handBits[0] && _handBits[1] == other._handBits[1]) {
-      return false;
-    }
-
-    // Verify that the set of bit positions set in the held piece bit representation
-    // is a subset of the other board's set
-    int8_t color_idx = (color == COLOR_BLACK) ? 0 : 1;
-
-    return (_handBits[color_idx] & other._handBits[color_idx]) == _handBits[color_idx];
-  }
-
-  /**
-   * Returns the piece at the specified coordinates.
-   * @param x X coordinate
-   * @param y Y coordinate
-   * @return Type of piece
+   * Return the piece at the specified coordinates.
+   * @param x X coordinate.
+   * @param y Y coordinate.
+   * @return Piece type.
    */
   inline uint8_t getPiece(const Position& position) const {
     return _cells[position.getIndex()];
@@ -247,18 +198,10 @@ class Board {
   }
 
   /**
-   * Returns the last move.
-   * @return The last move
-   */
-  inline Move getLastMove() const {
-    return _lastMove;
-  }
-
-  /**
-   * Writes the string representation of the board to an output stream.
-   * @param os Output stream
-   * @param board Board object
-   * @return Output stream
+   * Write a string representation of the board to the output stream.
+   * @param os Output stream.
+   * @param board Board object.
+   * @return Output stream.
    */
   friend std::ostream& operator<<(std::ostream& os, const Board& board) {
     os << board.toString();
@@ -325,22 +268,19 @@ class Board {
   int16_t _drawTurn;
 
   /**
-   * Object that stores the most recent move.
-   */
-  Move _lastMove;
-
-  /**
-   * Bitboards representing where each color's pieces are located (0: black's pieces, 1: white's pieces).
-   * Each bit corresponds to a square on the board: 1 if a piece is present, 0 otherwise.
+   * Piece occupancy bitboards: index 0 for Black, index 1 for White.
+   * Each bit corresponds to a square: one if occupied, zero otherwise.
    */
   BitBoard _colorBitBoards[2];
 
   /**
-   * Bitboards representing where each type of piece is located (0: black's pieces, 1: white's pieces).
+   * Bitboards representing where each type of piece is located (0: black's pieces, 1: white's
+   * pieces).
    * Each bit corresponds to a square on the board: 1 if a piece is present, 0 otherwise.
    * The array index corresponds to the type of piece.
    * However, the following pieces are assigned to another piece's bitboard:
-   *  - Promoted pawn, promoted lance, promoted knight, and promoted silver are assigned to the gold bitboard
+   *  - Promoted pawn, promoted lance, promoted knight, and promoted silver are assigned to the gold
+   * bitboard
    *  - Horse (promoted bishop) is assigned to both the bishop and king bitboards
    *  - Dragon (promoted rook) is assigned to both the rook and king bitboards
    */
@@ -384,27 +324,24 @@ class Board {
   void _removeHand(int8_t color, uint8_t piece);
 
   /**
-   * Returns a list of positions of pieces that attack the specified coordinate.
-   * If the template argument returnOnFirstAttacker is true,
-   * returns only the first attacker found.
-   * If additionalOccIndex is specified, calculates sliding piece attacks assuming
-   * there is an immovable piece at that coordinate.
-   * If the template argument removeOwnKing is true, removes the own king's position
-   * when calculating sliding piece attacks.
-   * @param color The color of the side being attacked
-   * @param posIndex The coordinate to check for attacking pieces
-   * @param additionalOccIndex Coordinate to assume has an extra piece (-1 if none)
-   * @return List of positions of pieces attacking the specified coordinate
+   * Return the positions of pieces attacking the specified square.
+   * If returnOnFirstAttacker is true, return attack existence as a bool.
+   * Treat additionalOccIndex as an immobile blocker when calculating sliding attacks.
+   * If removeOwnKing is true, ignore our king when calculating sliding attacks.
+   * @param color Color of the side under attack.
+   * @param posIndex Square to check for attacking pieces.
+   * @param additionalOccIndex Additional occupied square, or -1 for none.
+   * @return bool when returnOnFirstAttacker is true; otherwise std::vector<int8_t> positions.
    */
   template <bool returnOnFirstAttacker, bool removeOwnKing>
-  std::vector<int8_t> _getAttackers(
+  std::conditional_t<returnOnFirstAttacker, bool, std::vector<int8_t>> _getAttackers(
       int8_t color, int8_t posIndex, int8_t additionalOccIndex = -1) const;
 
   /**
-   * Returns the list of legal moves for the current board state.
-   * If the template argument removeUnpromote is true, removes non-promotion moves for pawn, bishop, rook, and lance on the 2nd rank.
-   * If the template argument checkOnly is true, returns only moves that cause check.
-   * @param legalMoves Array object to add legal moves to
+   * Return the legal moves for the current position.
+   * If removeUnpromote is true, omit unpromoted pawn, bishop, rook, and second-rank lance moves.
+   * If checkOnly is true, generate only checking moves.
+   * @param legalMoves Vector to which legal moves are appended.
    */
   template <bool removeUnpromote, bool checkOnly>
   void _getLegalMoves(std::vector<Move>& legalMoves) const;
@@ -565,7 +502,8 @@ class Board {
 
   /**
    * Returns whether moving from the specified position to the specified position results in check.
-   * The piece type to move is specified by the template argument piece (specified as PIECE_BLACK_XXX).
+   * The piece type to move is specified by the template argument piece (specified as
+   * PIECE_BLACK_XXX).
    * @param srcIndex Integer value representing the source position
    * @param dstIndex Integer value representing the destination position
    * @return true if the move results in check
@@ -574,7 +512,8 @@ class Board {
   bool _isCheckMove(int8_t srcIndex, int8_t dstIndex) const;
 
   /**
-   * Returns whether moving from the specified position to the specified position results in a discovered check.
+   * Returns whether moving from the specified position to the specified position results in a
+   * discovered check.
    * @param srcIndex Integer value representing the source position
    * @param dstIndex Integer value representing the destination position
    * @param color The color of the king to check
@@ -584,7 +523,8 @@ class Board {
 
   /**
    * Returns whether dropping a piece at the specified position results in check.
-   * The piece type to drop is specified by the template argument piece (specified as PIECE_BLACK_XXX).
+   * The piece type to drop is specified by the template argument piece (specified as
+   * PIECE_BLACK_XXX).
    * @param dstIndex Integer value representing the destination position
    * @return true if the drop results in check
    */
@@ -592,7 +532,8 @@ class Board {
   bool _isDropCheckMove(int8_t dstIndex) const;
 
   /**
-   * Returns whether dropping a pawn at the specified position results in an illegal checkmate (uchifuzume).
+   * Returns whether dropping a pawn at the specified position results in an illegal checkmate
+   * (uchifuzume).
    * @param dstIndex Integer value representing the destination position
    * @return true if the drop results in an illegal checkmate
    */

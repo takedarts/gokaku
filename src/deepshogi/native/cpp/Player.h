@@ -24,27 +24,30 @@ namespace deepshogi {
 class Player {
  public:
   /**
-   * Creates a player object.
-   * @param processor Object that performs inference
-   * @param threads Number of threads
-   * @param searchMaxVisits Maximum visit count for a node
-   * @param nyugyokuScoreBlack Score required for first-player nyugyoku declaration
-   * @param nyugyokuScoreWhite Score required for second-player nyugyoku declaration
-   * @param drawTurn Number of moves until draw
-   * @param checkSearchDepth Search depth for checkmate sequences
-   * @param checkSearchNode Number of search nodes for checkmate sequences
-   * @param checkNodeDepth Maximum depth of nodes to perform checkmate search
-   * @param pucbConstantInit Initial value of the constant multiplied by the PUCB confidence upper bound
-   * @param pucbConstantBase Change value of the constant multiplied by the PUCB confidence upper bound
+   * Create the player object.
+   * @param processor Inference processor.
+   * @param threads Number of threads.
+   * @param searchMaxVisits Maximum node visit count.
+   * @param nyugyokuScoreBlack Points required for Black's entering-king declaration.
+   * @param nyugyokuScoreWhite Points required for White's entering-king declaration.
+   * @param drawTurn Move count at which the game is drawn.
+   * @param sennichitePenalty Penalty assigned to repetition evaluations.
+   * @param checkSearchDepth Checkmate search depth.
+   * @param checkSearchNode Checkmate search node capacity.
+   * @param checkNodeDepth Maximum node depth at which to search for checkmate.
+   * @param pucbConstantInit Initial PUCB exploration coefficient.
+   * @param pucbConstantBase Base controlling the PUCB exploration coefficient.
+   * @param pucbMinVisitsRate Minimum visit ratio for prioritizing PUCB children.
    */
   Player(
       InferenceProcessor* processor, int32_t threads, int32_t searchMaxVisits,
       int32_t nyugyokuScoreBlack, int32_t nyugyokuScoreWhite, int32_t drawTurn,
-      int32_t checkSearchDepth, int32_t checkSearchNode, int32_t checkNodeDepth,
-      float pucbConstantInit, float pucbConstantBase);
+      float sennichitePenalty, int32_t checkSearchDepth, int32_t checkSearchNode,
+      int32_t checkNodeDepth, float pucbConstantInit, float pucbConstantBase,
+      float pucbMinVisitsRate);
 
   /**
-   * Destroys the player object.
+   * Destroy the player object.
    */
   virtual ~Player();
 
@@ -78,17 +81,16 @@ class Player {
       bool equally, int32_t candidateWidth, float temperature, float noise);
 
   /**
-   * Waits until the search completes.
-   * @param visits Search visit count
-   * @param playouts Search playout count
-   * @param timelimit Time to wait (seconds)
-   * @param stop true to stop the search
+   * Wait for the search to finish.
+   * @param visits Target search visit count.
+   * @param timelimit Maximum wait time in seconds.
+   * @param stop True to stop the search.
    */
-  void waitEvaluation(int32_t visits, int32_t playouts, float timelimit, bool stop);
+  void waitEvaluation(int32_t visits, float timelimit, bool stop);
 
   /**
-   * Gets the list of candidate moves.
-   * @return List of candidate moves
+   * Get the candidate moves.
+   * @return Candidate move list.
    */
   std::vector<Candidate> getCandidates();
 
@@ -223,7 +225,12 @@ class Player {
   int32_t _runnings;
 
   /**
-   * true if the search is paused.
+   * Number of nodes currently being updated.
+   */
+  int32_t _updatingNodes;
+
+  /**
+   * True while the search is paused.
    */
   bool _paused;
 
@@ -258,7 +265,14 @@ class Player {
   void _runSearch();
 
   /**
-   * Expands the search tree.
+   * Return true if all search work is idle.
+   * Call this method while holding the synchronization mutex.
+   * @return True if all search work is idle.
+   */
+  bool _isSearchIdle() const;
+
+  /**
+   * Expand the search tree.
    */
   void _runExpand();
 

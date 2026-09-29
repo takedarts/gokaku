@@ -17,6 +17,7 @@ cdef extern from "cpp/Board.h" namespace "deepshogi":
         vector[Position] getAttackers(const Position& position) const
         vector[Move] getLegalMoves(cpp_bool removeUnpromote, cpp_bool checkOnly) const
         vector[Move] getCheckmateMoves(int32_t depth) const
+        int8_t getScore(int8_t color, cpp_bool nyugyoku) const
         cpp_bool isNyugyoku(int8_t color) const
         cpp_bool isCheck(int8_t color) const
         string getSfen() const
@@ -28,4 +29,3 @@ cdef extern from "cpp/Board.h" namespace "deepshogi":
         int16_t getDrawTurn() const
         uint8_t getPiece(const Position& position) const
         int8_t getHandPieceNum(int8_t color, uint8_t piece) const
-        Move getLastMove() const

@@ -9,10 +9,13 @@ namespace deepshogi {
 
 /**
  * A class for representing the board state as a bit string and performing efficient calculations.
- * Each bit represents a specific position on the board, and is used to indicate the presence and type of pieces.
+ * Each bit represents a specific position on the board, and is used to indicate the presence and
+ * type of pieces.
  * Bit 0 is assigned to the upper-right of the board, with bits assigned in column-major order.
- * For example, in a 9x9 shogi board, bit 0 represents the upper-right square, and bit 8 represents the lower-right square.
- * Since this is designed for a shogi board, the following two variables are used to manage the bit state:
+ * For example, in a 9x9 shogi board, bit 0 represents the upper-right square, and bit 8 represents
+ * the lower-right square.
+ * Since this is designed for a shogi board, the following two variables are used to manage the bit
+ * state:
  *  - lower (int64_t): Bit string representing the lower bits of the board (bits 0-53).
  *  - upper (int32_t): Bit string representing the upper bits of the board (bits 54-80).
  */

@@ -12,17 +12,22 @@ namespace deepshogi {
  */
 struct InferenceResult {
   /**
-   * Creates an evaluation result object.
+   * Construct an inference result.
    */
-  InferenceResult() : value(0.0f), policies() {}
+  InferenceResult() : value(0.0f), remainingTurns(0.0f), policies() {}
 
   /**
-   * Board evaluation value.
+   * Position evaluation.
    */
   float value;
 
   /**
-   * List of predicted probabilities for the next move.
+   * Predicted moves remaining until the game ends.
+   */
+  float remainingTurns;
+
+  /**
+   * Predicted next-move probabilities.
    */
   std::vector<std::pair<Move, float>> policies;
 };

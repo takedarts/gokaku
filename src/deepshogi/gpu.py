@@ -1,7 +1,7 @@
 import logging
 from typing import List, Sequence, Tuple
 
-from deepshogi.native import NativeInferenceModel
+from .native import NativeInferenceModel
 
 LOGGER = logging.getLogger(__name__)
 
@@ -10,16 +10,16 @@ def get_default_gpus(
     gpus: Sequence[int] | None,
     fp16: bool,
 ) -> Tuple[List[int], bool]:
-    '''Return a list of appropriate GPU IDs and FP16 availability for the execution environment.
-    If gpus is None, return a list of available GPU IDs.
-    If gpus is specified, return that list.
-    If -1 is included in gpus, FP16 usage is disabled.
-    If invalid GPU IDs are included, a warning is displayed and they are ignored.
+    '''Return GPU IDs and FP16 availability appropriate for the environment.
+    If gpus is None, return the IDs of available GPUs.
+    Otherwise, use the specified GPU IDs.
+    Disable FP16 if gpus contains -1.
+    Warn about invalid GPU IDs and ignore them.
     Args:
-        gpus (Sequence[int] | None): List of GPU IDs
-        fp16 (bool): Whether to use FP16
+        gpus (Sequence[int] | None): Requested GPU IDs.
+        fp16 (bool): True to use FP16 computation.
     Returns:
-        Tuple[List[int], bool]: List of GPU IDs and FP16 availability
+        Tuple[List[int], bool]: GPU IDs and whether to use FP16.
     '''
     # Get list of available GPU IDs
     available_gpus = NativeInferenceModel.get_available_gpus()

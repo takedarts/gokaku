@@ -6,8 +6,7 @@ from libcpp.vector cimport vector
 import numpy
 cimport numpy
 
-from deepshogi.config import MODEL_INPUT_PACK_SIZE, MODEL_OUTPUT_PACK_SIZE, MODEL_OUTPUT_SIZE
-
+from deepshogi.config import MODEL_OUTPUT_PACK_SIZE, MODEL_OUTPUT_SIZE
 from pyx.inference cimport InferenceModel, InferenceProcessor
 
 
@@ -16,9 +15,9 @@ cdef class NativeInferenceModel:
 
     @staticmethod
     def get_available_gpus() -> List[int]:
-        '''Returns the list of available GPU indices.
+        '''Return the IDs of available GPUs.
         Returns:
-            list[int]: List of GPU indices
+            list[int]: Available GPU IDs.
         '''
         return InferenceModel.getAvailableGPUs()
 

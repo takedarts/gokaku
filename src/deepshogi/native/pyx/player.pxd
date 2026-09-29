@@ -13,15 +13,15 @@ cdef extern from "cpp/Player.h" namespace "deepshogi":
         Player(
             InferenceProcessor* processor, int32_t threads, int32_t searchMaxVisits,
             int32_t nyugyokuScoreBlack, int32_t nyugyokuScoreWhite, int32_t drawTurn,
-            int32_t checkSearchDepth, int32_t checkSearchNode, int32_t checkNodeDepth,
-            float pucbConstantInit, float pucbConstantBase) except +
+            float sennichitePenalty, int32_t checkSearchDepth, int32_t checkSearchNode,
+            int32_t checkNodeDepth, float pucbConstantInit, float pucbConstantBase,
+            float pucbMinVisitsRate) except +
         void initialize(const string& sfen) except +
         int32_t getColor() except +
         void play(const Move& move) except +
         void startEvaluation(
             bool equally, int32_t candidateWidth, float temperature, float noise) except +
-        void waitEvaluation(
-            int32_t visits, int32_t playouts, float timelimit, bool stop) except + nogil
+        void waitEvaluation(int32_t visits, float timelimit, bool stop) except + nogil
         vector[Candidate] getCandidates() except +
         int32_t getVisits() except +
         void copyBoardTo(Board* board) except +

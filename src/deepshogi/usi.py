@@ -10,11 +10,11 @@ from .config import (AUTHOR, BOARD_SIZE, COLOR_BLACK, COLOR_WHITE,
                      DEFAULT_CHECK_SEARCH_NODE, DEFAULT_DRAW_TURN,
                      DEFAULT_INITIAL_SFEN, DEFAULT_MAX_VISITS,
                      DEFAULT_NYUGYOKU_SCORES, DEFAULT_PUCB_CONSTANT_BASE,
-                     DEFAULT_PUCB_CONSTANT_INIT, NAME, PIECE_HAND_BISHOP,
-                     PIECE_HAND_GOLD, PIECE_HAND_KNIGHT, PIECE_HAND_LANCE,
-                     PIECE_HAND_PAWN, PIECE_HAND_ROOK, PIECE_HAND_SILVER,
-                     VERSION, get_color_name, get_opposite_color,
-                     get_shogi_score)
+                     DEFAULT_PUCB_CONSTANT_INIT, DEFAULT_PUCB_MIN_VISITS_RATE,
+                     NAME, PIECE_HAND_BISHOP, PIECE_HAND_GOLD,
+                     PIECE_HAND_KNIGHT, PIECE_HAND_LANCE, PIECE_HAND_PAWN,
+                     PIECE_HAND_ROOK, PIECE_HAND_SILVER, VERSION,
+                     get_color_name, get_opposite_color, get_shogi_score)
 from .exception import ShogiException
 from .player import Candidate, Player
 from .processor import Processor
@@ -40,7 +40,7 @@ def usi_string_to_move(sfen: str) -> Tuple[Tuple[int, int], Tuple[int, int], boo
     Args:
         sfen (str): USI move string
     Returns:
-        Tuple[Tuple[int,int], Tuple[int,int],bool]: (source coordinates, destination coordinates, True if promote)
+        Tuple[Tuple[int,int], Tuple[int,int],bool]: Source, destination, promotion flag.
     '''
     b = sfen.encode('utf-8')
 
@@ -106,23 +106,26 @@ def usi_candidate_to_string(candidate: Candidate, index: int) -> str:
 
 
 class USIEngine(object):
-    '''Class that executes thinking process based on USI protocol input.'''
+    '''Run searches in response to USI protocol input.'''
 
     def __init__(
         self,
         processor: Processor,
         threads: int,
-        visits: int,
-        playouts: int = 0,
+        visits: int = 1,
+        extends: int = 0,
         timelimit: float = 0,
         criterion: str = 'value',
         ponder: bool = False,
         multipv: int = 1,
+        max_visits: int = DEFAULT_MAX_VISITS,
         resign_threshold: float = 0.0,
         resign_turn: int = 0,
         initial_turn: int = 4,
         initial_width: int = 16,
         initial_temperature: float = 1.0,
+        initial_value_delta: float = 0.01,
+        initial_white_only: bool = False,
         nyugyoku_scores: Tuple[int, int] = DEFAULT_NYUGYOKU_SCORES,
         draw_turn: int = DEFAULT_DRAW_TURN,
         check_search_depth: int = DEFAULT_CHECK_SEARCH_DEPTH,
@@ -130,41 +133,44 @@ class USIEngine(object):
         check_node_depth: int = DEFAULT_CHECK_NODE_DEPTH,
         pucb_constant_init: float = DEFAULT_PUCB_CONSTANT_INIT,
         pucb_constant_base: float = DEFAULT_PUCB_CONSTANT_BASE,
-        max_visits: int = DEFAULT_MAX_VISITS,
+        pucb_min_visits_rate: float = DEFAULT_PUCB_MIN_VISITS_RATE,
         client_name: str = NAME,
         client_version: str = VERSION,
         client_author: str = AUTHOR,
         reader: TextIO = sys.stdin,
         writer: TextIO = sys.stdout,
     ):
-        '''Create a USI engine.
+        '''Create the USI engine.
         Args:
-            processor (Processor): Inference execution object
-            threads (int): Number of threads to use
-            visits (int): Number of search visits
-            playouts (int): Number of search playouts
-            timelimit (float): Thinking time limit (seconds)
-            criterion (str): Criterion for prioritizing candidate moves ('value' or 'visits')
-            ponder (bool): True to continue analysis during opponent's thinking
-            multipv (int): Number of candidate moves to output in analysis results
-            resign_threshold (float): Win rate threshold for resignation
-            resign_turn (int): Minimum number of turns before resignation
-            initial_turn (int): Number of initial turns for random moves
-            initial_width (int): Number of candidate moves for random moves
-            initial_temperature (float): Temperature parameter for random move selection
-            nyugyoku_scores (Tuple[int,int]): Points required for nyugyoku declaration
-            draw_turn (int): Number of turns for a draw
-            check_search_depth (int): Depth for checkmate search
-            check_search_node (int): Number of nodes for checkmate search
-            check_node_depth (int): Depth of nodes for checkmate search
-            pucb_constant_init (float): Initial value applied to PUCB upper confidence bound
-            pucb_constant_base (float): Base value applied to PUCB upper confidence bound
-            max_visits (int): Maximum number of search visits
-            client_name (str): Client display name
-            client_version (str): Client display version
-            client_author (str): Displayed author name
-            reader (TextIO): Stream to input commands
-            writer (TextIO): Stream to output results
+            processor (Processor): Inference processor.
+            threads (int): Number of threads to use.
+            visits (int): Search visit count.
+            extends (int): Maximum number of search extensions.
+            timelimit (float): Thinking time limit in seconds.
+            criterion (str): Candidate ranking criterion: 'value' or 'visits'.
+            ponder (bool): True to continue analysis during the opponent's turn.
+            multipv (int): Number of candidate variations to report.
+            max_visits (int): Maximum search visit count.
+            resign_threshold (float): Win probability threshold for resignation.
+            resign_turn (int): Minimum move count before resignation.
+            initial_turn (int): Number of initial turns using random moves.
+            initial_width (int): Number of candidates for random moves.
+            initial_temperature (float): Temperature for random moves.
+            initial_value_delta (float): Acceptable value difference for random moves.
+            initial_white_only (bool): True to use random moves only for White.
+            nyugyoku_scores (Tuple[int,int]): Points required for entering-king declarations.
+            draw_turn (int): Move count at which the game is drawn.
+            check_search_depth (int): Checkmate search depth.
+            check_search_node (int): Checkmate search node capacity.
+            check_node_depth (int): Node depth at which to run checkmate search.
+            pucb_constant_init (float): Initial PUCB coefficient.
+            pucb_constant_base (float): Base controlling the PUCB coefficient.
+            pucb_min_visits_rate (float): Minimum visit ratio for prioritizing PUCB children.
+            client_name (str): Displayed client name.
+            client_version (str): Displayed client version.
+            client_author (str): Displayed author name.
+            reader (TextIO): Command input stream.
+            writer (TextIO): Result output stream.
         '''
         self.player: Player | None = None
         self.processor = processor
@@ -176,10 +182,11 @@ class USIEngine(object):
         self.check_node_depth = check_node_depth
         self.pucb_constant_init = pucb_constant_init
         self.pucb_constant_base = pucb_constant_base
+        self.pucb_min_visits_rate = pucb_min_visits_rate
         self.max_visits = max_visits
 
         self.visits = visits
-        self.playouts = playouts
+        self.extends = extends
         self.timelimit = timelimit
         self.criterion = criterion
         self.ponder = ponder
@@ -191,7 +198,8 @@ class USIEngine(object):
         self.initial_turn = initial_turn
         self.initial_width = initial_width
         self.initial_temperature = initial_temperature
-
+        self.initial_value_delta = initial_value_delta
+        self.initial_white_only = initial_white_only
         self.client_name = client_name
         self.client_version = client_version
         self.client_author = client_author
@@ -214,13 +222,16 @@ class USIEngine(object):
                                  lambda v: str(round(v * 100)), lambda s: float(s) / 100),
             'PucbConstantBase': ('spin default {} min 0', 'pucb_constant_base',
                                  lambda v: str(round(v)), lambda s: float(s)),
+            'PucbMinVisitsRate': (
+                'spin default {} min 0', 'pucb_min_visits_rate',
+                lambda v: str(round(v * 100)), lambda s: float(s) / 100),
             'MaxVisits': ('spin default {} min 1', 'max_visits', str, int),
             'NyugyokuRule': ('combo default {} var 27 var 24', 'nyugyoku_scores',
                              lambda v: '24' if v == (31, 31) else '27',
                              lambda s: (31, 31) if s == '24' else DEFAULT_NYUGYOKU_SCORES),
             'DrawTurn': ('spin default {} min 1', 'draw_turn', str, int),
             'Visits': ('spin default {} min 1', 'visits', str, int),
-            'Playouts': ('spin default {} min 0', 'playouts', str, int),
+            'Extends': ('spin default {} min 0', 'extends', str, int),
             'Timelimit': ('spin default {} min 0', 'timelimit',
                           lambda v: str(int(v * 1000)), lambda s: float(s) / 1000),
             'Ponder': ('check default {}', 'ponder',
@@ -235,6 +246,10 @@ class USIEngine(object):
             'InitialWidth': ('spin default {} min 1', 'initial_width', str, int),
             'InitialTemperature': ('spin default {} min 0', 'initial_temperature',
                                    lambda v: str(int(v * 100)), lambda s: float(s) / 100),
+            'InitialValueDelta': ('spin default {} min 0', 'initial_value_delta',
+                                  lambda v: str(int(v * 100)), lambda s: float(s) / 100),
+            'InitialWhiteOnly': ('check default {}', 'initial_white_only',
+                                 lambda v: str(v).lower(), lambda s: s.lower() == 'true'),
         }
 
     def run(self) -> None:
@@ -401,18 +416,19 @@ class USIEngine(object):
                 check_search_node=self.check_search_node,
                 check_node_depth=self.check_node_depth,
                 pucb_constant_init=self.pucb_constant_init,
-                pucb_constant_base=self.pucb_constant_base)
+                pucb_constant_base=self.pucb_constant_base,
+                pucb_min_visits_rate=self.pucb_min_visits_rate)
 
         return (True, 'readyok', False)
 
     def _perform_command_usinewgame(self, args: List[str]) -> Tuple[bool, str, bool]:
         '''Start a new game.
         Args:
-            args (List[str]): Arguments
+            args (List[str]): Command arguments.
         Returns:
-            Tuple[bool, str, bool]: (True to output, message, True to continue execution)
+            Tuple[bool, str, bool]: (Whether to output, message, whether to continue).
         '''
-        # Ensure player object is created
+        # Ensure that the player has been created.
         if self.player is None:
             raise ShogiException('player is not initialized')
 
@@ -432,7 +448,7 @@ class USIEngine(object):
         Returns:
             Tuple[bool, str, bool]: (True to output, message, True to continue execution)
         '''
-        # Ensure player object is created
+        # Ensure that the player has been created.
         if self.player is None:
             raise ShogiException('player is not initialized')
 
@@ -489,7 +505,7 @@ class USIEngine(object):
         Returns:
             Tuple[bool, str, bool]: (True to output, message, True to continue execution)
         '''
-        # Ensure player object is created
+        # Ensure that the player has been created.
         if self.player is None:
             raise ShogiException('player is not initialized')
 
@@ -531,7 +547,7 @@ class USIEngine(object):
                 index += 2
 
         # Calculate time limit
-        # If remaining time is not set, use default time limit
+        # Use the default time limit when remaining time is unspecified.
         # If ponder is specified in arguments, set time limit to 0.5 seconds
         if ponder:
             timelimit = 0.5
@@ -560,43 +576,45 @@ class USIEngine(object):
         # If ponder is specified in arguments, set visits to max_visits
         visits = self.max_visits if ponder else self.visits
 
-        # 探索開始前の状態を記録する
+        # Record the state before starting the search.
         prev_time = time.time()
         prev_nodes = self.player.get_visits() if analyze else 0
 
-        # Calculate move
-        # If it's the initial turn and ponder is not specified, make a random move
-        # Otherwise, calculate the move using the evaluation function
-        if not ponder and len(self.moves) < self.initial_turn:
+        # Determine whether to select a random move.
+        random_move = (
+            not ponder and len(self.moves) < self.initial_turn
+            and (not self.initial_white_only or self.player.get_color() == COLOR_WHITE))
+
+        # Compute the move.
+        if random_move:
             LOGGER.debug('RandomMove: turn=%d', len(self.moves))
-            candidates = [self.player.get_random(
+            candidates = [self.player.get_random_candidate(
                 width=self.initial_width,
                 timelimit=timelimit,
                 temperature=self.initial_temperature,
-                delta=0.01,
+                delta=self.initial_value_delta,
                 ponder=self.ponder)]
         else:
             LOGGER.debug(
-                'Evaluate: visits=%d, playouts=%d, timelimit=%.1f, ponder=%s',
-                visits, self.playouts, timelimit, ponder)
+                'Evaluate: visits=%d, timelimit=%.1f, ponder=%s',
+                visits, timelimit, ponder)
             candidates = self.player.evaluate(
                 visits=visits,
-                playouts=self.playouts,
+                extends=self.extends,
                 timelimit=timelimit,
                 criterion=self.criterion,
                 equally=(self.multipv > 1),
                 candidate_width=self.multipv if self.multipv > 1 else 0,
                 ponder=self.ponder)
 
-        # If there are no candidate moves, raise an exception (only occurs if
-        # search settings are incorrect)
+        # Raise an error if no candidates exist, indicating invalid search settings.
         if candidates[0].src == -1:
             raise ShogiException('no candidates')
 
-        # 探索にかかった時間を計算する
+        # Calculate the time spent searching.
         elapsed_time = time.time() - prev_time
 
-        # ponderが指定されている場合はtimeoutの時間が経過するまで待機する
+        # When pondering, wait until the timeout expires.
         if ponder:
             time.sleep(max(timelimit - elapsed_time, 0.0))
 
@@ -670,7 +688,7 @@ class USIEngine(object):
         Returns:
             Tuple[bool, str, bool]: (True to output, message, True to continue execution)
         '''
-        # Ensure player object is created
+        # Ensure that the player has been created.
         if self.player is None:
             raise ShogiException('player is not initialized')
 
@@ -686,7 +704,7 @@ class USIEngine(object):
         Returns:
             Tuple[bool, str, bool]: (True to output, message, True to continue execution)
         '''
-        # Ensure player object is created
+        # Ensure that the player has been created.
         if self.player is None:
             raise ShogiException('player is not initialized')
 
@@ -700,7 +718,7 @@ class USIEngine(object):
         Returns:
             Tuple[bool, str, bool]: (True to output, message, True to continue execution)
         '''
-        # Ensure player object is created
+        # Ensure that the player has been created.
         if self.player is None:
             raise ShogiException('player is not initialized')
 
@@ -733,16 +751,22 @@ class USIEngine(object):
         Returns:
             Tuple[bool, str, bool]: (True to output, message, True to continue execution)
         '''
-        # Ensure player object is created
+        # Ensure that the player has been created.
         if self.player is None:
             raise ShogiException('player is not initialized')
 
-        # Calculate move
+        # Compute the move.
         _, message, _ = self._perform_command_go([], analyze=False)
         move = message.split()[1]
-        src, dst, promote = usi_string_to_move(move)
 
-        # Advance the board
+        # Parse the move.
+        # Return unparseable moves unchanged, such as bestmove resign.
+        try:
+            src, dst, promote = usi_string_to_move(move)
+        except ShogiException:
+            return (True, message, False)
+
+        # Advance the position.
         self.player.play(src, dst, promote)
         self.moves.append(move)
 

@@ -9,7 +9,7 @@ from deepshogi.log import start_logging
 
 try:
     import torch_tensorrt  # type: ignore
-except (ImportError, OSError) as e:
+except (ImportError, OSError, RuntimeError) as e:
     torch_tensorrt = None  # type: ignore
     TENSORRT_IMPORT_ERROR: Exception | None = e
 else:
@@ -19,6 +19,7 @@ LOGGER = logging.getLogger(__name__)
 
 
 def parse_args() -> argparse.Namespace:
+    '''Parse TensorRT compilation arguments; return argparse.Namespace.'''
     parser = argparse.ArgumentParser(description='Compile the TorchScript model to TensorRT model.')
     parser.add_argument('input', type=str, help='Path to the input TorchScript model.')
     parser.add_argument('output', type=str, help='Path to the output TensorRT model.')
@@ -42,23 +43,25 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def save_tensorrt_model(
-    path: str | Path,
+def compile_tensorrt_model(
     model: nn.Module,
     *,
     batch_size: int = DEFAULT_BATCH_SIZE,
+    device: torch.device = torch.device('cuda:0'),
     dtype: torch.dtype = torch.float16,
     require_full_compilation: bool = False,
     truncate_long_and_double: bool = False,
-) -> None:
-    '''Convert a PyTorch/TorchScript model to a TensorRT model and save it.
+) -> torch.jit.ScriptModule:
+    '''Compile a PyTorch or TorchScript model into a TensorRT model.
     Args:
-        path: File path to save the model
-        model: PyTorch model to convert
-        batch_size: Batch size
-        dtype: Data type
-        require_full_compilation: Whether to require full compilation
-        truncate_long_and_double: Whether to truncate long and double types to float
+        model (nn.Module): Model to compile.
+        batch_size (int): Batch size.
+        device (torch.device): Device on which to place the model.
+        dtype (torch.dtype): Data type.
+        require_full_compilation (bool): Whether to require full compilation.
+        truncate_long_and_double (bool): Whether to truncate long and double values.
+    Returns:
+        torch.jit.ScriptModule: Compiled TensorRT model.
     '''
     if torch_tensorrt is None:
         raise ImportError(f'torch_tensorrt is not available: {TENSORRT_IMPORT_ERROR}')
@@ -66,40 +69,85 @@ def save_tensorrt_model(
     if not torch.cuda.is_available():
         raise RuntimeError('CUDA is not available.')
 
-    device = torch.device('cuda:0')
-    model.to(device, dtype)
-    model.eval()
+    # Use the same CUDA device for the TensorRT builder and model compilation.
+    with torch.cuda.device(device):
+        # Create the target device specification for Torch-TensorRT.
+        tensorrt_device = torch_tensorrt.Device(
+            gpu_id=torch.cuda.current_device())
 
-    # To pass to torch_tensorrt.compile(ir='torchscript'), a plain nn.Module must
-    # first be converted to TorchScript to fix the input shape.
-    if not isinstance(model, torch.jit.ScriptModule):
-        inputs = torch.zeros((batch_size, MODEL_INPUT_SIZE), device=device, dtype=dtype)
+        # Move the model to the requested device and dtype, then enable evaluation mode.
+        model.to(device, dtype)
+        model.eval()
 
+        # Convert ordinary nn.Module instances to TorchScript before calling
+        # torch_tensorrt.compile(ir='torchscript'), fixing the input shape.
+        if not isinstance(model, torch.jit.ScriptModule):
+            inputs = torch.zeros((batch_size, MODEL_INPUT_SIZE), device=device, dtype=dtype)
+
+            with torch.inference_mode():
+                model = torch.jit.trace(model, inputs)
+
+        # Create the TensorRT input specification.
+        input_spec = torch_tensorrt.Input(
+            shape=(batch_size, MODEL_INPUT_SIZE),
+            dtype=dtype)
+
+        # Compile the TensorRT model for the requested CUDA device.
         with torch.inference_mode():
-            model = torch.jit.trace(model, inputs)
+            trt_model = torch_tensorrt.compile(
+                model,
+                ir='torchscript',
+                inputs=[input_spec],
+                device=tensorrt_device,
+                enabled_precisions={dtype},
+                workspace_size=1 << 30,
+                require_full_compilation=require_full_compilation,
+                truncate_long_and_double=truncate_long_and_double,
+            )
 
-    input_spec = torch_tensorrt.Input(
-        shape=(batch_size, MODEL_INPUT_SIZE),
-        dtype=dtype)
+        # Return the compiled TensorRT model.
+        return trt_model
 
-    with torch.inference_mode():
-        trt_model = torch_tensorrt.compile(
-            model,
-            ir='torchscript',
-            inputs=[input_spec],
-            enabled_precisions={dtype},
-            workspace_size=1 << 30,
-            require_full_compilation=require_full_compilation,
-            truncate_long_and_double=truncate_long_and_double,
-        )
 
+def save_tensorrt_model(
+    path: str | Path,
+    model: nn.Module,
+    *,
+    batch_size: int = DEFAULT_BATCH_SIZE,
+    device: torch.device = torch.device('cuda:0'),
+    dtype: torch.dtype = torch.float16,
+    require_full_compilation: bool = False,
+    truncate_long_and_double: bool = False,
+) -> None:
+    '''Compile a PyTorch or TorchScript model into TensorRT and save it.
+    Args:
+        path (str | Path): Destination file path.
+        model (nn.Module): Model to compile.
+        batch_size (int): Batch size.
+        device (torch.device): Device on which to place the model.
+        dtype (torch.dtype): Data type.
+        require_full_compilation (bool): Whether to require full compilation.
+        truncate_long_and_double (bool): Whether to truncate long and double values.
+    '''
+    # Compile the model into TensorRT.
+    trt_model = compile_tensorrt_model(
+        model=model,
+        batch_size=batch_size,
+        device=device,
+        dtype=dtype,
+        require_full_compilation=require_full_compilation,
+        truncate_long_and_double=truncate_long_and_double,
+    )
+
+    # Save the TensorRT model.
     torch.jit.save(trt_model, path)
 
 
 def main() -> None:
+    '''Compile and save the requested TensorRT model; return None.'''
     args = parse_args()
 
-    # Configure logging output
+    # Configure logging.
     start_logging(debug=args.verbose)
 
     # Check if GPU is available
@@ -114,20 +162,18 @@ def main() -> None:
         LOGGER.error('Output file %s already exists. Please choose a different path.', output_path)
         return
 
-    # Load the model
+    # Load the model.
     device = torch.device(f'cuda:{args.gpu}')
     dtype = torch.float16 if args.fp16 else torch.float32
-
     model = torch.jit.load(args.input, map_location=device)
-    model.to(device, dtype)
-    model.eval()
 
-    # Convert to TensorRT model and save
+    # Compile the model into TensorRT and save it.
     try:
         save_tensorrt_model(
             path=output_path,
             model=model,
             batch_size=args.batch_size,
+            device=device,
             dtype=dtype,
             require_full_compilation=not args.no_require_full_compilation,
             truncate_long_and_double=args.truncate_long_and_double,

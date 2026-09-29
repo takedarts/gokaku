@@ -1,18 +1,19 @@
 import logging
 import math
 import random
+import time
 from typing import Dict, List, Tuple
 
 from .board import Board, is_hand_position
-from .config import (BOARD_SIZE, COLOR_BLACK, COLOR_NONE, COLOR_WHITE,
+from .config import (BOARD_SIZE, COLOR_NONE, COLOR_WHITE,
                      DEFAULT_ALLOWED_REPEATS, DEFAULT_CHECK_NODE_DEPTH,
                      DEFAULT_CHECK_SEARCH_DEPTH, DEFAULT_CHECK_SEARCH_NODE,
                      DEFAULT_DRAW_TURN, DEFAULT_INITIAL_SFEN,
                      DEFAULT_MAX_VISITS, DEFAULT_NYUGYOKU_SCORES,
                      DEFAULT_PUCB_CONSTANT_BASE, DEFAULT_PUCB_CONSTANT_INIT,
-                     RESULT_MAX_MOVES, RESULT_NONE, RESULT_NYUGYOKU,
-                     RESULT_SENNICHITE, RESULT_TSUMI, get_color_name,
-                     get_opposite_color)
+                     DEFAULT_PUCB_MIN_VISITS_RATE, RESULT_MAX_MOVES,
+                     RESULT_NONE, RESULT_NYUGYOKU, RESULT_SENNICHITE,
+                     RESULT_TSUMI, get_color_name, get_opposite_color)
 from .exception import ShogiException
 from .native import NativePlayer
 from .processor import Processor
@@ -39,6 +40,7 @@ def parse_move16(move: int) -> Tuple[Tuple[int, int], Tuple[int, int], bool]:
 
 
 class Candidate(object):
+    '''Hold a candidate move, its evaluation, and its principal variation.'''
     def __init__(
         self,
         src: Tuple[int, int],
@@ -46,31 +48,31 @@ class Candidate(object):
         promote: bool,
         color: int,
         visits: int,
-        playouts: int,
         policy: float,
         value: float,
+        remaining_turns: float,
         variations: List[int],
     ) -> None:
-        '''Initialize candidate move object.
+        '''Initialize a candidate move.
         Args:
-            src (Tuple[int, int]): Source coordinates
-            dst (Tuple[int, int]): Destination coordinates
-            promote (bool): True if promote
-            color (int): Side to move
-            visits (int): Number of visits
-            playouts (int): Number of playouts
-            policy (float): Expected move probability
-            value (float): Predicted win rate
-            variations (List[int]): Expected sequence (move representation)
+            src (Tuple[int, int]): Source coordinates.
+            dst (Tuple[int, int]): Destination coordinates.
+            promote (bool): True if the move promotes the piece.
+            color (int): Player color.
+            visits (int): Visit count.
+            policy (float): Predicted move probability.
+            value (float): Predicted outcome value.
+            remaining_turns (float): Predicted moves remaining until the game ends.
+            variations (List[int]): Principal variation as 16-bit move encodings.
         '''
         self.src = src
         self.dst = dst
         self.promote = promote
         self.color = color
         self.visits = visits
-        self.playouts = playouts
         self.policy = policy
         self.value = value
+        self.remaining_turns = max(remaining_turns, 0.0)
         self.variations = [parse_move16(v) for v in variations]
 
         if math.isnan(self.policy):
@@ -91,28 +93,31 @@ class Candidate(object):
 
     @property
     def win_chance_lcb(self) -> float:
-        '''Returns the lower confidence bound of the win rate.
+        '''Return the lower confidence bound of the win probability.
         Returns:
-            float: Lower confidence bound of the win rate
+            float: Lower confidence bound of the win probability.
         '''
         return self.value_lcb * self.color * 0.5 + 0.5
 
     def __str__(self) -> str:
+        '''Return a readable description of the candidate as str.'''
         return (
             f'Candidate('
             f'src={self.src}, dst={self.dst}, promote={self.promote},'
             f' color={get_color_name(self.color)},'
-            f' visits={self.visits}, playouts={self.playouts}, policy={self.policy:.2f},'
+            f' visits={self.visits}, policy={self.policy:.2f},'
             f' value={self.value:.3f}, value_lcb={self.value_lcb:.3f},'
+            f' remaining_turns={self.remaining_turns:.1f},'
             f' win_chance={self.win_chance:.3f}, win_chance_lcb={self.win_chance_lcb:.3f},'
             f' variations={self.variations})')
 
     def __repr__(self) -> str:
+        '''Return the candidate representation as str.'''
         return str(self)
 
 
 class Referee(object):
-    '''Class to judge game results.'''
+    '''Determine game results.'''
 
     def __init__(
         self,
@@ -202,6 +207,7 @@ class Referee(object):
 
 
 class Player(object):
+    '''Coordinate native search with game adjudication.'''
     def __init__(
         self,
         processor: Processor,
@@ -210,42 +216,47 @@ class Player(object):
         initial_sfen: str = DEFAULT_INITIAL_SFEN,
         nyugyoku_scores: Tuple[int, int] = DEFAULT_NYUGYOKU_SCORES,
         draw_turn: int = DEFAULT_DRAW_TURN,
+        sennichite_penalty: float = 0.0,
         check_search_depth: int = DEFAULT_CHECK_SEARCH_DEPTH,
         check_search_node: int = DEFAULT_CHECK_SEARCH_NODE,
         check_node_depth: int = DEFAULT_CHECK_NODE_DEPTH,
         pucb_constant_init: float = DEFAULT_PUCB_CONSTANT_INIT,
         pucb_constant_base: float = DEFAULT_PUCB_CONSTANT_BASE,
+        pucb_min_visits_rate: float = DEFAULT_PUCB_MIN_VISITS_RATE,
         allowed_repeats: int = DEFAULT_ALLOWED_REPEATS,
         check_next_repeats: bool = True,
     ) -> None:
-        '''Initialize player object.
+        '''Initialize the player.
         Args:
-            processor (Processor): Processor management object
-            threads (int): Number of threads to use
-            max_visits (int): Maximum number of visits for search
-            initial_sfen (str): Initial board in SFEN format
-            nyugyoku_scores (Tuple[int, int]): Points required for nyugyoku declaration
-            draw_turn (int): Number of turns for a draw
-            check_search_depth (int): Depth for checkmate search
-            check_search_node (int): Number of nodes for checkmate search
-            check_node_depth (int): Maximum depth of nodes for checkmate search
-            pucb_constant_init (float): Initial value applied to PUCB upper confidence bound
-            pucb_constant_base (float): Base value applied to PUCB upper confidence bound
-            allowed_repeats (int): Allowed number of repeats of the same position (default is 3)
-            check_next_repeats (bool): True to judge repetition for the next side to move
+            processor (Processor): Inference processor.
+            threads (int): Number of threads to use.
+            max_visits (int): Maximum node visit count.
+            initial_sfen (str): Initial position in SFEN format.
+            nyugyoku_scores (Tuple[int, int]): Points required for entering-king declarations.
+            draw_turn (int): Move count at which the game is drawn.
+            sennichite_penalty (float): Penalty assigned to repetition evaluations.
+            check_search_depth (int): Checkmate search depth.
+            check_search_node (int): Checkmate search node capacity.
+            check_node_depth (int): Node depth at which to run checkmate search.
+            pucb_constant_init (float): Initial PUCB exploration coefficient.
+            pucb_constant_base (float): Base controlling the PUCB exploration coefficient.
+            pucb_min_visits_rate (float): Minimum visit ratio for prioritizing PUCB children.
+            allowed_repeats (int): Allowed position repetitions; defaults to three.
+            check_next_repeats (bool): Whether to check repetition on the following turn.
         '''
         # Keep a reference to the processor object so it is not destroyed
         self.processor = processor
 
-        # Create native object
+        # Create the native object.
         self.native = NativePlayer(
             processor.native, threads, max_visits, nyugyoku_scores, draw_turn,
-            check_search_depth, check_search_node, check_node_depth,
-            pucb_constant_init, pucb_constant_base)
+            sennichite_penalty, check_search_depth, check_search_node, check_node_depth,
+            pucb_constant_init, pucb_constant_base, pucb_min_visits_rate)
 
         self.native.initialize(initial_sfen)
+        self.sennichite_penalty = sennichite_penalty
 
-        # Create referee object for the game
+        # Create the game referee.
         self.referee = Referee(
             allowed_repeats=allowed_repeats, draw_turn=draw_turn)
         self.check_next_repeats = check_next_repeats
@@ -255,10 +266,10 @@ class Player(object):
         Args:
             sfen (str): Initial board in SFEN format
         '''
-        # Stop if pondering
-        self.native.wait_evaluation(0, 0, 0.0, True)
+        # Stop pondering if it is active.
+        self.native.wait_evaluation(0, 0.0, True)
 
-        # Initialize
+        # Initialize the position.
         self.native.initialize(sfen)
         self.referee.clear()
 
@@ -279,7 +290,6 @@ class Player(object):
         Returns:
             Tuple[Tuple[int, int], Tuple[int, int], bool]: Move information
         '''
-        # If the type of piece after moving is specified,
         # determine whether to promote based on the piece type
         if piece is not None and not is_hand_position(src):
             promote = (self.get_board().get_piece(src) != piece)
@@ -287,34 +297,36 @@ class Player(object):
         # Update the repetition judgment object
         self.referee.update(self.get_board())
 
-        # Move the piece
+        # Play the move.
         self.native.play(src, dst, promote)
 
         return src, dst, promote
 
-    def get_random(
+    def get_random_candidate(
         self,
         width: int = 16,
         timelimit: float = 120.0,
         temperature: float = 1.0,
+        noise: float = 0.0,
         delta: float = 0.1,
         ponder: bool = False,
     ) -> Candidate:
-        '''Return a random move.
+        '''Return a candidate sampled from the policy distribution.
         Args:
-            width (int): Number of candidate moves
-            timelimit (float): Time limit (seconds)
-            temperature (float): Temperature parameter
-            delta (float): Allowable win rate drop
-            ponder (bool): True to continue searching
+            width (int): Number of candidate moves.
+            timelimit (float): Time limit in seconds.
+            temperature (float): Temperature parameter.
+            noise (float): Strength of Gumbel noise during search.
+            delta (float): Acceptable drop in win probability.
+            ponder (bool): True to continue searching.
         Returns:
-            Candidate: Candidate move
+            Candidate: Selected candidate move.
         '''
-        # Evaluate the board
-        self.native.start_evaluation(True, width, 1.0, 0.0)
-        self.native.wait_evaluation(width + 1, 0, timelimit, not ponder)
+        # Evaluate the position.
+        self.native.start_evaluation(True, width, 1.0, noise)
+        self.native.wait_evaluation(width + 1, timelimit, not ponder)
 
-        # Create a list of candidate moves
+        # Build the candidate list.
         candidates = [Candidate(*c) for c in self.native.get_candidates()]
 
         # Get the maximum predicted win rate
@@ -327,121 +339,136 @@ class Player(object):
         # Convert policy values to selection probabilities
         probs = [c.policy**(1 / max(temperature, 1e-3)) for c in candidates]
 
-        # Return a randomly selected candidate move
-        return random.choices(candidates, weights=probs, k=1)[0]
+        # Randomly select a candidate.
+        candidate = random.choices(candidates, weights=probs, k=1)[0]
+
+        # Output log
+        if LOGGER.isEnabledFor(logging.DEBUG):
+            LOGGER.debug(
+                'Random: %d candidates, max_win_chance=%.3f, delta=%.3f, temperature=%.3f',
+                len(candidates), max_win_chance, delta, temperature)
+            LOGGER.debug(candidate)
+
+        return candidate
 
     def evaluate(
         self,
         visits: int,
-        playouts: int = 0,
         timelimit: float = 120.0,
         equally: bool = False,
         criterion: str = 'value',
         candidate_width: int = 0,
         temperature: float = 1.0,
         noise: float = 0.0,
-        sennichite_penalty: float = 0.0,
         ponder: bool = False,
+        extends: int = 0,
     ) -> List[Candidate]:
-        '''Evaluate the board.
+        '''Evaluate the position.
         Args:
-            visits (int): Target number of visits
-            playouts (int): Target number of playouts
-            timelimit (float): Time limit (seconds)
-            equally (bool): True to make the number of searches equal, False to use UCB or PUCB
-            criterion (str): Criterion for prioritizing candidate moves ('value' or 'visits')
-            candidate_width (int): Search width for candidate moves (if 0, width is automatically adjusted)
-            temperature (float): Temperature parameter for search
-            noise (float): Strength of Gumbel noise for search
-            sennichite_penalty (float): Penalty to set for repetition (sennichite) evaluation
-            ponder (bool): True to continue searching
+            visits (int): Target visit count.
+            timelimit (float): Total time limit in seconds, including search extensions.
+            equally (bool): True for equal visits, False for PUCB or similar selection.
+            criterion (str): Candidate ranking criterion: 'value' or 'visits'.
+            candidate_width (int): Search width; zero adjusts the width automatically.
+            temperature (float): Search temperature.
+            noise (float): Strength of Gumbel noise during search.
+            ponder (bool): True to continue searching.
+            extends (int): Maximum number of search extensions.
         Returns:
-            List[Candidate]: List of candidate moves
+            List[Candidate]: Candidate moves.
         '''
-        # Evaluate the board
-        LOGGER.debug(
-            'Evaluation: %d visits, %d playouts, %.1f seconds',
-            visits, playouts, timelimit)
-        self.native.start_evaluation(equally, candidate_width, temperature, noise)
-        self.native.wait_evaluation(visits, playouts, timelimit, not ponder)
+        # Set the shared deadline and visit increment for search extensions.
+        deadline = time.monotonic() + timelimit
+        additional_visits = max(visits // 2, 1)
+        candidates: List[Candidate] = []
+        repeats = 0
 
-        # Create a list of candidate moves
-        candidates = [Candidate(*c) for c in self.native.get_candidates()]
+        # Clamp the extension limit to zero or greater.
+        extends = max(extends, 0)
 
-        # Judge the game result and reflect it in the evaluation value
-        for candidate in candidates:
-            # Create a board after making the candidate move
-            board = self.get_board()
-            board.play(candidate.src, candidate.dst, candidate.promote)
+        # Run the initial search and at most the requested number of extensions.
+        while repeats <= extends:
+            # Skip extensions when less than one second remains.
+            remaining_time = max(deadline - time.monotonic(), 0.0)
 
-            # Judge the end of the game on the board after making the candidate move
-            game_over, winner, result = self.referee.judge(board)
+            if repeats > 0 and remaining_time < 1.0:
+                break
 
-            # If the game is over, set the winner's side as the evaluation value
-            # If it is a draw (sennichite), set the specified penalty
-            if game_over:
-                if result == RESULT_SENNICHITE and winner == COLOR_NONE:
-                    value = get_opposite_color(candidate.color) * sennichite_penalty
-                else:
-                    value = winner
+            # Increase the cumulative visit target relative to the original request.
+            target_visits = visits + repeats * additional_visits
 
-                candidate.value = value
-                candidate.value_lcb = value
-                continue
+            # Evaluate the position.
+            LOGGER.debug('Evaluation: %d visits, %.1f seconds', target_visits, remaining_time)
+            self.native.start_evaluation(equally, candidate_width, temperature, noise)
 
-            # If not judging repetition for the next side to move, proceed to the next
-            # candidate move
-            if not self.check_next_repeats:
-                continue
+            # Include time spent waiting for search startup in the time limit.
+            remaining_time = max(deadline - time.monotonic(), 0.0)
+            self.native.wait_evaluation(target_visits, remaining_time, not ponder)
 
-            # If it is a draw (sennichite) for the next side to move, also set the specified penalty
-            next_board = Board()
+            # Build the candidate list.
+            candidates = [Candidate(*c) for c in self.native.get_candidates()]
 
-            for move in board.get_legal_moves():
-                next_board.copy_from(board)
-                next_board.play(*move)
+            # Do not extend the search if no candidates are available.
+            if not candidates:
+                break
 
-                repeats = self.referee.get_repeats(next_board)
-
-                if repeats < self.referee.allowed_repeats:
-                    continue
-                elif candidate.color == COLOR_BLACK:
-                    candidate.value = min(candidate.value, -1 * sennichite_penalty)
-                    candidate.value_lcb = min(candidate.value_lcb, -1 * sennichite_penalty)
-                    break
-                else:
-                    candidate.value = max(candidate.value, sennichite_penalty)
-                    candidate.value_lcb = max(candidate.value_lcb, sennichite_penalty)
-                    break
-
-        # Sort candidate moves
-        if criterion == 'visits':
-            candidates.sort(key=lambda cand: cand.visits, reverse=True)
-        else:
-            candidates.sort(key=lambda cand: cand.win_chance_lcb, reverse=True)
-
-        # Output logs
-        if LOGGER.isEnabledFor(logging.DEBUG):
-            LOGGER.debug(
-                'Evaluation: %d visits, %d playouts (batch fill rate=%.2f, cache hit rate=%.2f)',
-                sum(c.visits for c in candidates),
-                sum(c.playouts for c in candidates),
-                self.processor.get_batch_fill_rate(),
-                self.processor.get_cache_hit_rate())
+            # Reflect adjudicated game results in the evaluations.
             for candidate in candidates:
-                LOGGER.debug(candidate)
+                # Create a board after making the candidate move
+                board = self.get_board()
+                board.play(candidate.src, candidate.dst, candidate.promote)
 
-        # Return the list of candidate moves
+                # Judge the end of the game on the board after making the candidate move
+                game_over, winner, result = self.referee.judge(board)
+
+                # Use the winner's color as the evaluation when the game has ended.
+                if game_over:
+                    if result == RESULT_SENNICHITE and winner == COLOR_NONE:
+                        value = get_opposite_color(candidate.color) * self.sennichite_penalty
+                    else:
+                        value = winner
+
+                    candidate.value = value
+                    candidate.value_lcb = value
+
+            # Sort the candidates.
+            if criterion == 'visits':
+                candidates.sort(key=lambda cand: cand.visits, reverse=True)
+            else:
+                candidates.sort(key=lambda cand: cand.win_chance_lcb, reverse=True)
+
+            # Output log
+            if LOGGER.isEnabledFor(logging.DEBUG):
+                LOGGER.debug(
+                    'Evaluation: %d visits (batch fill rate=%.2f, cache hit rate=%.2f)',
+                    sum(c.visits for c in candidates),
+                    self.processor.get_batch_fill_rate(),
+                    self.processor.get_cache_hit_rate())
+                for candidate in candidates:
+                    LOGGER.debug(candidate)
+
+            # Stop if the selected move's win probability is outside the extension range.
+            if not (0.05 < candidates[0].win_chance < 0.95):
+                break
+
+            # Stop unless another candidate has at least two thirds of the selected move's visits.
+            if not any(c.visits * 3 >= candidates[0].visits * 2 for c in candidates[1:]):
+                break
+
+            # Advance the extension counter.
+            repeats += 1
+
+        # Return the candidate list.
         return candidates
 
     def stop_evaluation(self) -> None:
-        '''Stop if pondering.'''
-        self.native.wait_evaluation(0, 0, 0.0, True)
+        '''Stop pondering if it is active.'''
+        self.native.wait_evaluation(0, 0.0, True)
 
     def get_color(self) -> int:
         '''Return the side to move.
         Returns:
-            int: Side to move
+            int: Side to move.
         '''
         return self.native.get_color()
 

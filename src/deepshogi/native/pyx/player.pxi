@@ -20,38 +20,42 @@ cdef class NativePlayer:
         max_visits: int,
         nyugyoku_scores: Tuple[int, int],
         draw_turn: int,
+        sennichite_penalty: float,
         check_search_depth: int,
         check_search_node: int,
         check_node_depth: int,
         pucb_constant_init: float,
         pucb_constant_base: float,
+        pucb_min_visits_rate: float,
     )->None:
-        '''Initializes the player object.
+        '''Initialize the player.
         Args:
-            processor (NativeInferenceProcessor): Inference processor object
-            threads (int): Number of threads
-            max_visits (int): Maximum number of visits per node
-            nyugyoku_scores (Tuple[int, int]): Scores required for entering-king declaration
-            draw_turn (int): Number of moves until a draw
-            check_search_depth (int): Depth of the checkmate search
-            check_search_node (int): Number of nodes in the checkmate search
-            check_node_depth (int): Depth of nodes in the checkmate search
-            pucb_constant_init (float): Initial value of the constant multiplied by the PUCB confidence bound
-            pucb_constant_base (float): Rate of change of the constant multiplied by the PUCB confidence bound
+            processor (NativeInferenceProcessor): Native inference processor.
+            threads (int): Number of threads.
+            max_visits (int): Maximum node visit count.
+            nyugyoku_scores (Tuple[int, int]): Points required for entering-king declarations.
+            draw_turn (int): Move count at which the game is drawn.
+            sennichite_penalty (float): Penalty assigned to repetition evaluations.
+            check_search_depth (int): Checkmate search depth.
+            check_search_node (int): Checkmate search node capacity.
+            check_node_depth (int): Node depth at which to run checkmate search.
+            pucb_constant_init (float): Initial PUCB exploration coefficient.
+            pucb_constant_base (float): Base controlling the PUCB exploration coefficient.
+            pucb_min_visits_rate (float): Minimum visit ratio for prioritizing PUCB children.
         '''
         self.player = new Player(
             processor.processor, threads, max_visits,
             nyugyoku_scores[0], nyugyoku_scores[1], draw_turn,
-            check_search_depth, check_search_node, check_node_depth,
-            pucb_constant_init, pucb_constant_base)
+            sennichite_penalty, check_search_depth, check_search_node, check_node_depth,
+            pucb_constant_init, pucb_constant_base, pucb_min_visits_rate)
 
     def __dealloc__(self):
         del self.player
 
     def initialize(self, sfen: str) -> None:
-        '''Sets the game state to the initial state.
+        '''Reset the game to the initial position.
         Args:
-            sfen (str): Board position in SFEN format
+            sfen (str): Position in SFEN format.
         '''
         self.player.initialize(sfen.encode('utf-8'))
 
@@ -81,41 +85,47 @@ cdef class NativePlayer:
         temperature: float,
         noise: float,
     ) -> None:
-        '''Starts evaluation.
+        '''Start evaluation.
         Args:
-            equally (bool): True to distribute visits equally, False to use PUCB or similar
-            candidate_width (int): Search width for candidate moves (0 to set automatically)
-            temperature (float): Temperature parameter for the search
-            noise (float): Strength of Gumbel noise in the search
+            equally (bool): True for equal visits; False for PUCB or similar selection.
+            candidate_width (int): Candidate search width; zero selects it automatically.
+            temperature (float): Search temperature.
+            noise (float): Strength of Gumbel noise during search.
         '''
         self.player.startEvaluation(equally, candidate_width, temperature, noise)
 
-    def wait_evaluation(self, visits: int, playouts: int, timelimit: float, stop: bool) -> None:
-        '''Waits until the specified visit count and playout count are reached.
+    def wait_evaluation(
+        self,
+        visits: int,
+        timelimit: float,
+        stop: bool,
+    ) -> None:
+        '''Wait until the requested visit count is reached.
         Args:
-            visits (int): Number of visits
-            playouts (int): Number of playouts
-            timelimit (float): Time limit in seconds
-            stop (bool): True to issue a stop command
+            visits (int): Visit count.
+            timelimit (float): Time limit in seconds.
+            stop (bool): True to request stopping.
         '''
         cdef int32_t visits_int = visits
-        cdef int32_t playouts_int = playouts
         cdef float timelimit_float = timelimit
         cdef bool stop_bool = stop
 
         with nogil:
-            self.player.waitEvaluation(visits_int, playouts_int, timelimit_float, stop_bool)
+            self.player.waitEvaluation(visits_int, timelimit_float, stop_bool)
 
     def get_candidates(
         self,
-    ) -> List[Tuple[Tuple[int, int], Tuple[int, int], int, int, int, float, float, List[int]]]:
-        '''Returns the list of candidate moves.
+    ) -> List[Tuple[Tuple[int, int], Tuple[int, int], bool, int, int, float, float,
+                    float, List[int]]]:
+        '''Return the candidate moves.
         Returns:
-            List[Tuple[Tuple[int, int], Tuple[int, int], int, int, int, float, float, List[int]]]: List of candidate moves
+            List[Tuple[Tuple[int, int], Tuple[int, int], bool, int, int, float, float,
+                       float, List[int]]]: Candidate moves.
         '''
         cdef vector[Candidate] candidates = self.player.getCandidates()
 
-        results: List[Tuple[Tuple[int, int], Tuple[int, int], int, int, float, float, List[int]]] = []
+        results: List[Tuple[Tuple[int, int], Tuple[int, int], bool, int, int, float,
+                            float, float, List[int]]] = []
 
         for i in range(candidates.size()):
             src = (candidates[i].getMove().getSrc().getX(), candidates[i].getMove().getSrc().getY())
@@ -123,22 +133,22 @@ cdef class NativePlayer:
             promote = candidates[i].getMove().isPromote()
             color = candidates[i].getColor()
             visits = candidates[i].getVisits()
-            playouts = candidates[i].getPlayouts()
             policy = candidates[i].getPolicy()
             value = candidates[i].getValue()
+            remaining_turns = candidates[i].getRemainingTurns()
             variations = candidates[i].getVariations()
 
             results.append((
-                src, dst, promote, color, visits, playouts, policy, value,
+                src, dst, promote, color, visits, policy, value, remaining_turns,
                 [variations[j].getValue() for j in range(variations.size())],
             ))
 
         return results
 
     def get_visits(self) -> int:
-        '''Gets the number of visits to the root node.
+        '''Return the root node's visit count.
         Returns:
-            int: Number of visits to the root node
+            int: Root node visit count.
         '''
         return self.player.getVisits()
 

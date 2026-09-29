@@ -7,7 +7,10 @@ Gokaku is a computer Shogi program developed using deep reinforcement learning f
 Gokaku is a sibling program of the computer Go program [Maru](https://github.com/takedarts/maru). Gokaku shares the same deep learning model architecture, search algorithm, and reinforcement learning methodology as Maru.
 
 You can check the improvement of Gokaku's playing strength through reinforcement learning on [this page](https://takeda-lab.jp/gokaku/).
-The model files are available for download from [this release page](https://github.com/takedarts/gokaku/releases/tag/v2.3).
+
+A model file is required to run Gokaku.
+You can download the TorchScript model from [this release page](https://github.com/takedarts/gokaku/releases/tag/v2.4).
+To create a TensorRT model, convert the TorchScript model using `src/compile.py`.
 
 ## How to Run
 Gokaku can be run using one of the following methods:
@@ -46,6 +49,9 @@ On Windows environments, `MSBuild` is required (MSBuild is included with Visual 
 python src/build.py
 ```
 
+Release builds enable IPO/LTO and require a supporting compiler and linker.
+Use `python src/build.py --debug` to build with IPO/LTO disabled.
+
 If compilation is successful, the compiled Cython module will be generated in `src/deepshogi/native`.
 
 You can delete the generated files by running `src/build.py` with the `--clean` option:
@@ -55,7 +61,7 @@ python src/build.py --clean
 
 ### Running the Program
 You can launch Gokaku by running the launch script `src/run.py`.
-At runtime, you need to specify the model file as a command-line argument (You can download the model file from [here](https://github.com/takedarts/gokaku/releases/tag/v2.3)):
+Specify a TorchScript or TensorRT model as the command-line argument. Download the TorchScript model from [this release page](https://github.com/takedarts/gokaku/releases/tag/v2.4), or create a TensorRT model using `src/compile.py`:
 ```
 python src/run.py <model_file>
 ```
@@ -63,9 +69,9 @@ python src/run.py <model_file>
 Gokaku operates via the USI (Universal Shogi Interface) protocol.
 Here is a simple example of usage:
 ```
-% python src/run.py b4c256-900.model
+% python src/run.py b10c512-1000.model
 usi
-id name Gokaku 2.3
+id name Gokaku 2.4
 id author Atsushi Takeda
 option name Threads type spin default 16 min 1
 option name CheckSearchDepth type spin default 21 min 1
@@ -73,10 +79,12 @@ option name CheckSearchNode type spin default 20000 min 1
 option name CheckNodeDepth type spin default 2 min 0
 option name PucbConstantInit type spin default 160 min 0
 option name PucbConstantBase type spin default 3200 min 0
+option name PucbMinVisitsRate type spin default 0 min 0
+option name MaxVisits type spin default 1000000 min 1
 option name NyugyokuRule type combo default 27 var 27 var 24
 option name DrawTurn type spin default 512 min 1
 option name Visits type spin default 50 min 1
-option name Playouts type spin default 0 min 0
+option name Extends type spin default 0 min 0
 option name Timelimit type spin default 120000 min 0
 option name Ponder type check default false
 option name MultiPV type spin default 1 min 1
@@ -86,6 +94,8 @@ option name ResignTurn type spin default 50 min 0
 option name InitialTurn type spin default 4 min 0
 option name InitialWidth type spin default 16 min 1
 option name InitialTemperature type spin default 100 min 0
+option name InitialValueDelta type spin default 1 min 0
+option name InitialWhiteOnly type check default false
 usiok
 isready
 readyok
@@ -110,7 +120,7 @@ Run the following command to compile the model file into a TensorRT model:
 python src/compile.py <torch-script-file> <tensorrt-file>
 ```
 
-For `<torch-script-file>`, specify the model file that can be downloaded from [here](https://github.com/takedarts/gokaku/releases/tag/v2.3).
+For `<torch-script-file>`, specify a TorchScript model.
 When you run the above command, a TensorRT format model file will be generated at `<tensorrt-file>`.
 
 You can launch Gokaku using TensorRT by running the startup script with the created TensorRT model file specified as an argument:
@@ -122,11 +132,12 @@ When running Gokaku with TensorRT, you need to use the same compilation options 
 If you specify the `--fp16` or `--batch-size` options when compiling the TensorRT model, specify the same options in the `run.py` execution command as well.
 The following example shows how to compile a TensorRT model with half-precision floating point (FP16) and batch size 16, and then launch Gokaku using that model (TensorRT model compilation only needs to be done once):
 ```
-python src/compile.py --fp16 --batch-size 16 b4c256-900.model b4c256-900.rt.model
-python src/run.py --fp16 --batch-size 16 b4c256-900.rt.model
+python src/compile.py --fp16 --batch-size 16 b10c512-1000.model b10c512-1000.rt.model
+python src/run.py --fp16 --batch-size 16 b10c512-1000.rt.model
 ```
 
 ## Running with Docker
+
 ### Running in CUDA-enabled Environments
 A Docker image for running Gokaku is available, which makes it easy to use Gokaku (TensorRT is not supported).
 
@@ -137,15 +148,15 @@ docker run --rm -i --gpus all pytorch/pytorch:2.12.0-cuda12.6-cudnn9-runtime nvi
 ```
 
 When running it for the first time, you need to download the Docker image.
-The Docker image intended for use with CUDA, `takedarts/gokaku:v2.3.1-cuda12.6`, is about 4 GB in size, so the download may take some time.
+The Docker image intended for use with CUDA, `takedarts/gokaku:v2.4-cuda12.6`, is about 4 GB in size, so the download may take some time.
 I recommend downloading the Docker image in advance by running the following command:
 ```
-docker pull takedarts/gokaku:v2.3.1-cuda12.6
+docker pull takedarts/gokaku:v2.4-cuda12.6
 ```
 
-You can run the Gokaku Docker image by executing the following command in an environment where CUDA is available (You can download the model file from [here](https://github.com/takedarts/gokaku/releases/tag/v2.3)):
+You can run the Gokaku Docker image by executing the following command in an environment where CUDA is available (You can download the model file from [here](https://github.com/takedarts/gokaku/releases/tag/v2.4)):
 ```
-docker run -iq --rm --gpus all -v .:/workspace takedarts/gokaku:v2.3.1-cuda12.6 /opt/run.sh <model_file>
+docker run -iq --rm --gpus all -v .:/workspace takedarts/gokaku:v2.4-cuda12.6 /opt/run.sh <model_file>
 ```
 Use the `--gpus` option to specify the GPUs to use, and mount the current directory to the container's `/workspace` using `-v .:/workspace`.
 Place the model file in the current directory and specify its path as `<model_file>`.
@@ -153,19 +164,19 @@ Place the model file in the current directory and specify its path as `<model_fi
 You can also specify options after the execution command.
 If you add `--help` to the execution command, a list of available options will be displayed:
 ```
-docker run -iq --rm --gpus all -v .:/workspace takedarts/gokaku:v2.3.1-cuda12.6 /opt/run.sh --help
+docker run -iq --rm --gpus all -v .:/workspace takedarts/gokaku:v2.4-cuda12.6 /opt/run.sh --help
 ```
 
 ### Running on CPU
-A Docker image intended for CPU (AMD64) execution, `takedarts/gokaku:v2.3.1-cpu`, is also available (its image size is smaller than the CUDA version).
+A Docker image intended for CPU (AMD64) execution, `takedarts/gokaku:v2.4-cpu`, is also available (its image size is smaller than the CUDA version).
 If you want to run computations on the CPU, execute the following command:
 ```
-docker run -iq --rm -v .:/workspace takedarts/gokaku:v2.3.1-cpu /opt/run.sh <model_file>
+docker run -iq --rm -v .:/workspace takedarts/gokaku:v2.4-cpu /opt/run.sh <model_file>
 ```
 
-If you want to run on an ARM64 CPU architecture, use the Docker image `takedarts/gokaku:v2.3.1-arm`:
+If you want to run on an ARM64 CPU architecture, use the Docker image `takedarts/gokaku:v2.4-arm`:
 ```
-docker run -iq --rm -v .:/workspace takedarts/gokaku:v2.3.1-arm /opt/run.sh <model_file>
+docker run -iq --rm -v .:/workspace takedarts/gokaku:v2.4-arm /opt/run.sh <model_file>
 ```
 
 ## Execution Options
@@ -174,64 +185,73 @@ When running the startup script `src/run.py`, you can specify the following opti
 | Option                      | Description                                                    | Default Value         |
 |-----------------------------|----------------------------------------------------------------|-----------------------|
 | `--help`                    | Display a list of available options                            |                       |
-| `--visits <N>`              | Number of searches (number of nodes in the search tree)        | 50                    |
-| `--playouts <N>`            | Number of playouts (number of leaves in the search tree)       | 0                     |
+| `--visits <N>`              | Search visits (number of nodes in the search tree)        | 50                    |
+| `--extends <N>` | Maximum search extensions | 0 |
+| `--max-visits <N>` | Maximum search visits | 1,000,000 |
 | `--timelimit <N>`           | Maximum thinking time (in seconds)                             | 120                   |
 | `--criterion <S>`           | Criterion for selecting moves (`value` or `visits`)            | `value`               |
 | `--ponder`                  | Enable pondering                                               | False                 |
 | `--resign <R>`              | Predicted win rate threshold for resignation                   | 0.02                  |
-| `--min-turn <N>`            | Minimum number of turns before resignation is allowed          | 100                   |
+| `--min-turn <N>`            | Minimum number of turns before resignation is allowed          | 50                   |
 | `--initial-turn <N>`        | Number of opening turns with random moves                      | 4                     |
 | `--initial-width <N>`       | Number of candidates for opening random moves                  | 16                    |
 | `--initial-temperature <N>` | Temperature parameter for opening random moves                 | 1.0                   |
+| `--initial-value-delta <R>` | Allowed win-probability drop for random moves | 0.01 |
+| `--initial-white-only` | Use random opening moves only for White | False |
 | `--nyugyoku-rule <N>`       | Points for the entering-king rule (27 or 24)                   | 27                    |
+| `--draw-turn <N>` | Move count for a draw | 512 |
 | `--check-search-depth <N>`  | Depth of checkmate search nodes                                | 21                    |
 | `--check-search-node <N>`   | Number of checkmate search nodes                               | 20,000                |
 | `--check-node-depth <N>`    | Depth of search nodes at which checkmate search is performed   | 2                     |
-| `--pucb-constant-init <R>`  | Initial value of PUCB constant term                            | 1.6                   |
-| `--pucb-constant-base <R>`  | Base value of PUCB constant term                               | 3200.0                |
+| `--pucb-constant-init <N>`  | Initial value of PUCB constant term                            | 1.6                   |
+| `--pucb-constant-base <N>`  | Base value of PUCB constant term                               | 3200.0                |
+| `--pucb-min-visits-rate <R>` | Minimum visit ratio prioritized by PUCB | 0.0 |
 | `--client-name <S>`         | Client name to display                                         | `Gokaku`              |
-| `--client-version <S>`      | Version information to display                                 | `2.3`                 |
+| `--client-version <S>`      | Version information to display                                 | `2.4`                 |
 | `--threads <N>`             | Number of threads to use for search                            | 16                    |
 | `--batch-size <N>`          | Batch size for board evaluation                                | 32                    |
-| `--gpus <N,...>`       | GPU ID(s) to use (comma-separated for multiple GPUs)           | All available GPUs    |
+| `--gpus <N>`       | GPU ID(s) to use (comma-separated for multiple GPUs)           | All available GPUs    |
 | `--fp16`                    | Use half-precision floating point (FP16)                       | False                 |
 | `--threads-per-gpu <N>`     | Number of inference threads per GPU                            | 2                     |
-| `--cache-size <N>`          | Cache size for inference results                               | max(visits, playouts) |
+| `--cache-size <N>`          | Cache size for inference results                               | visits |
 | `--verbose`                 | Enable log output to standard error                            | False                 |
 
-### Relationship between Visits, Playouts, and Timelimit
-The termination condition of the search is determined by the values specified with the `--visits`, `--playouts`, and `--timelimit` options. The search ends either when both the number of visits and the number of playouts exceed their specified values, or when the elapsed thinking time exceeds the specified number of seconds.
+### Visits, search extensions, and time limits
 
-### Visits and Playouts
-In Gokaku, the number of visits is defined as "the number of nodes in the search tree," and the number of playouts is defined as "the number of leaves in the search tree."
-The definition of the number of visits is the same as in other programs such as LeelaZero and KataGo.
-On the other hand, the definition of the number of playouts differs from other programs.
-
-In situations where the number of candidate moves is small, the number of leaves tends not to increase even when expanding nodes.
-Therefore, when controlling the size of the search tree based on the number of playouts, a larger search tree tends to be created compared to when controlling based on the number of visits.
-This is because in situations where a determined sequence of moves continues, it is less important to evaluate situations in the middle of the sequence, and it is more important to evaluate situations after the sequence breaks.
-Compared to specifying the number of visits, specifying the same value for the number of playouts tends to result in longer search times. However, because deeper search trees can be created, this may lead to improved playing strength.
-
-Note that Gokaku always reuses the search tree. Therefore, even when running a search with the number of playouts specified, if the game progresses as expected, the search may finish in a short time.
+- Search ends when any of the following conditions is met:
+  - Visits reach the target specified by `--visits`.
+  - Visits reach the maximum specified by `--max-visits`.
+  - A checkmate is found.
+  - The time limit specified by `--timelimit` is reached.
+- Search ends early when the most visited child exceeds 60% of the target specified by `--visits`.
+- With `--extends N`, search can continue up to N more times when the selected move's win probability is strictly between 5% and 95% and another candidate has at least two thirds of its visits. Each extension increases the target visits by half the original requested value. No extension is performed when less than one second remains.
+- The search tree is reused after moves.
 
 ## Execution Examples
-To start Gokaku using the model file `b4c256-900.model`, run the following command:
+To start Gokaku using the model file `b10c512-1000.model`, run the following command:
 ```
-python src/run.py b4c256-900.model
+python src/run.py b10c512-1000.model
 ```
 
 To start Gokaku with the number of visits set to 1000 and the maximum thinking time set to 5 seconds, run the following command:
 ```
-python src/run.py b4c256-900.model --visits 1000 --timelimit 5
+python src/run.py b10c512-1000.model --visits 1000 --timelimit 5
 ```
 
-## Compatibility with Gokaku Version 2.2 and Earlier
-- Model files for Gokaku version 2.1 and earlier cannot be used with Gokaku version 2.3.
-- Model files for Gokaku version 2.2 do not support compilation to TensorRT models.
+## Compatibility with Earlier Versions
+Gokaku version 2.4 changes the model specification, including its output format, so models from Gokaku version 2.3 or earlier cannot be used.
+
+## Tests
+After building, run the CPU board, inference, and search tests with:
+```sh
+PYTHONPATH=src python -m unittest discover -s src/tests -p '*_test.py' -v
+MYPYPATH=src python -m mypy --explicit-package-bases src
+```
+See [src/tests/README.md](src/tests/README.md) for the C++ cache test and fixture provenance.
 
 ## License
 Starting with Gokaku version 2.2, the license has been changed to the MIT License.
+
 - Gokaku version 2.1 and earlier: GPL-3.0 License
 - Gokaku version 2.2 and later: MIT License
 

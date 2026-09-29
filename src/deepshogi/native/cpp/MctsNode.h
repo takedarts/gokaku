@@ -9,9 +9,11 @@
 #include <set>
 #include <shared_mutex>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "Board.h"
+#include "BoardHash.h"
 #include "MctsManager.h"
 #include "MctsParameter.h"
 #include "MctsPolicy.h"
@@ -22,7 +24,7 @@
 namespace deepshogi {
 
 /**
- * A class for managing the state of MCTS search nodes.
+ * Manage the state of an MCTS search node.
  */
 class MctsNode {
  public:
@@ -39,16 +41,18 @@ class MctsNode {
   void initialize(const std::string sfen);
 
   /**
-   * Applies the specified inference result to the evaluation value and predicted move probability list of this node.
-   * @param value Board evaluation value
-   * @param policies List of predicted probabilities for the next move
+   * Apply inference results to this node's evaluation and move probabilities.
+   * @param value Position evaluation.
+   * @param remainingTurns Predicted moves remaining until the game ends.
+   * @param policies Predicted probabilities of the next moves.
    */
   void applyInferenceResult(
-      float value, const std::vector<std::pair<Move, float>>& policies);
+      float value, float remainingTurns,
+      const std::vector<std::pair<Move, float>>& policies);
 
   /**
-   * Updates the MCTS evaluation value of this node.
-   * @param mctsValue MCTS evaluation value
+   * Update this node's MCTS evaluation.
+   * @param mctsValue MCTS evaluation.
    */
   void updateMctsValue(float mctsValue);
 
@@ -59,7 +63,8 @@ class MctsNode {
    * - The board has not been evaluated
    * - No legal moves exist
    * - A checkmate move sequence has been found by checkmate search
-   * - This is not the root node, and an entering-king declaration is possible or the draw move count has been reached
+   * - This is not the root node, and an entering-king declaration is possible or the draw move
+   * count has been reached
    * Returns nullptr if search is canceled.
    * @param equally true to equalize the search visit count
    * @param width Search width (0 means automatic adjustment)
@@ -90,8 +95,14 @@ class MctsNode {
   void setAsRootNode();
 
   /**
-   * Returns true if this node's board has been evaluated.
-   * @return true if the board has been evaluated
+   * Carry the position history forward when changing the root.
+   * @param oldRootNode Previous root node.
+   */
+  void copyAppearedBoardHashes(const MctsNode* oldRootNode);
+
+  /**
+   * Return true if this node's position has been evaluated.
+   * @return True if the position has been evaluated.
    */
   bool isEvaluated();
 
@@ -108,8 +119,14 @@ class MctsNode {
   float getNodeValue();
 
   /**
-   * Returns the list of predicted probabilities for the next move of this node.
-   * @return List of predicted probabilities for the next move
+   * Return the predicted moves remaining from this node until the game ends.
+   * @return Predicted moves remaining until the game ends.
+   */
+  float getRemainingTurns();
+
+  /**
+   * Return the predicted probabilities of this node's next moves.
+   * @return Predicted next-move probabilities.
    */
   std::vector<MctsPolicy> getPolicies();
 
@@ -147,14 +164,14 @@ class MctsNode {
   int32_t getVisits();
 
   /**
-   * Gets the playout count.
-   * @return Playout count
+   * Return the largest visit count among candidate moves.
+   * @return Largest child visit count.
    */
-  int32_t getPlayouts();
+  int32_t getPvVisits();
 
   /**
-   * Gets the MCTS evaluation value of this node.
-   * @return MCTS evaluation value
+   * Return this node's MCTS evaluation.
+   * @return MCTS evaluation.
    */
   float getMctsValue();
 
@@ -165,16 +182,17 @@ class MctsNode {
   float getMctsValueLCB();
 
   /**
-   * Gets the priority of this node based on PUCB.
-   * @param totalVisits Total visit count
-   * @return Priority
+   * Return this node's PUCB priority.
+   * @param totalVisits Total visit count.
+   * @param childrenSize Number of children of the parent node.
+   * @return Whether visits are below the minimum, paired with the PUCB priority.
    */
-  float getPriorityByPUCB(int32_t totalVisits);
+  std::pair<bool, float> getPriorityByPUCB(int32_t totalVisits, int32_t childrenSize);
 
   /**
-   * Gets the checkmate move sequence of this node.
-   * Returns an empty array if no checkmate sequence has been found.
-   * @return Checkmate move sequence
+   * Return this node's checkmating move sequence.
+   * Return an empty vector if no checkmating sequence is known.
+   * @return Checkmating move sequence.
    */
   std::vector<Move> getCheckmateMoves();
 
@@ -247,12 +265,7 @@ class MctsNode {
   float _probability;
 
   /**
-   * true if this node is the first child of its parent node.
-   */
-  bool _firstChild;
-
-  /**
-   * true if evaluation of this node is in progress.
+   * True while this node is being evaluated.
    */
   bool _evaluating;
 
@@ -267,14 +280,19 @@ class MctsNode {
   float _nodeValue;
 
   /**
-   * List of predicted probabilities for the next move of this node.
-   * This list is updated when the board evaluation value of this node is updated.
-   * However, when this node is in a terminal state, this list is empty.
-   * This node is in a terminal state under any of the following conditions:
-   * - No legal moves exist (loss)
-   * - An entering-king declaration is possible (win)
-   * - The maximum move count has been reached (draw)
-   * - A checkmate move sequence has been found (win)
+   * Predicted moves remaining from this node until the game ends.
+   */
+  float _remainingTurns;
+
+  /**
+   * Predicted probabilities of this node's next moves.
+   * Update this list when the position evaluation changes.
+   * The list is empty for terminal nodes.
+   * A node is terminal under any of the following conditions.
+   * - No legal moves exist (loss).
+   * - An entering-king victory can be declared (win).
+   * - The maximum move count is reached (draw).
+   * - A checkmating move sequence has been found (win).
    */
   std::vector<MctsPolicy> _policies;
 
@@ -294,12 +312,12 @@ class MctsNode {
   std::atomic<int32_t> _visits;
 
   /**
-   * Playout count.
+   * Largest child visit count.
    */
-  std::atomic<int32_t> _playouts;
+  std::atomic<int32_t> _pvVisits;
 
   /**
-   * MCTS evaluation value.
+   * MCTS evaluation.
    */
   MctsValue _mctsValue;
 
@@ -326,7 +344,12 @@ class MctsNode {
   bool _checkmateMoveSearched;
 
   /**
-   * List of candidate moves waiting to be registered as child nodes.
+   * Position hashes encountered before reaching the root.
+   */
+  std::set<BoardHash> _appearedBoardHashes;
+
+  /**
+   * Candidate moves waiting to be registered as children.
    */
   std::queue<MctsPolicy> _waitingPolicies;
 
@@ -341,15 +364,26 @@ class MctsNode {
   void _resetNode();
 
   /**
-   * Gets the next node object to evaluate.
-   * This function assumes that this node has already been evaluated.
-   * @param equally true to equalize the search visit count
-   * @param width Search width (0 means automatic adjustment)
-   * @param temperature Temperature parameter for search
-   * @param noise Strength of Gumbel noise for search
-   * @return Next node object to evaluate
+   * Update visit counts for this node and its parent.
+   */
+  void _incrementVisits();
+
+  /**
+   * Get the next node to evaluate.
+   * This method requires the current node to have been evaluated.
+   * @param equally True to distribute visits equally.
+   * @param width Search width; zero adjusts it automatically.
+   * @param temperature Search temperature.
+   * @param noise Strength of Gumbel noise during search.
+   * @return Next node to evaluate.
    */
   MctsNode* _pickupNextNode(bool equally, int32_t width, float temperature, float noise);
+
+  /**
+   * Return true if this position occurs in the history or current search path.
+   * @return True if the position has appeared before.
+   */
+  bool _isSennichite() const;
 };
 
 }  // namespace deepshogi

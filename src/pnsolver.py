@@ -127,7 +127,7 @@ def get_move_text_in_japanese(
             if len(duplicate_suffixes) < duplicate_count:
                 move_text += suffixes[i]
 
-    # Add the promotion character if it's a promotion move and "成" hasn't been added yet
+    # Append the promotion marker if it is missing from a promoting move.
     if promote and '成' not in move_text:
         move_text += '成'
 

@@ -1,8 +1,6 @@
 #pragma once
 
-#include <atomic>
 #include <condition_variable>
-#include <map>
 #include <memory>
 #include <mutex>
 #include <queue>
@@ -10,7 +8,7 @@
 #include <vector>
 
 #include "Board.h"
-#include "BoardHash.h"
+#include "InferenceCache.h"
 #include "InferenceExecutor.h"
 #include "InferenceResult.h"
 #include "MctsNode.h"
@@ -18,7 +16,7 @@
 namespace deepshogi {
 
 /**
- * A class that manages inference execution for board evaluation.
+ * Manage inference for position evaluations.
  */
 class InferenceProcessor {
  private:
@@ -102,21 +100,16 @@ class InferenceProcessor {
   }
 
   /**
-   * Returns the cache hit rate for inference.
-   * @return Cache hit rate for inference
+   * Return the inference cache hit rate.
+   * @return Inference cache hit rate.
    */
   inline float getCacheHitRate() const {
-    return _cacheHitRate.load(std::memory_order_relaxed);
+    return _cache.getHitRate();
   }
 
  private:
   /**
-   * Mutex object for synchronizing cache access.
-   */
-  std::mutex _cacheMutex;
-
-  /**
-   * Mutex object for synchronizing inference execution reservation queue access.
+   * Mutex protecting the inference request queue.
    */
   std::mutex _queueMutex;
 
@@ -131,29 +124,17 @@ class InferenceProcessor {
   std::queue<std::pair<MctsNode*, InferenceExecutorCallback>> _queue;
 
   /**
-   * List of inference executor objects.
+   * Inference result cache.
+   */
+  InferenceCache _cache;
+
+  /**
+   * Inference executors.
    */
   std::vector<std::unique_ptr<InferenceExecutor>> _executors;
 
   /**
-   * Cache size for inference results.
-   */
-  int32_t _cacheSize;
-
-  /**
-   * Queue of cache keys for inference results.
-   * Used to evict old cache entries when the cache size is exceeded.
-   */
-  std::queue<BoardHash> _cacheKeys;
-
-  /**
-   * Cache of inference results.
-   * Key is the board hash value; value is the inference result.
-   */
-  std::map<BoardHash, InferenceResult> _cacheResults;
-
-  /**
-   * True to terminate.
+   * True when termination is requested.
    */
   bool _terminated;
 
@@ -166,11 +147,6 @@ class InferenceProcessor {
    * Batch size.
    */
   int32_t _batchSize;
-
-  /**
-   * Cache hit rate for inference.
-   */
-  std::atomic<float> _cacheHitRate;
 };
 
 }  // namespace deepshogi

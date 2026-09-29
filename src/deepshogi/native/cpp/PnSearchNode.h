@@ -9,13 +9,19 @@ namespace deepshogi {
 class PnSearchEngine;
 
 /**
- * Class representing a search node in the PN search algorithm.
+ * Represent a node in the PN search algorithm.
  */
 class PnSearchNode {
+ private:
+  /**
+   * Allow DF-PN search to access node values and child references.
+   */
+  friend class PnSearchEngine;
+
  public:
   /**
-   * Constructs a PN search node object.
-   * Initializes the node as a terminal node representing a non-checkmate state.
+   * Construct a PN search node.
+   * Initialize it as a terminal node representing no checkmate.
    */
   PnSearchNode();
 
@@ -25,45 +31,52 @@ class PnSearchNode {
   PnSearchNode(const PnSearchNode& node) = delete;
 
   /**
-   * Destroys the PN search node object.
+   * Destroy the PN search node.
    */
-  virtual ~PnSearchNode() = default;
+  virtual ~PnSearchNode();
 
   /**
-   * Initializes this node as a terminal node with the specified board state.
-   * @param board Board object
-   * @param depth Depth of the node
+   * Initialize this node as a leaf for the specified position.
+   * @param board const Board* target position.
+   * @param depth int32_t remaining search depth in moves.
+   * @return void
    */
   void initialize(const Board* board, int32_t depth);
 
   /**
-   * Expands the node to generate child nodes.
-   * @param engine PN search engine object
-   * @return true if the node was successfully expanded
+   * Copy child references and search values without cloning the children themselves.
+   * @param node const PnSearchNode* source node.
+   * @return void
    */
-  bool expand(PnSearchEngine* engine);
+  void copyFrom(const PnSearchNode* node);
 
   /**
-   * Updates the PN/DN values of this node.
-   * @param depth_limit Depth limit
+   * Expand the node into children, retaining already expanded children.
+   * @param engine PnSearchEngine* search engine.
+   * @param board Board* working position, restored on return.
+   * @return bool; false only when node capacity is exhausted.
    */
-  void update(int32_t depth_limit);
+  bool expand(PnSearchEngine* engine, Board* board);
 
   /**
-   * Returns the next child node to search.
-   * Returns nullptr if this node is a terminal node.
-   * For the checking side, returns the child node with the minimum "PN value + log(search count)".
-   * For the evading side, returns the child node with the minimum "DN value + log(search count)".
-   * Computing priority with the search count reduces search bias
-   * and increases the chance of finding shorter checkmate sequences.
-   * @return Pointer to the next child node to search
+   * Update this node's PN/DN values, preserving terminal values when there are no children.
+   * @return void
    */
-  PnSearchNode* getNextNode();
+  void update();
 
   /**
-   * Returns the move and child node for the checkmate sequence.
-   * Returns nullptr if no child node forming a checkmate sequence exists.
-   * @return Pair of the checkmate move and child node
+   * Get the next child to search.
+   * Return nullptr as the child when this node is terminal.
+   * Minimize PN for attackers and DN for defenders, breaking ties by subtree size.
+   * @param depth int32_t current requested remaining depth.
+   * @return Pair of the next move and child node.
+   */
+  std::pair<Move, PnSearchNode*> getNextNode(int32_t depth);
+
+  /**
+   * Get the move and child node on the checkmating line.
+   * Return nullptr if no child lies on a checkmating line.
+   * @return Pair of a checkmating move and its child node.
    */
   std::pair<Move, PnSearchNode*> getCheckmateNode();
 
@@ -89,91 +102,124 @@ class PnSearchNode {
   }
 
   /**
-   * Returns the PN value.
-   * @return PN value
+   * Return the PN value without a move limit.
+   * @return int32_t PN value without a move limit.
    */
-  inline int32_t getPn() const {
-    return _pn;
+  inline int32_t getContPn() const {
+    return _contPn;
   }
 
   /**
-   * Returns the DN value.
-   * @return DN value
+   * Return the DN value without a move limit.
+   * @return int32_t DN value without a move limit.
    */
-  inline int32_t getDn() const {
-    return _dn;
+  inline int32_t getContDn() const {
+    return _contDn;
   }
 
   /**
-   * Returns the number of moves to checkmate.
-   * @return Number of moves to checkmate
+   * Return the PN value with a move limit.
+   * @return int32_t PN value with a move limit.
+   */
+  inline int32_t getTermPn() const {
+    return _termPn;
+  }
+
+  /**
+   * Return the DN value with a move limit.
+   * @return int32_t DN value with a move limit.
+   */
+  inline int32_t getTermDn() const {
+    return _termDn;
+  }
+
+  /**
+   * Return the depth associated with term values.
+   * @return int32_t depth associated with term values.
+   */
+  inline int32_t getTermDepth() const {
+    return _termDepth;
+  }
+
+  /**
+   * Return the internal value used to compare checkmate sequence lengths.
+   * @return int32_t internal value for comparing checkmate sequence lengths.
    */
   inline int32_t getStep() const {
     return _step;
   }
 
   /**
-   * Returns the size of the node.
-   * @return Size of the node
+   * Return the aggregate subtree size used for search priority.
+   * @return int32_t aggregate subtree size.
    */
   inline int32_t getSize() const {
     return _size;
   }
 
-  /**
-   * Returns true if this node is the same as or inferior to the specified node.
-   * An inferior node has the same board piece arrangement and the same or fewer
-   * pieces in hand for every piece type.
-   * The side delivering check is the turn evaluated.
-   * @param node Node to compare against
-   * @return true if this node is equal to or inferior to the specified node
-   */
-  inline bool isLesserThanOrEqual(const PnSearchNode* node) const {
-    // Checking side's turn: verify that the board piece arrangement is the same and own pieces in hand are the same or fewer
-    if (_depth % 2 == 1) {
-      return _board.isLesserThanOrEqual(node->_board, _board.getColor());
-    }
-    // Evading side's turn: verify that the board piece arrangement is the same and opponent's pieces in hand are the same or fewer
-    else {
-      return _board.isLesserThanOrEqual(node->_board, OPPOSITE_COLOR(_board.getColor()));
-    }
-  }
-
  private:
-  /**
-   * Board object.
-   */
-  Board _board;
-
-  /**
-   * Depth of the node.
-   */
-  int32_t _depth;
-
   /**
    * List of child nodes.
    */
   std::vector<std::pair<Move, PnSearchNode*>> _children;
 
   /**
-   * PN value.
+   * Legal moves generated during initialization.
+   * Reuse their generation order when expanding again from depth zero.
    */
-  int32_t _pn;
+  std::vector<Move> _legalMoves;
 
   /**
-   * DN value.
+   * Current requested remaining depth: odd for attackers, even for defenders.
    */
-  int32_t _dn;
+  int32_t _depth;
 
   /**
-   * Number of moves to checkmate.
+   * PN value without a move limit.
+   */
+  int32_t _contPn;
+
+  /**
+   * PN value with a move limit.
+   */
+  int32_t _termPn;
+
+  /**
+   * DN value without a move limit.
+   */
+  int32_t _contDn;
+
+  /**
+   * DN value with a move limit.
+   */
+  int32_t _termDn;
+
+  /**
+   * Aggregate depth updated together with term values.
+   */
+  int32_t _termDepth;
+
+  /**
+   * Depth at which the term result was solved; not used to increase search depth.
+   */
+  int32_t _termResultDepth;
+
+  /**
+   * Internal value used to compare checkmate sequence lengths.
    */
   int32_t _step;
 
   /**
-   * Size of the node.
+   * Size aggregated from children for search priority calculation.
    */
   int32_t _size;
+
+  /**
+   * Return this child's PN and DN for the requested depth.
+   * @param depth int32_t requested remaining depth.
+   * @return std::pair<int32_t, int32_t> PN and DN values.
+   */
+  std::pair<int32_t, int32_t> _getValues(int32_t depth) const;
 };
 
 }  // namespace deepshogi

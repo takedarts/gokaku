@@ -10,20 +10,25 @@ namespace deepshogi {
 class MctsParameter {
  public:
   /**
-   * Creates a parameter object.
-   * @param nyugyokuScoreBlack Score required for black's entering-king declaration
-   * @param nyugyokuScoreWhite Score required for white's entering-king declaration
-   * @param drawTurn Number of moves until a draw
-   * @param pucbConstantInit Initial value of the constant multiplied by the PUCB confidence upper bound
-   * @param pucbConstantBase Rate-of-change value of the constant multiplied by the PUCB confidence upper bound
+   * Create the parameter object.
+   * @param nyugyokuScoreBlack Points required for Black's entering-king declaration.
+   * @param nyugyokuScoreWhite Points required for White's entering-king declaration.
+   * @param drawTurn Move count at which the game is drawn.
+   * @param sennichitePenalty Penalty assigned to repetition evaluations.
+   * @param checkSearchDepth Checkmate search depth.
+   * @param checkSearchNode Checkmate search node capacity.
+   * @param pucbConstantInit Initial PUCB exploration coefficient.
+   * @param pucbConstantBase Base controlling the PUCB exploration coefficient.
+   * @param pucbMinVisitsRate Minimum visit ratio for prioritizing PUCB children.
    */
   MctsParameter(
       int32_t nyugyokuScoreBlack, int32_t nyugyokuScoreWhite, int32_t drawTurn,
-      float pucbConstantInit, float pucbConstantBase);
+      float sennichitePenalty, float pucbConstantInit, float pucbConstantBase,
+      float pucbMinVisitsRate);
 
   /**
-   * Copies a parameter object.
-   * @param other The source parameter object to copy from
+   * Copy the parameter object.
+   * @param other Source parameter object.
    */
   MctsParameter(const MctsParameter& other) = default;
 
@@ -57,24 +62,40 @@ class MctsParameter {
   }
 
   /**
-   * Gets the initial value of the constant multiplied by the PUCB confidence upper bound.
-   * @return Initial value of the constant multiplied by the PUCB confidence upper bound
+   * Return the penalty assigned to repetition evaluations.
+   * @return Penalty assigned to repetition evaluations.
+   */
+  inline float getSennichitePenalty() const {
+    return _sennichitePenalty;
+  }
+
+  /**
+   * Return the initial PUCB exploration coefficient.
+   * @return Initial PUCB exploration coefficient.
    */
   inline float getPucbConstantInit() const {
     return _pucbConstantInit;
   }
 
   /**
-   * Gets the rate-of-change value of the constant multiplied by the PUCB confidence upper bound.
-   * @return Rate-of-change value of the constant multiplied by the PUCB confidence upper bound
+   * Return the base controlling the PUCB exploration coefficient.
+   * @return Base controlling the PUCB exploration coefficient.
    */
   inline float getPucbConstantBase() const {
     return _pucbConstantBase;
   }
 
+  /**
+   * Return the minimum visit ratio for prioritizing PUCB children.
+   * @return Minimum visit ratio for prioritizing PUCB children.
+   */
+  inline float getPucbMinVisitsRate() const {
+    return _pucbMinVisitsRate;
+  }
+
  private:
   /**
-   * Score required for black's entering-king declaration.
+   * Points required for Black's entering-king declaration.
    */
   int32_t _nyugyokuScoreBlack;
 
@@ -89,14 +110,24 @@ class MctsParameter {
   int32_t _drawTurn;
 
   /**
-   * Initial value of the constant multiplied by the PUCB confidence upper bound.
+   * Penalty assigned to repetition evaluations.
+   */
+  float _sennichitePenalty;
+
+  /**
+   * Initial PUCB exploration coefficient.
    */
   float _pucbConstantInit;
 
   /**
-   * Rate-of-change value of the constant multiplied by the PUCB confidence upper bound.
+   * Base controlling the PUCB exploration coefficient.
    */
   float _pucbConstantBase;
+
+  /**
+   * Minimum visit ratio for prioritizing PUCB children.
+   */
+  float _pucbMinVisitsRate;
 };
 
 }  // namespace deepshogi

@@ -13,6 +13,7 @@ SRC_PATH = Path(__file__).parent.absolute()
 
 
 def parse_args() -> argparse.Namespace:
+    '''Parse build arguments; return argparse.Namespace.'''
     parser = argparse.ArgumentParser(
         description='Build native codes',
         formatter_class=argparse.RawTextHelpFormatter)
@@ -60,6 +61,8 @@ def make_files(
     cmake_text = cmake_text.replace('%PYTHON3_VERSION%', platform.python_version())
     cmake_text = cmake_text.replace('%TORCH_PATH%', torch_path)
     cmake_text = cmake_text.replace('%CPP_FILES%', cpp_files)
+    # Enable LTO for release builds and disable it for debug builds.
+    cmake_text = cmake_text.replace('%ENABLE_IPO%', 'OFF' if debug else 'ON')
 
     if debug:
         cmake_text = cmake_text.replace('%MSVC_CXX_FLAGS%', '/Zi /Od /utf-8')
@@ -127,6 +130,7 @@ def run_cmake(path: str) -> None:
 
 
 def _clean(paths: List[Path]) -> None:
+    '''Remove generated paths (List[Path]) recursively; return None.'''
     for path in paths:
         if path.is_dir():
             _clean(list(path.iterdir()))
@@ -136,6 +140,7 @@ def _clean(paths: List[Path]) -> None:
 
 
 def clean(path: str) -> None:
+    '''Clean the native build at path (str); return None.'''
     work_path = Path(__file__).parent / path
     targets = [
         work_path / 'build',
@@ -149,6 +154,7 @@ def clean(path: str) -> None:
 
 
 def main() -> None:
+    '''Run the native build command; return None.'''
     args = parse_args()
     base_path = 'deepshogi/native'
 

@@ -1,60 +1,61 @@
 #include "Candidate.h"
 
+#include <algorithm>
 #include <sstream>
 
 namespace deepshogi {
 
 /**
- * Creates candidate move data.
- * @param move Move
- * @param visits Visit count
- * @param playouts Playout count
- * @param policy Predicted move probability
- * @param value Evaluation value
- * @param variations Predicted line
+ * Create candidate move data.
+ * @param move Move.
+ * @param visits Visit count.
+ * @param policy Predicted move probability.
+ * @param value Evaluation value.
+ * @param remainingTurns Predicted moves remaining until the game ends.
+ * @param variations Principal variation.
  */
 Candidate::Candidate(
-    Move move, int32_t color, int32_t visits, int32_t playouts,
-    float policy, float value, std::vector<Move> variations)
+    Move move, int32_t color, int32_t visits, float policy, float value,
+    float remainingTurns, std::vector<Move> variations)
     : _move(move),
       _color(color),
       _visits(visits),
-      _playouts(playouts),
       _policy(policy),
       _value(value),
+      _remainingTurns(std::max(remainingTurns, 0.0f)),
       _variations(variations) {
 }
 
 /**
- * Creates candidate move data.
- * @param move Move
- * @param color Turn color
- * @param visits Visit count
- * @param playouts Playout count
- * @param policy Predicted move probability
- * @param value Evaluation value
+ * Create candidate move data.
+ * @param move Move.
+ * @param color Player color.
+ * @param visits Visit count.
+ * @param policy Predicted move probability.
+ * @param value Evaluation value.
+ * @param remainingTurns Predicted moves remaining until the game ends.
  */
 Candidate::Candidate(
-    Move move, int32_t color, int32_t visits, int32_t playouts,
-    float policy, float value)
+    Move move, int32_t color, int32_t visits, float policy, float value,
+    float remainingTurns)
     : Candidate(
-          move, color, visits, playouts,
-          policy, value, std::vector<Move>()) {
+          move, color, visits, policy, value, remainingTurns,
+          std::vector<Move>()) {
   _variations.push_back(move);
 }
 
 /**
- * Returns a string representation of the candidate move.
- * @return String representation of the candidate move.
+ * Return a string representation of the candidate.
+ * @return String representation of the candidate.
  */
 std::string Candidate::toString() const {
   std::stringstream ss;
   ss << "Move: " << _move.toString()
      << ", Color: " << ((_color == COLOR_BLACK) ? "Black" : "White")
      << ", Visits: " << _visits
-     << ", Playouts: " << _playouts
      << ", Policy: " << _policy
-     << ", Value: " << _value;
+     << ", Value: " << _value
+     << ", Remaining Turns: " << _remainingTurns;
 
   if (!_variations.empty()) {
     ss << ", Variations: [";

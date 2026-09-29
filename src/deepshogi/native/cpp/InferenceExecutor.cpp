@@ -249,21 +249,20 @@ static void getOutputMask(const Board* board, int32_t* mask) {
     mask[index / 32] |= (1 << (index % 32));
   }
 
-  // Create the value mask data
-  int32_t value_index = MODEL_PREDICTIONS * BOARD_SIZE * BOARD_SIZE;
-
-  mask[value_index / 32] |= (1 << (value_index % 32));
+  // Build the value output mask.
+  mask[(MODEL_VALUE_OFFSET + 0) / 32] |= (1 << ((MODEL_VALUE_OFFSET + 0) % 32));
+  mask[(MODEL_VALUE_OFFSET + 2) / 32] |= (1 << ((MODEL_VALUE_OFFSET + 2) % 32));
 }
 
 /**
- * Creates an inference executor object.
- * @param processor Inference manager object
- * @param file Path to the inference model file
- * @param gpu ID of the GPU to use
- * @param fp16 True to use half-precision floating point
- * @param deterministic True to enable deterministic behavior
- * @param batchSize Batch size
- * @param threads Number of threads to run
+ * Construct an inference executor.
+ * @param processor Inference processor.
+ * @param file Inference model file path.
+ * @param gpu GPU ID to use.
+ * @param fp16 True to use half-precision floating point.
+ * @param deterministic True to request deterministic behavior.
+ * @param batchSize Batch size.
+ * @param threads Number of execution threads.
  */
 InferenceExecutor::InferenceExecutor(
     InferenceProcessor* processor, std::string file, int32_t gpu, bool fp16,
@@ -388,7 +387,7 @@ void InferenceExecutor::_run(int32_t threadIndex) {
       std::unique_lock<std::mutex> lock(_processor->_queueMutex);
 
       // Wait if there are no scheduled inference executions
-      // [stop] If a stop request is received and the queue is empty, exit the wait
+      // [Stop] End the wait when termination is requested and the queue is empty.
       // [inference] If there are scheduled inference executions, exit the wait
       _processor->_queueCondition.wait(lock, [this] {
         if (_processor->_terminated && _processor->_queue.empty()) {
@@ -430,7 +429,7 @@ void InferenceExecutor::_run(int32_t threadIndex) {
     }
 
     // Run inference
-    // For CPU execution, match the batch size to the actual number of items
+    // On CPU, match the batch size to the actual number of inputs.
     // For non-CPU devices, run inference with a fixed batch size
     int32_t batch_size = (_model->isCpu()) ? static_cast<int32_t>(batch.size()) : _batchSize;
 
@@ -466,14 +465,17 @@ void InferenceExecutor::_run(int32_t threadIndex) {
         result.policies.emplace_back(move, probability);
       }
 
-      // Create the value inference result
-      result.value = outputs[MODEL_PREDICTIONS * BOARD_SIZE * BOARD_SIZE] * 2.0f - 1.0f;
+      // Construct the value inference result.
+      result.value = outputs[MODEL_VALUE_OFFSET + 0] * 2.0f - 1.0f;
+
+      // Convert the model output to predicted moves remaining until the game ends.
+      result.remainingTurns = std::max(outputs[MODEL_VALUE_OFFSET + 2] * 100.0f, 0.0f);
 
       if (node->getBoard().getColor() == COLOR_WHITE) {
         result.value = -result.value;
       }
 
-      // Invoke the callback function
+      // Invoke the callback.
       callback(node, result);
     }
   }

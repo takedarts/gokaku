@@ -14,34 +14,34 @@ namespace deepshogi {
 class Candidate {
  public:
   /**
-   * Creates candidate move data.
-   * @param move Move
-   * @param color Turn color
-   * @param visits Visit count
-   * @param playouts Playout count
-   * @param policy Predicted move probability
-   * @param minimax Minimax evaluation value
-   * @param variations Predicted line
+   * Create candidate move data.
+   * @param move Move.
+   * @param color Player color.
+   * @param visits Visit count.
+   * @param policy Predicted move probability.
+   * @param value Evaluation value.
+   * @param remainingTurns Predicted moves remaining until the game ends.
+   * @param variations Principal variation.
    */
   Candidate(
-      Move move, int32_t color, int32_t visits, int32_t playouts,
-      float policy, float value, std::vector<Move> variations);
+      Move move, int32_t color, int32_t visits, float policy, float value,
+      float remainingTurns, std::vector<Move> variations);
 
   /**
-   * Creates candidate move data.
-   * @param move Move
-   * @param color Turn color
-   * @param visits Visit count
-   * @param playouts Playout count
-   * @param policy Predicted move probability
-   * @param value Evaluation value
+   * Create candidate move data.
+   * @param move Move.
+   * @param color Player color.
+   * @param visits Visit count.
+   * @param policy Predicted move probability.
+   * @param value Evaluation value.
+   * @param remainingTurns Predicted moves remaining until the game ends.
    */
   Candidate(
-      Move move, int32_t color, int32_t visits, int32_t playouts,
-      float policy, float value);
+      Move move, int32_t color, int32_t visits, float policy, float value,
+      float remainingTurns);
 
   /**
-   * Destroys the instance.
+   * Destroy the instance.
    */
   virtual ~Candidate() = default;
 
@@ -76,16 +76,8 @@ class Candidate {
   }
 
   /**
-   * Returns the playout count.
-   * @return Playout count
-   */
-  inline int32_t getPlayouts() const {
-    return _playouts;
-  }
-
-  /**
-   * Returns the predicted move probability.
-   * @return Predicted move probability
+   * Return the predicted move probability.
+   * @return Predicted move probability.
    */
   inline float getPolicy() const {
     return _policy;
@@ -100,8 +92,16 @@ class Candidate {
   }
 
   /**
-   * Returns the predicted line.
-   * @return Predicted line
+   * Return the predicted moves remaining until the game ends.
+   * @return Predicted moves remaining until the game ends.
+   */
+  inline float getRemainingTurns() const {
+    return _remainingTurns;
+  }
+
+  /**
+   * Return the principal variation.
+   * @return Principal variation.
    */
   inline std::vector<Move> getVariations() const {
     return _variations;
@@ -135,11 +135,6 @@ class Candidate {
   int32_t _visits;
 
   /**
-   * Playout count.
-   */
-  int32_t _playouts;
-
-  /**
    * Predicted move probability.
    */
   float _policy;
@@ -150,7 +145,12 @@ class Candidate {
   float _value;
 
   /**
-   * Predicted line.
+   * Predicted moves remaining until the game ends.
+   */
+  float _remainingTurns;
+
+  /**
+   * Principal variation.
    */
   std::vector<Move> _variations;
 };

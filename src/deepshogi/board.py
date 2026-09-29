@@ -138,28 +138,21 @@ class Board(object):
         return piece
 
     def get_hand_piece_num(self, color: int, piece: int) -> int:
-        '''Get the number of pieces of the specified type and color.
+        '''Return the number of pieces of the specified type and color in hand.
         Args:
-            color (int): Side to move
-            piece (int): Type of piece
+            color (int): Player color.
+            piece (int): Piece type.
         Returns:
-            int: Number of pieces
+            int: Number of pieces.
         '''
         return self.native.get_hand_piece_num(color, piece)
 
-    def get_last_move(self) -> Tuple[Tuple[int, int], Tuple[int, int], bool]:
-        '''Get the last move.
-        Returns:
-            Tuple[Tuple[int, int], Tuple[int, int], bool]: Last move
-        '''
-        return self.native.get_last_move()
-
     def get_attackers(self, pos: Tuple[int, int]) -> List[Tuple[int, int]]:
-        '''Get a list of positions of pieces attacking the specified coordinates.
+        '''Return the positions of pieces attacking the specified square.
         Args:
-            pos (Tuple[int, int]): Coordinates
+            pos (Tuple[int, int]): Square coordinates.
         Returns:
-            List[Tuple[int, int]]: List of positions of attacking pieces
+            List[Tuple[int, int]]: Positions of attacking pieces.
         '''
         return self.native.get_attackers(pos[0], pos[1])
 
@@ -170,7 +163,7 @@ class Board(object):
     ) -> List[Tuple[Tuple[int, int], Tuple[int, int], bool]]:
         '''Get legal moves.
         Args:
-            remove_unpromote (bool): True to remove non-promotion moves for pawns, bishops, and rooks
+            remove_unpromote (bool): Omit selected unpromoted moves.
             check_only (bool): True to get only checking moves
         Returns:
             List[Tuple[Tuple[int, int], Tuple[int, int], bool]]: List of legal moves
@@ -181,20 +174,33 @@ class Board(object):
         self,
         depth: int,
     ) -> List[Tuple[Tuple[int, int], Tuple[int, int], bool]]:
-        '''Get the checkmate moves for the current board.
+        '''Return a checkmating move sequence for the current position.
         Args:
-            depth (int): Depth of the checkmate search
+            depth (int): Checkmate search depth.
         Returns:
-            List[Tuple[Tuple[int, int], Tuple[int, int], bool]]: List of checkmate moves
+            List[Tuple[Tuple[int, int], Tuple[int, int], bool]]: Checkmating move sequence.
         '''
         return self.native.get_checkmate_moves(depth)
 
-    def is_nyugyoku(self, color: int | None = None) -> bool:
-        '''Determine nyugyoku (entering king).
+    def get_score(self, color: int | None = None, nyugyoku: bool = False) -> int:
+        '''Return the piece score, counting major pieces as five and minor pieces as one.
         Args:
-            color (int | None): Side to move (if None, use current side)
+            color (int | None): Color to score; None selects the side to move.
+            nyugyoku (bool): If True, count only pieces in enemy territory and in hand.
         Returns:
-            bool: True if nyugyoku
+            int: Total piece score.
+        '''
+        if color is None:
+            color = self.get_color()
+
+        return self.native.get_score(color, nyugyoku)
+
+    def is_nyugyoku(self, color: int | None = None) -> bool:
+        '''Check whether an entering-king victory can be declared.
+        Args:
+            color (int | None): Declaring color; None selects the side to move.
+        Returns:
+            bool: True if an entering-king victory can be declared.
         '''
         if color is None:
             color = self.get_color()

@@ -4,17 +4,19 @@
 #include <torch_tensorrt/logging.h>
 #endif
 
+#include <fstream>
+
 #include "Config.h"
 
 namespace deepshogi {
 
 /**
- * Determines whether the specified file is a TensorRT model file.
- * TensorRT model files contain specific marker strings, so the function
- * checks whether any of those markers are present in the file.
- * Always returns false when TensorRT is not supported.
- * @param filename File name
- * @return True if the file is a TensorRT model file
+ * Check whether the specified file is a TensorRT model.
+ * TensorRT model files contain specific marker strings;
+ * check whether those markers are present in the file.
+ * Always return false when TensorRT support is unavailable.
+ * @param filename File name.
+ * @return True if the file is a TensorRT model.
  */
 static bool isTensorRTModelFile(const std::string& filename) {
 #ifdef USE_TORCH_TENSORRT
@@ -156,8 +158,8 @@ InferenceModel::InferenceModel(
 #endif
 
   // Load the model and set the execution device and data type
-  // The loading method differs between TensorRT model files and other model files,
-  // so check the file contents and switch the loading method accordingly.
+  // TensorRT models and other model files require different loading methods;
+  // inspect the file contents to choose the appropriate loader.
   // The `isTensorRTModelFile` function always returns false when TensorRT is not supported.
   if (isTensorRTModelFile(filename)) {
     _model = torch::jit::load(filename, _device);
@@ -207,8 +209,7 @@ void InferenceModel::forward(int32_t* inputs, int32_t* masks, float* outputs, in
   {
     std::lock_guard<std::mutex> computeLock(_computeMutex);
 
-    // Input values are stored in bit representation (except the last three values)
-    // Bit-shift all values except the last three to convert them to 0 or 1
+    // Unpack the binary feature region. The scalar positions are overwritten below.
     in_data = torch::bitwise_right_shift(
         in_values.narrow(1, 0, MODEL_INPUT_PACK_SIZE - 3).unsqueeze(2), _bitShift);
     in_data = torch::bitwise_and(in_data, 1);
@@ -216,14 +217,19 @@ void InferenceModel::forward(int32_t* inputs, int32_t* masks, float* outputs, in
     in_data = in_data.narrow(1, 0, MODEL_INPUT_SIZE);
     in_data = in_data.to(_dtype);
 
-    // The last three values are stored scaled from the range [0, 1] to [0, 0xfffff]
-    // Normalize the last three values back to the range [0, 1] and store them at the end of the input data
-    in_values = in_values.narrow(1, MODEL_INPUT_PACK_SIZE - 3, 3);
+    // The last five packed values are fixed-point scalars scaled by 0xfffff.
+    //  - Points required for our entering-king declaration.
+    //  - Points required for the opponent's entering-king declaration.
+    //  - Our total piece score.
+    //  - The opponent's total piece score.
+    //  - Normalized proximity to the maximum-move draw limit.
+    // Normalize these values and store them at their designated input offsets.
+    in_values = in_values.narrow(1, MODEL_INPUT_PACK_SIZE - 5, 5);
     in_values = in_values.to(torch::kFloat32) / 0xfffff;
     in_values = in_values.to(_dtype);
-    in_data.slice(1, MODEL_INPUT_SIZE - 3, MODEL_INPUT_SIZE).copy_(in_values);
+    in_data.slice(1, MODEL_INFO_OFFSET + 77, MODEL_INFO_OFFSET + 82).copy_(in_values);
 
-    // Each output mask value is stored in bit representation
+    // Each output mask is stored as a bit representation.
     // Bit-shift to convert them to 0 or 1
     out_masks = torch::bitwise_right_shift(
         out_masks.unsqueeze(2), _bitShift);

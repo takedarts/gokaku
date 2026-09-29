@@ -1,15 +1,15 @@
 ################################################################
-# Global settings
+# General settings.
 ################################################################
 # Program name
 NAME = 'Gokaku'
-# Version number
-VERSION = '2.3.1'
-# Author name
+# Version number.
+VERSION = '2.4'
+# Author name.
 AUTHOR = 'Atsushi Takeda'
 
 ################################################################
-# Constant values (the value for side to move is different from cshogi)
+# Constants (color values differ from cshogi).
 ################################################################
 # Board size
 BOARD_SIZE = 9
@@ -149,30 +149,55 @@ PIECE_HAND_GOLD = 6
 PIECE_HAND_END = 7
 
 ################################################################
-# Model settings
+# Model settings.
 ################################################################
-# Number of board features input to the model
-MODEL_FEATURES = 84
-# Number of game features input to the model
-MODEL_INFOS = 80
-# Number of policy layers output by the model
-MODEL_POLICIES = 82
-# Number of board predictions output by the model
-MODEL_PREDICTIONS = MODEL_POLICIES * 2 + 1
-# Number of game predictions output by the model
-MODEL_VALUES = 8
+# Number of board feature planes supplied to the model.
+MODEL_FEATURE_NUM = 83
+# Number of game features supplied to the model.
+MODEL_INFO_NUM = 93
+# Number of policy planes output by the model.
+MODEL_POLICY_NUM = 82
+# Number of reply prediction planes output by the model.
+MODEL_REPLY_NUM = 82
+# Number of game prediction values output by the model.
+MODEL_VALUE_NUM = 9
 
-# Size of data input to the model
-MODEL_INPUT_SIZE = MODEL_FEATURES * BOARD_SIZE * BOARD_SIZE + MODEL_INFOS
-# Size of data input to the model when embedded as int32
-MODEL_INPUT_PACK_SIZE = (MODEL_INPUT_SIZE + 31) // 32 + 3
-# Size of data output by the model
-MODEL_OUTPUT_SIZE = MODEL_PREDICTIONS * BOARD_SIZE * BOARD_SIZE + MODEL_VALUES
-# Size of data output by the model (mask) when embedded as int32
+# Number of board feature input elements.
+MODEL_FEATURE_SIZE = MODEL_FEATURE_NUM * BOARD_SIZE * BOARD_SIZE
+# Number of game features supplied to the model.
+MODEL_INFO_SIZE = MODEL_INFO_NUM
+# Number of policy output elements.
+MODEL_POLICY_SIZE = MODEL_POLICY_NUM * BOARD_SIZE * BOARD_SIZE
+# Number of reply prediction output elements.
+MODEL_REPLY_SIZE = MODEL_REPLY_NUM * BOARD_SIZE * BOARD_SIZE
+# Number of game prediction output elements.
+MODEL_VALUE_SIZE = MODEL_VALUE_NUM
+
+# Offset of game features in the model input.
+MODEL_INFO_OFFSET = MODEL_FEATURE_SIZE
+# Offset of reply predictions in the model output.
+MODEL_REPLY_OFFSET = MODEL_POLICY_SIZE
+# Offset of game prediction values in the model output.
+MODEL_VALUE_OFFSET = MODEL_POLICY_SIZE + MODEL_REPLY_SIZE
+
+# Size of the model input.
+MODEL_INPUT_SIZE = MODEL_FEATURE_SIZE + MODEL_INFO_SIZE
+# Number of int32 elements in the packed model input.
+# Encode one-hot board features and masks using one bit each.
+# Encode the following real-valued features using 32 bits each.
+#  - Points required for our entering-king declaration.
+#  - Points required for the opponent's entering-king declaration.
+#  - Our total piece score.
+#  - The opponent's total piece score.
+#  - Normalized proximity to the maximum-move draw limit.
+MODEL_INPUT_PACK_SIZE = (MODEL_INPUT_SIZE + 31) // 32 + 5
+# Size of the model output.
+MODEL_OUTPUT_SIZE = MODEL_POLICY_SIZE + MODEL_REPLY_SIZE + MODEL_VALUE_SIZE
+# Number of int32 elements in the packed model output mask.
 MODEL_OUTPUT_PACK_SIZE = (MODEL_OUTPUT_SIZE + 31) // 32
 
 ################################################################
-# Default values
+# Default values.
 ################################################################
 # Default initial board
 DEFAULT_INITIAL_SFEN = 'lnsgkgsnl/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL b - 1'
@@ -194,13 +219,15 @@ DEFAULT_MAX_VISITS = 1_000_000
 DEFAULT_PUCB_CONSTANT_INIT = 1.6
 # Base value applied to PUCB upper confidence bound
 DEFAULT_PUCB_CONSTANT_BASE = 3200.0
-# Default number of threads per GPU
+# Default minimum visit ratio for prioritizing children in PUCB.
+DEFAULT_PUCB_MIN_VISITS_RATE = 0.0
+# Default number of threads per GPU.
 DEFAULT_THREADS_PER_GPU = 2
 # Default batch size for board evaluation calculation
 DEFAULT_BATCH_SIZE = 32
 
 ################################################################
-# Logging settings
+# Logging settings.
 ################################################################
 # Log format
 LOGGING_FORMAT = '%(asctime)s [%(levelname)-5.5s] %(message)s (%(module)s.%(funcName)s:%(lineno)s)'

@@ -8,7 +8,7 @@ cdef extern from "cpp/Candidate.h" namespace "deepshogi":
         Move getMove() const
         int32_t getColor() const
         int32_t getVisits() const
-        int32_t getPlayouts() const
         float getPolicy() const
         float getValue() const
+        float getRemainingTurns() const
         vector[Move] getVariations() const

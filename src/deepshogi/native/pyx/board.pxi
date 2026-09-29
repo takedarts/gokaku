@@ -44,7 +44,7 @@ cdef class NativeBoard:
         promote: bool,
     ) -> Tuple[Tuple[int, int], Tuple[int, int], bool, int]:
         '''Moves a piece.
-        Returns the result of the move as (source coordinate, destination coordinate, promotion flag, type of captured piece).
+        Return (source, destination, promotion flag, captured piece type).
         Args:
             src (Tuple[int, int]): Source coordinate
             dst (Tuple[int, int]): Destination coordinate
@@ -63,7 +63,13 @@ cdef class NativeBoard:
             result.getMove().isPromote(),
             result.getCaptured())
 
-    def undo(self, src: Tuple[int, int], dst: Tuple[int, int], promote: bool, captured: int) -> None:
+    def undo(
+        self,
+        src: Tuple[int, int],
+        dst: Tuple[int, int],
+        promote: bool,
+        captured: int,
+    ) -> None:
         '''Restores the board to the state before the move.
         Args:
             src (Tuple[int, int]): Source coordinate
@@ -102,33 +108,22 @@ cdef class NativeBoard:
         return self.board.getPiece(Position(pos[0], pos[1]))
 
     def get_hand_piece_num(self, color: int, piece: int) -> int:
-        '''Returns the number of the specified piece in hand.
+        '''Return the number of the specified pieces in hand.
         Args:
-            color (int): Player color
-            piece (int): Piece type
+            color (int): Player color.
+            piece (int): Piece type.
         Returns:
-            int: Number of pieces in hand
+            int: Number of pieces in hand.
         '''
         return self.board.getHandPieceNum(color, piece)
 
-    def get_last_move(self) -> Tuple[Tuple[int, int], Tuple[int, int], bool]:
-        '''Returns the last move made.
-        Returns:
-            Tuple[Tuple[int, int], Tuple[int, int], bool]: Last move
-        '''
-        cdef Move move = self.board.getLastMove()
-        return (
-            (move.getSrc().getX(), move.getSrc().getY()),
-            (move.getDst().getX(), move.getDst().getY()),
-            move.isPromote())
-
     def get_attackers(self, x: int, y: int) -> List[Tuple[int,int]]:
-        '''Returns the list of pieces attacking the specified coordinate.
+        '''Return the pieces attacking the specified square.
         Args:
-            x (int): X coordinate
-            y (int): Y coordinate
+            x (int): X coordinate.
+            y (int): Y coordinate.
         Returns:
-            List[Tuple[int, int]]: List of pieces attacking the specified coordinate
+            List[Tuple[int, int]]: Positions of pieces attacking the square.
         '''
         cdef vector[Position] attackers = self.board.getAttackers(Position(x, y))
         return [(pos.getX(), pos.getY()) for pos in attackers]
@@ -163,7 +158,7 @@ cdef class NativeBoard:
         Args:
             depth (int): Depth of the checkmate search
         Returns:
-            List[Tuple[Tuple[int, int], Tuple[int, int], bool]]: Sequence of moves in the checkmate line
+            List[Tuple[Tuple[int, int], Tuple[int, int], bool]]: Checkmating moves.
         '''
         cdef vector[Move] moves = self.board.getCheckmateMoves(depth)
 
@@ -173,13 +168,24 @@ cdef class NativeBoard:
              moves[i].isPromote())
             for i in range(moves.size())]
 
+    def get_score(self, color: int, nyugyoku: bool = False) -> int:
+        '''
+        Return the piece score, counting major pieces as five and minor pieces as one.
+        Args:
+            color (int): Color to score.
+            nyugyoku (bool): If True, count only pieces in enemy territory and in hand.
+        Returns:
+            int: Total piece score.
+        '''
+        return self.board.getScore(color, nyugyoku)
+
     def is_nyugyoku(self, color: int) -> bool:
         '''
-        Returns True if entering-king declaration is possible.
+        Return True if an entering-king victory can be declared.
         Args:
-            color (int): Color of the declaring player
+            color (int): Declaring color.
         Returns:
-            bool: True if entering-king declaration is possible
+            bool: True if an entering-king victory can be declared.
         '''
         return self.board.isNyugyoku(color)
 

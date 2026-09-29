@@ -59,9 +59,9 @@
 #define PIECE_HAND_GOLD         (${PIECE_HAND_GOLD})
 #define PIECE_HAND_END          (${PIECE_HAND_END})
 
-// Model configuration values
-#define MODEL_FEATURES          (${MODEL_FEATURES})
-#define MODEL_PREDICTIONS       (${MODEL_PREDICTIONS})
+// Model settings.
+#define MODEL_INFO_OFFSET       (${MODEL_INFO_OFFSET})
+#define MODEL_VALUE_OFFSET      (${MODEL_VALUE_OFFSET})
 #define MODEL_INPUT_SIZE        (${MODEL_INPUT_SIZE})
 #define MODEL_INPUT_PACK_SIZE   (${MODEL_INPUT_PACK_SIZE})
 #define MODEL_OUTPUT_SIZE       (${MODEL_OUTPUT_SIZE})

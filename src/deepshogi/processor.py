@@ -3,11 +3,14 @@ from typing import List
 
 import numpy as np
 
-from .config import DEFAULT_BATCH_SIZE, DEFAULT_THREADS_PER_GPU
+from .board import Board
+from .config import (DEFAULT_BATCH_SIZE, DEFAULT_THREADS_PER_GPU,
+                     MODEL_VALUE_OFFSET)
 from .native import NativeInferenceProcessor
 
 
 class Processor(object):
+    '''Manage model inference and batched board evaluation.'''
     def __init__(
         self,
         model: str | Path,
@@ -18,15 +21,15 @@ class Processor(object):
         threads_per_gpu: int = DEFAULT_THREADS_PER_GPU,
         cache_size: int = 0,
     ) -> None:
-        '''Initialize processor management object.
+        '''Initialize the inference processor.
         Args:
-            model (str | Path): Path to model file
-            gpus (List[int]): List of GPU numbers to use
-            batch_size (int): Maximum batch size
-            fp16 (bool): Whether to use FP16
-            deterministic (bool): True to make results reproducible
-            threads_per_gpu (int): Number of threads per GPU
-            cache_size (int): Cache size for evaluation results
+            model (str | Path): Model file path.
+            gpus (List[int]): GPU IDs to use.
+            fp16 (bool): Whether to use FP16.
+            deterministic (bool): True to request reproducible results.
+            batch_size (int): Maximum batch size.
+            threads_per_gpu (int): Number of threads per GPU.
+            cache_size (int): Evaluation cache capacity.
         '''
         if not Path(model).exists():
             raise FileNotFoundError(f'File not found: {model}')
@@ -34,10 +37,26 @@ class Processor(object):
         self.native = NativeInferenceProcessor(
             str(model), gpus, fp16, deterministic, batch_size, threads_per_gpu, cache_size)
 
-    def execute(self, inputs: np.ndarray) -> np.ndarray:
-        '''Execute inference.
+    def evaluate(self, boards: List[Board]) -> np.ndarray:
+        '''Evaluate multiple positions in one batch.
         Args:
-            inputs (np.ndarray): Input data
+            boards (List[Board]): Positions to evaluate.
+        Returns:
+            np.ndarray: Evaluation values from each position's side-to-move perspective.
+        '''
+        # Convert each position into the model input format.
+        inputs = np.stack([board.get_inputs() for board in boards])
+
+        # Run batch inference and convert win probabilities to values from -1 to 1.
+        outputs = self.execute(inputs)
+        return outputs[:, MODEL_VALUE_OFFSET] * 2.0 - 1.0
+
+    def execute(self, inputs: np.ndarray) -> np.ndarray:
+        '''Run inference.
+        Args:
+            inputs (np.ndarray): Input data.
+        Returns:
+            np.ndarray: Model outputs.
         '''
         return self.native.execute(inputs)
 

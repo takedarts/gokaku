@@ -8,7 +8,8 @@ namespace deepshogi {
 
 /**
  * A class for managing the predicted move probabilities of MCTS search nodes.
- * Manages the move information, its predicted probability, and the number of times it has been searched.
+ * Manages the move information, its predicted probability, and the number of times it has been
+ * searched.
  */
 class MctsPolicy {
  public:
