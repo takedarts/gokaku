@@ -50,9 +50,6 @@ Windows環境では`MSBuild`が必要となります（MSBuildはVisual Studio�
 python src/build.py
 ```
 
-ReleaseビルドではIPO/LTOを使用するため、対応するコンパイラとリンカが必要です。
-`python src/build.py --debug`ではIPO/LTOを無効にします。
-
 コンパイルに成功すると`src/deepshogi/native`にコンパイルされたCythonモジュールが生成されます。
 
 なお、オプション`--clean`を指定して`src/build.py`を実行すると生成されたファイルを削除します。
@@ -129,8 +126,8 @@ python src/compile.py <torch-script-file> <tensorrt-file>
 python src/run.py <tensorrt-file>
 ```
 
-ただし、TensorRTを使用してGokakuを実行する場合、TensorRTモデルのコンパイルオプションと`run.py`の実行オプションを同じものにする必要があります。
-TensorRTモデルをコンパイルする際に`--fp16`や`--batch-size`オプションを指定した場合、`run.py`の実行コマンドにも同じオプションを指定してください。
+ただし、TensorRTを使用してGokakuを実行する場合、TensorRTモデルのコンパイルオプションと`src/run.py`の実行オプションを同じものにする必要があります。
+TensorRTモデルをコンパイルする際に`--fp16`や`--batch-size`オプションを指定した場合、`src/run.py`の実行コマンドにも同じオプションを指定してください。
 以下はTensorRTモデルを半精度浮動小数点数（FP16）でバッチサイズ16に設定してコンパイルし、そのモデルを使用してGokakuを起動する例です（TensorRTモデルのコンパイルは1度だけで行います）。
 ```
 python src/compile.py --fp16 --batch-size 16 b10c512-1000.model b10c512-1000.rt.model
@@ -155,7 +152,7 @@ CUDAを使用することを想定したDockerイメージ `takedarts/gokaku:v2.
 docker pull takedarts/gokaku:v2.4-cuda12.6
 ```
 
-CUDAを使用できる環境で以下のコマンドを実行することで、GokakuのDockerイメージを実行できます（モデルファイルは[こちら](https://github.com/takedarts/gokaku/releases/tag/v2.4)からダウンロードできます）。
+CUDAを使用できる環境で以下のコマンドを実行することで、GokakuのDockerイメージを実行できます。
 ```
 docker run -iq --rm --gpus all -v .:/workspace takedarts/gokaku:v2.4-cuda12.6 /opt/run.sh <model_file>
 ```
@@ -247,7 +244,9 @@ Gokaku version 2.4で、出力の形式を含めたモデルの仕様が変更�
 PYTHONPATH=src python -m unittest discover -s src/tests -p '*_test.py' -v
 MYPYPATH=src python -m mypy --explicit-package-bases src
 ```
-キャッシュのC++テストとテストデータの出典は[src/tests/README.md](src/tests/README.md)を参照してください。
+
+テストは小さなモデルを生成して使用するため、学習済みモデルやGPUは不要です。
+詳しくは[src/tests/README.md](src/tests/README.md)を参照してください。
 
 ## ライセンス
 Gokaku version 2.2から、ライセンスをMIT Licenseに変更しました。

@@ -23,14 +23,16 @@ However, if you want to run Gokaku with TensorRT, you need to build from source 
 
 ## Running from Source Files
 ### Build Instructions
-Since most parts of this program are written in Cython and C++, the program code must be compiled before it can be run to create modules for search and board evaluation.
+Most of this program is written in Cython and C++.
+To run Gokaku, you need to build the program to create modules for search and board evaluation.
 
 First, install the required modules for building and running:
 ```
 pip install numpy cython cmake
 ```
 
-In addition to the above modules, PyTorch is required for building and running. Please check the CUDA version installed in your environment and install the appropriate version of PyTorch for your execution environment.
+In addition to the above modules, PyTorch is required for building and running.
+Check the CUDA version and other details of your environment, and install a suitable version of PyTorch.
 Even in environments with ROCm installed, you should be able to run Gokaku by installing a ROCm-compatible version of PyTorch (ROCm environment operation has not been verified, and TensorRT cannot be used in ROCm environments).
 ```
 pip install torch
@@ -49,9 +51,6 @@ On Windows environments, `MSBuild` is required (MSBuild is included with Visual 
 python src/build.py
 ```
 
-Release builds enable IPO/LTO and require a supporting compiler and linker.
-Use `python src/build.py --debug` to build with IPO/LTO disabled.
-
 If compilation is successful, the compiled Cython module will be generated in `src/deepshogi/native`.
 
 You can delete the generated files by running `src/build.py` with the `--clean` option:
@@ -61,7 +60,7 @@ python src/build.py --clean
 
 ### Running the Program
 You can launch Gokaku by running the launch script `src/run.py`.
-Specify a TorchScript or TensorRT model as the command-line argument. Download the TorchScript model from [this release page](https://github.com/takedarts/gokaku/releases/tag/v2.4), or create a TensorRT model using `src/compile.py`:
+Specify a TorchScript or TensorRT model as the argument (you can download a TorchScript model from [this release page](https://github.com/takedarts/gokaku/releases/tag/v2.4), or create a TensorRT model using `src/compile.py`).
 ```
 python src/run.py <model_file>
 ```
@@ -105,7 +104,7 @@ info multipv 1 nodes 1 score cp -23 pv 3i3h
 bestmove 3i3h
 ```
 
-Since Gokaku supports the USI protocol, you can also use GUI applications that support USI protocol, such as [ShogiHome](https://sunfish-shogi.github.io/shogihome/).
+Since Gokaku complies with the USI protocol, you can use it as a Shogi engine for a GUI that supports USI, such as [ShogiHome](https://sunfish-shogi.github.io/shogihome/).
 
 To see the available options, run the script with the `--help` flag:
 ```
@@ -128,8 +127,8 @@ You can launch Gokaku using TensorRT by running the startup script with the crea
 python src/run.py <tensorrt-file>
 ```
 
-When running Gokaku with TensorRT, you need to use the same compilation options for the TensorRT model and the execution options for `run.py`.
-If you specify the `--fp16` or `--batch-size` options when compiling the TensorRT model, specify the same options in the `run.py` execution command as well.
+When running Gokaku with TensorRT, the TensorRT model's compilation options and the execution options for `src/run.py` must match.
+If you specify the `--fp16` or `--batch-size` options when compiling the TensorRT model, specify the same options in the `src/run.py` execution command as well.
 The following example shows how to compile a TensorRT model with half-precision floating point (FP16) and batch size 16, and then launch Gokaku using that model (TensorRT model compilation only needs to be done once):
 ```
 python src/compile.py --fp16 --batch-size 16 b10c512-1000.model b10c512-1000.rt.model
@@ -154,12 +153,12 @@ I recommend downloading the Docker image in advance by running the following com
 docker pull takedarts/gokaku:v2.4-cuda12.6
 ```
 
-You can run the Gokaku Docker image by executing the following command in an environment where CUDA is available (You can download the model file from [here](https://github.com/takedarts/gokaku/releases/tag/v2.4)):
+You can run the Gokaku Docker image by executing the following command in an environment where CUDA is available:
 ```
 docker run -iq --rm --gpus all -v .:/workspace takedarts/gokaku:v2.4-cuda12.6 /opt/run.sh <model_file>
 ```
 Use the `--gpus` option to specify the GPUs to use, and mount the current directory to the container's `/workspace` using `-v .:/workspace`.
-Place the model file in the current directory and specify its path as `<model_file>`.
+Place the model file in the current directory or a subdirectory, and specify its path as `<model_file>`.
 
 You can also specify options after the execution command.
 If you add `--help` to the execution command, a list of available options will be displayed:
@@ -247,7 +246,9 @@ After building, run the CPU board, inference, and search tests with:
 PYTHONPATH=src python -m unittest discover -s src/tests -p '*_test.py' -v
 MYPYPATH=src python -m mypy --explicit-package-bases src
 ```
-See [src/tests/README.md](src/tests/README.md) for the C++ cache test and fixture provenance.
+
+The tests generate and use a small model, so no trained model or GPU is required.
+See [src/tests/README.md](src/tests/README.md) for details.
 
 ## License
 Starting with Gokaku version 2.2, the license has been changed to the MIT License.
