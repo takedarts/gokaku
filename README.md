@@ -5,12 +5,14 @@
 Gokaku is a computer Shogi program developed using deep reinforcement learning from randomly generated game records. The deep learning model of Gokaku incorporates nested-bottleneck convolutions and multi-head attention, enabling it to efficiently grasp the overall state of the board. Its reinforcement learning procedure is inspired by approaches used in Katago and Gumbel AlphaZero, allowing it to efficiently learn a wide range of patterns.
 
 Gokaku is a sibling program of the computer Go program [Maru](https://github.com/takedarts/maru). Gokaku shares the same deep learning model architecture, search algorithm, and reinforcement learning methodology as Maru.
-
-You can check the improvement of Gokaku's playing strength through reinforcement learning on [this page](https://takeda-lab.jp/gokaku/).
+You can track Gokaku's playing strength improvements on [this page](https://takeda-lab.jp/gokaku/).
 
 A model file is required to run Gokaku.
 You can download the TorchScript model from [this release page](https://github.com/takedarts/gokaku/releases/tag/v2.4).
 To create a TensorRT model, convert the TorchScript model using `src/compile.py`.
+
+**Note:** Gokaku version 2.4 changes the model specification, including its output format,
+so models from Gokaku version 2.3 or earlier cannot be used.
 
 ## How to Run
 Gokaku can be run using one of the following methods:
@@ -236,9 +238,6 @@ To start Gokaku with the number of visits set to 1000 and the maximum thinking t
 ```
 python src/run.py b10c512-1000.model --visits 1000 --timelimit 5
 ```
-
-## Compatibility with Earlier Versions
-Gokaku version 2.4 changes the model specification, including its output format, so models from Gokaku version 2.3 or earlier cannot be used.
 
 ## Tests
 After building, run the CPU board, inference, and search tests with:

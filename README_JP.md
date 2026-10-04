@@ -5,12 +5,13 @@
 Gokakuはランダム着手の棋譜からの深層強化学習を用いて作成されたコンピュータ将棋プログラムです。Gokakuの深層学習モデルはNested-Bottleneck構造のConvolutionやMulti-Head Attentionを含んでおり、盤面全体の状況を効率よく把握できる構造となっています。また、Gokakuの強化学習手順はKatagoやGumbel AlphaZeroを参考にして設計されており、効率よく多くのパターンを学習できるように設計されています。
 
 Gokakuはコンピュータ囲碁プログラム[Maru](https://github.com/takedarts/maru)の兄弟プログラムです。Gokakuの深層学習モデル・探索アルゴリズム・強化学習手順はMaruと同じ手法を用いています。
-
-強化学習によるGokakuの棋力向上を[こちらのページ](https://takeda-lab.jp/gokaku/)で確認できます。
+棋力向上の経過は[こちらのページ](https://takeda-lab.jp/gokaku/)で確認できます。
 
 Gokakuを実行するためにはモデルファイルが必要です。
 TorchScriptモデルは[こちら](https://github.com/takedarts/gokaku/releases/tag/v2.4)からダウンロードできます。
 TensorRTモデルは`src/compile.py`を使ってTorchScriptモデルから作成してください。
+
+**注意** Gokaku version 2.4で、出力の形式を含めたモデルの仕様が変更されたため、Gokaku version 2.3以前のモデルは使用できません。
 
 ## 実行方法
 Gokakuは以下のいずれかの方法で実行できます。
@@ -234,9 +235,6 @@ python src/run.py b10c512-1000.model
 ```
 python src/run.py b10c512-1000.model --visits 1000 --timelimit 5
 ```
-
-## 以前のバージョンとの互換性
-Gokaku version 2.4で、出力の形式を含めたモデルの仕様が変更されたため、Gokaku version 2.3以前のモデルは使用できません。
 
 ## テスト
 ビルド後に次のコマンドでCPUの盤面・推論・探索テストを実行します。
