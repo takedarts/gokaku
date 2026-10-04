@@ -61,7 +61,7 @@ def make_files(
     cmake_text = cmake_text.replace('%PYTHON3_VERSION%', platform.python_version())
     cmake_text = cmake_text.replace('%TORCH_PATH%', torch_path)
     cmake_text = cmake_text.replace('%CPP_FILES%', cpp_files)
-    # Enable LTO for release builds and disable it for debug builds.
+    # Enable LTO in supported release builds and disable it in debug builds.
     cmake_text = cmake_text.replace('%ENABLE_IPO%', 'OFF' if debug else 'ON')
 
     if debug:

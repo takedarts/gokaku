@@ -59,16 +59,22 @@ set_source_files_properties( modules.pyx PROPERTIES CYTHON_IS_CXX TRUE )
 # Multi-file cython modules do not appear to be working at the moment.
 cython_add_module( modules modules.pyx %CPP_FILES%)
 
-# Enable LTO for both compilation and linking in release builds.
+# Enable LTO in release builds only when supported.
+set_property( TARGET modules PROPERTY INTERPROCEDURAL_OPTIMIZATION FALSE )
 if( %ENABLE_IPO% )
+  # Use the project's compiler flags for the support check when CMake supports this policy.
+  if( POLICY CMP0138 )
+    cmake_policy( SET CMP0138 NEW )
+  endif()
   include( CheckIPOSupported )
   check_ipo_supported( RESULT ipo_supported OUTPUT ipo_error LANGUAGES CXX )
-  if( NOT ipo_supported )
-    message( FATAL_ERROR "LTO is not supported: ${ipo_error}" )
+  if( ipo_supported )
+    set_property( TARGET modules PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE )
+    message( STATUS "IPO/LTO is enabled." )
+  else()
+    # Keep normal optimizations and continue building without LTO when it is unsupported.
+    message( WARNING "IPO/LTO is disabled because it is not supported: ${ipo_error}" )
   endif()
-  set_property( TARGET modules PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE )
-else()
-  set_property( TARGET modules PROPERTY INTERPROCEDURAL_OPTIMIZATION FALSE )
 endif()
 
 # When compiling with torch-tensorrt support, all libraries will be linked.
