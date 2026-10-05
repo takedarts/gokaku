@@ -11,7 +11,7 @@ Gokakuを実行するためにはモデルファイルが必要です。
 TorchScriptモデルは[こちら](https://github.com/takedarts/gokaku/releases/tag/v2.4)からダウンロードできます。
 TensorRTモデルは`src/compile.py`を使ってTorchScriptモデルから作成してください。
 
-**注意** Gokaku version 2.4で、出力の形式を含めたモデルの仕様が変更されたため、Gokaku version 2.3以前のモデルは使用できません。
+**注意** Gokaku version 2.4では、出力の形式を含めたモデルの仕様が変更されたため、Gokaku version 2.3以前のモデルは使用できません。
 
 ## 実行方法
 Gokakuは以下のいずれかの方法で実行できます。
@@ -238,7 +238,7 @@ python src/run.py b10c512-1000.model --visits 1000 --timelimit 5
 
 ## テスト
 ビルド後に次のコマンドでCPUの盤面・推論・探索テストを実行します。
-```sh
+```
 PYTHONPATH=src python -m unittest discover -s src/tests -p '*_test.py' -v
 MYPYPATH=src python -m mypy --explicit-package-bases src
 ```

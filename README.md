@@ -241,7 +241,7 @@ python src/run.py b10c512-1000.model --visits 1000 --timelimit 5
 
 ## Tests
 After building, run the CPU board, inference, and search tests with:
-```sh
+```
 PYTHONPATH=src python -m unittest discover -s src/tests -p '*_test.py' -v
 MYPYPATH=src python -m mypy --explicit-package-bases src
 ```
