@@ -79,8 +79,8 @@ class InferenceTest(unittest.TestCase):
             values = expected[:, MODEL_VALUE_OFFSET] * 2 - 1
             np.testing.assert_allclose(processor.evaluate(boards), values, atol=1e-6)
 
-            # Native predict reconstructs SFEN with default rules; test that API on default boards.
-            for index in (0, 0, 3, 3):
+            # Native predict must preserve the draw limit when reconstructing SFEN.
+            for index in (0, 0, 2, 2, 3, 3):
                 board = boards[index]
                 self.assertAlmostEqual(
                     processor.native.predict(board.native),

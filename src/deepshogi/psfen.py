@@ -244,9 +244,17 @@ def convert_psfen_to_sfen(psfen: bytes) -> str:
 
     # Build SFEN format of board description
     def get_line_sfen(line: list[str]) -> str:
+        '''Encode one board rank as an SFEN string.
+
+        Args:
+            line (list[str]): Piece symbols, with empty strings for empty squares.
+        Returns:
+            str: Piece symbols with consecutive empty squares replaced by their count.
+        '''
         sfen_chars = []
         empty_count = 0
 
+        # Count empty squares until the next piece is encountered.
         for c in line:
             if c == '':
                 empty_count += 1
@@ -256,6 +264,7 @@ def convert_psfen_to_sfen(psfen: bytes) -> str:
                     empty_count = 0
                 sfen_chars.append(c)
 
+        # Include empty squares at the end of the rank.
         if empty_count > 0:
             sfen_chars.append(str(empty_count))
 

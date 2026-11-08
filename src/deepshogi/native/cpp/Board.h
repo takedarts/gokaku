@@ -37,9 +37,8 @@ class Board {
    * No pieces are placed on the board.
    * @param nyugyokuScoreBlack Points required for black's entering-king declaration
    * @param nyugyokuScoreWhite Points required for white's entering-king declaration
-   * @param drawTurn Number of moves until a draw
    */
-  Board(int8_t nyugyokuScoreBlack, int8_t nyugyokuScoreWhite, int16_t drawTurn);
+  Board(int8_t nyugyokuScoreBlack, int8_t nyugyokuScoreWhite);
 
   /**
    * Destroys the board object.
@@ -49,8 +48,9 @@ class Board {
   /**
    * Initializes the board from an SFEN-format string.
    * @param sfen SFEN-format string
+   * @param drawTurn Total move count at which the game is drawn.
    */
-  void initialize(const std::string& sfen);
+  void initialize(const std::string& sfen, int16_t drawTurn);
 
   /**
    * Moves a piece.

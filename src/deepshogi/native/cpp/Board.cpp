@@ -239,20 +239,22 @@ Board::Board()
  * Do not place any pieces on the board.
  * @param nyugyokuScoreBlack Points required for Black's entering-king declaration.
  * @param nyugyokuScoreWhite Points required for White's entering-king declaration.
- * @param drawTurn Move count at which the game is drawn.
  */
-Board::Board(int8_t nyugyokuScoreBlack, int8_t nyugyokuScoreWhite, int16_t drawTurn)
+Board::Board(int8_t nyugyokuScoreBlack, int8_t nyugyokuScoreWhite)
     : Board() {
   _nyugyokuScores[0] = nyugyokuScoreBlack;
   _nyugyokuScores[1] = nyugyokuScoreWhite;
-  _drawTurn = drawTurn;
 }
 
 /**
  * Initializes the board from an SFEN-format string.
  * @param sfen SFEN-format string
+ * @param drawTurn Total move count at which the game is drawn.
  */
-void Board::initialize(const std::string& sfen) {
+void Board::initialize(const std::string& sfen, int16_t drawTurn) {
+  // Preserve entering-king scores and set the draw limit for this initialization.
+  _drawTurn = drawTurn;
+
   // Initialize
   std::fill(std::begin(_cells), std::end(_cells), 0);
   _cellHash = 0;

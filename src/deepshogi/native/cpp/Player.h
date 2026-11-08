@@ -30,7 +30,6 @@ class Player {
    * @param searchMaxVisits Maximum node visit count.
    * @param nyugyokuScoreBlack Points required for Black's entering-king declaration.
    * @param nyugyokuScoreWhite Points required for White's entering-king declaration.
-   * @param drawTurn Move count at which the game is drawn.
    * @param sennichitePenalty Penalty assigned to repetition evaluations.
    * @param checkSearchDepth Checkmate search depth.
    * @param checkSearchNode Checkmate search node capacity.
@@ -41,7 +40,7 @@ class Player {
    */
   Player(
       InferenceProcessor* processor, int32_t threads, int32_t searchMaxVisits,
-      int32_t nyugyokuScoreBlack, int32_t nyugyokuScoreWhite, int32_t drawTurn,
+      int32_t nyugyokuScoreBlack, int32_t nyugyokuScoreWhite,
       float sennichitePenalty, int32_t checkSearchDepth, int32_t checkSearchNode,
       int32_t checkNodeDepth, float pucbConstantInit, float pucbConstantBase,
       float pucbMinVisitsRate);
@@ -54,8 +53,9 @@ class Player {
   /**
    * Initializes the state of the player object.
    * @param sfen SFEN of the initial position
+   * @param drawTurn Total move count at which the game is drawn.
    */
-  void initialize(const std::string& sfen);
+  void initialize(const std::string& sfen, int32_t drawTurn);
 
   /**
    * Gets the next turn color.
@@ -87,6 +87,12 @@ class Player {
    * @param stop True to stop the search.
    */
   void waitEvaluation(int32_t visits, float timelimit, bool stop);
+
+  /**
+   * Request stopping and wake threads waiting for search results.
+   * @return void
+   */
+  void stopEvaluation();
 
   /**
    * Get the candidate moves.
@@ -240,7 +246,12 @@ class Player {
   bool _stopped;
 
   /**
-   * true if the search is terminated.
+   * True if an explicit search stop has been requested.
+   */
+  bool _stopRequested;
+
+  /**
+   * True if the search has terminated.
    */
   bool _terminated;
 

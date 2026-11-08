@@ -17,25 +17,25 @@ cdef class NativeBoard:
     '''A class for managing the state of the board.'''
     cdef Board *board
 
-    def __cinit__(self, nyugyoku_scores: Tuple[int, int], draw_turn: int) -> None:
+    def __cinit__(self, nyugyoku_scores: Tuple[int, int]) -> None:
         '''Creates a board object.
         Args:
             nyugyoku_scores (Tuple[int, int]): Scores for entering-king declaration
-            draw_turn (int): Number of moves until a draw
         '''
-        self.board = new Board(nyugyoku_scores[0], nyugyoku_scores[1], draw_turn)
+        self.board = new Board(nyugyoku_scores[0], nyugyoku_scores[1])
 
     def __dealloc__(self) -> None:
         '''Destroys the board object.'''
         del self.board
 
-    def initialize(self, sfen: str) -> None:
+    def initialize(self, sfen: str, draw_turn: int) -> None:
         '''
         Initializes the board with a SFEN-format string.
         Args:
             sfen (str): SFEN-format string
+            draw_turn (int): Total move count at which the game is drawn.
         '''
-        self.board.initialize(sfen.encode('utf-8'))
+        self.board.initialize(sfen.encode('utf-8'), draw_turn)
 
     def play(
         self,

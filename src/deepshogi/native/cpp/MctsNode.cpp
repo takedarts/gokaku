@@ -22,8 +22,7 @@ MctsNode::MctsNode(MctsManager* manager)
       _manager(manager),
       _board(
           manager->getParameter().getNyugyokuScoreBlack(),
-          manager->getParameter().getNyugyokuScoreWhite(),
-          manager->getParameter().getDrawTurn()),
+          manager->getParameter().getNyugyokuScoreWhite()),
       _move(MOVE_INVALID),
       _probability(0.0f),
       _evaluating(false),
@@ -48,12 +47,15 @@ MctsNode::MctsNode(MctsManager* manager)
 /**
  * Initialize this node as the root position specified by SFEN.
  * @param sfen Position in SFEN format.
+ * @param drawTurn Total move count at which the game is drawn.
  */
-void MctsNode::initialize(const std::string sfen) {
+void MctsNode::initialize(const std::string sfen, int32_t drawTurn) {
   std::unique_lock<std::shared_mutex> node_lock(_mutex);
 
   _resetNode();
-  _board.initialize(sfen);
+
+  // Apply the current game rules to reused nodes as well.
+  _board.initialize(sfen, drawTurn);
   _move = MOVE_INVALID;
 }
 

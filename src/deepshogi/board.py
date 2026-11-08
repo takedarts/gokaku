@@ -38,8 +38,8 @@ class Board(object):
         if isinstance(nyugyoku_scores, int):
             nyugyoku_scores = (nyugyoku_scores, nyugyoku_scores)
 
-        self.native = NativeBoard(nyugyoku_scores, draw_turn)
-        self.native.initialize(initial_sfen)
+        self.native = NativeBoard(nyugyoku_scores)
+        self.native.initialize(initial_sfen, draw_turn)
 
     def play(
         self,

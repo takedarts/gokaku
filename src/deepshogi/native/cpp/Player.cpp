@@ -14,7 +14,6 @@ constexpr char DEFAULT_SFEN[] = "lnsgkgsnl/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1
  * @param searchMaxVisits Maximum node visit count.
  * @param nyugyokuScoreBlack Points required for Black's entering-king declaration.
  * @param nyugyokuScoreWhite Points required for White's entering-king declaration.
- * @param drawTurn Move count at which the game is drawn.
  * @param sennichitePenalty Penalty assigned to repetition evaluations.
  * @param checkSearchDepth Checkmate search depth.
  * @param checkSearchNode Checkmate search node capacity.
@@ -25,7 +24,7 @@ constexpr char DEFAULT_SFEN[] = "lnsgkgsnl/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1
  */
 Player::Player(
     InferenceProcessor* processor, int32_t threads, int32_t searchMaxVisits,
-    int32_t nyugyokuScoreBlack, int32_t nyugyokuScoreWhite, int32_t drawTurn,
+    int32_t nyugyokuScoreBlack, int32_t nyugyokuScoreWhite,
     float sennichitePenalty, int32_t checkSearchDepth, int32_t checkSearchNode,
     int32_t checkNodeDepth, float pucbConstantInit, float pucbConstantBase,
     float pucbMinVisitsRate)
@@ -40,7 +39,7 @@ Player::Player(
       _searchThread(),
       _updateThread(),
       _manager(MctsParameter(
-          nyugyokuScoreBlack, nyugyokuScoreWhite, drawTurn,
+          nyugyokuScoreBlack, nyugyokuScoreWhite,
           sennichitePenalty, pucbConstantInit, pucbConstantBase, pucbMinVisitsRate)),
       _root(_manager.createNode()),
       _searchMaxVisits(searchMaxVisits),
@@ -54,11 +53,12 @@ Player::Player(
       _updatingNodes(0),
       _paused(false),
       _stopped(true),
+      _stopRequested(false),
       _terminated(false),
       _canceled(false),
       _evaluatingNodes(),
       _checkingNodes() {
-  _root->initialize(DEFAULT_SFEN);
+  _root->initialize(DEFAULT_SFEN, 0x7fff);
   _searchThread = std::thread(&Player::_runSearch, this);
   _updateThread = std::thread(&Player::_runUpdate, this);
 }
@@ -82,8 +82,9 @@ Player::~Player() {
 /**
  * Initializes the state of the player object.
  * @param sfen SFEN of the initial position
+ * @param drawTurn Total move count at which the game is drawn.
  */
-void Player::initialize(const std::string& sfen) {
+void Player::initialize(const std::string& sfen, int32_t drawTurn) {
   std::unique_lock<std::mutex> lock(_mutex);
 
   // Pause the threads.
@@ -98,7 +99,7 @@ void Player::initialize(const std::string& sfen) {
 
   // Set the initial node as the root node
   _root = _manager.createNode();
-  _root->initialize(sfen);
+  _root->initialize(sfen, drawTurn);
 
   // Release the search tree including the old root node
   _manager.releaseTree(old_root);
@@ -185,6 +186,7 @@ void Player::startEvaluation(
 
   // Set to running state
   _stopped = false;
+  _stopRequested = false;
 
   // Resume the threads
   _paused = false;
@@ -205,7 +207,7 @@ void Player::waitEvaluation(int32_t visits, float timelimit, bool stop) {
   // wait until the root has been visited at least once.
   if (visits > 0) {
     _waitCondition.wait(lock, [this]() {
-      return _root->getVisits() > 0;
+      return _stopRequested || _root->getVisits() > 0;
     });
   }
 
@@ -218,7 +220,9 @@ void Player::waitEvaluation(int32_t visits, float timelimit, bool stop) {
 
   _waitCondition.wait_for(
       lock, timeout, [this, visits]() {
-        if (_root->getVisits() >= _searchMaxVisits) {
+        if (_stopRequested) {
+          return true;
+        } else if (_root->getVisits() >= _searchMaxVisits) {
           return true;
         } else if (_root->getVisits() >= visits) {
           return true;
@@ -233,6 +237,24 @@ void Player::waitEvaluation(int32_t visits, float timelimit, bool stop) {
 
   // Stop the search.
   _stopped = _stopped || stop;
+}
+
+/**
+ * Request stopping and wake threads waiting for search results.
+ * @return void
+ */
+void Player::stopEvaluation() {
+  {
+    // Stop new searches and cancel active tree traversal.
+    std::lock_guard<std::mutex> lock(_mutex);
+    _stopRequested = true;
+    _stopped = true;
+    _canceled.store(true, std::memory_order_release);
+  }
+
+  // Wake both first-visit and timed result waits.
+  _waitCondition.notify_all();
+  _searchCondition.notify_all();
 }
 
 /**
@@ -404,8 +426,10 @@ void Player::_runSearch() {
       // - [Search] No termination, stop, or pause is requested,
       //   fewer threads are running than the thread pool capacity,
       //   pending evaluations and visits remain below their respective limits.
-      _searchCondition.wait(lock, [this, max_evaluating_size]() {
+      _searchCondition.wait(lock, [this, max_evaluating_size, &last_root_node]() {
         if (_terminated && _isSearchIdle()) {
+          return true;
+        } else if (_stopRequested && last_root_node != nullptr) {
           return true;
         } else if (!_checkingNodes.empty()) {
           return true;
@@ -419,6 +443,19 @@ void Player::_runSearch() {
           return false;
         }
       });
+
+      // Cancel queued mate searches and register pending nodes on the next search.
+      if (_stopRequested) {
+        while (!_checkingNodes.empty()) {
+          _checkingNodes.pop();
+        }
+        last_root_node = nullptr;
+        _stopCondition.notify_all();
+        if (_terminated && _isSearchIdle()) {
+          break;
+        }
+        continue;
+      }
 
       // Exit the loop when the stopping conditions are met.
       if (_terminated && _isSearchIdle()) {
@@ -580,6 +617,14 @@ void Player::_runExpand() {
  * Executes checkmate search.
  */
 void Player::_runCheckmateSearch(MctsNode* node) {
+  {
+    // Skip tasks stopped while waiting in the thread pool.
+    std::lock_guard<std::mutex> lock(_mutex);
+    if (_stopRequested) {
+      return;
+    }
+  }
+
   // Use the PN search engine to search for long-sequence checkmate moves
   PnSearchEngine* engine = _pnsearch.acquire();
   int32_t remain_turn = node->getBoard().getDrawTurn() - node->getBoard().getTurn() + 1;

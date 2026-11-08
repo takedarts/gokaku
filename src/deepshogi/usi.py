@@ -1,7 +1,8 @@
 import logging
 import sys
 import time
-from threading import Thread
+from dataclasses import dataclass, field
+from threading import Event, RLock, Thread
 from typing import Any, Callable, Dict, List, TextIO, Tuple
 
 from .board import Board
@@ -18,6 +19,7 @@ from .config import (AUTHOR, BOARD_SIZE, COLOR_BLACK, COLOR_WHITE,
 from .exception import ShogiException
 from .player import Candidate, Player
 from .processor import Processor
+from .timelimit import get_timelimit
 
 LOGGER = logging.getLogger(__name__)
 
@@ -103,6 +105,17 @@ def usi_candidate_to_string(candidate: Candidate, index: int) -> str:
         text += f' depth {depth} pv {pv}'
 
     return text
+
+
+@dataclass
+class _SearchRequest:
+    '''Hold the stop event, response state, and candidates for one go request.'''
+
+    mode: str = 'normal'
+    stop_event: Event = field(default_factory=Event)
+    discard: bool = False
+    responded: bool = False
+    candidates: List[Candidate] = field(default_factory=list)
 
 
 class USIEngine(object):
@@ -209,6 +222,8 @@ class USIEngine(object):
 
         self.thread: Thread | None = None
         self.terminated = False
+        self._request: _SearchRequest | None = None
+        self._response_lock = RLock()
 
         self.startsfen = DEFAULT_INITIAL_SFEN
         self.moves: List[str] = []
@@ -254,8 +269,8 @@ class USIEngine(object):
 
     def run(self) -> None:
         '''Run the USI engine.'''
-        while True:
-            try:
+        try:
+            while True:
                 # Read command
                 command = self.reader.readline()
 
@@ -270,68 +285,160 @@ class USIEngine(object):
                 if len(command) == 0:
                     continue
 
-                # If a thread is running, terminate it
-                if self.thread is not None:
-                    self.terminated = True
-                    self.thread.join()
-
-                # Output log
+                # Decode the command without waiting for the search thread.
                 LOGGER.debug('USI command: %s', command)
+                tokens = command.split()
+                name = tokens[0].lower().replace('-', '_')
 
-                # If quit command, break loop
-                if command.lower().startswith('quit'):
-                    self.thread = None
+                # Exit through the shared search cleanup path.
+                if name == 'quit':
                     break
 
-                # Execute command in a separate thread
-                self.terminated = False
-                self.thread = Thread(target=self._perform, args=(command,))
-                self.thread.start()
-            except BaseException as e:
-                LOGGER.error('USI error: %s', e)
-                break
+                # Handle control commands while the search thread is active.
+                if name in ('isready', 'stop', 'ponderhit'):
+                    self._perform(command)
+                    continue
+
+                # Keep the active search running when an unknown command arrives.
+                if not hasattr(self, f'_perform_command_{name}'):
+                    self._perform(command)
+                    continue
+
+                # Stop the old search and suppress its response before changing state.
+                self._stop_search(discard=True)
+                self._join_search()
+
+                if name == 'go':
+                    # Register the request before starting its thread so early stops are accepted.
+                    options = [token.lower() for token in tokens[1:]]
+                    mode = (
+                        'ponder' if 'ponder' in options else
+                        'infinite' if 'infinite' in options else 'normal')
+
+                    request = _SearchRequest(mode=mode)
+                    with self._response_lock:
+                        self._request = request
+
+                    self.thread = Thread(target=self._perform, args=(command, request))
+                    self.thread.start()
+                else:
+                    self._perform(command)
+        except BaseException as e:
+            LOGGER.error('USI error: %s', e)
+        finally:
+            # Suppress further responses and stop searching on quit or end of input.
+            self.terminated = True
+            self._stop_search(discard=True)
+            self._join_search()
+
+    def _stop_search(self, discard: bool = False) -> None:
+        '''Notify the active search to stop.
+        Args:
+            discard (bool): True to suppress the old search response as well.
+        Returns:
+            None: No return value.
+        '''
+        # Notify only unanswered requests without restarting completed requests.
+        with self._response_lock:
+            request = self._request
+            active = request is not None and not request.responded
+
+            if request is not None and active:
+                request.discard = request.discard or discard
+                request.stop_event.set()
+
+        # Stop background searches too when changing positions or shutting down.
+        if self.player is not None and (active or discard):
+            self.player.stop_evaluation()
+
+    def _join_search(self) -> None:
+        '''Wait for the search thread after requesting it to stop.
+        Returns:
+            None: No return value.
+        '''
+        if self.thread is not None:
+            self.thread.join()
+            self.thread = None
+        with self._response_lock:
+            self._request = None
+
+    def _write_response(
+        self, message: str, request: _SearchRequest | None = None,
+    ) -> None:
+        '''Write response lines and prevent duplicate final responses.
+        Args:
+            message (str): Response text, possibly containing multiple lines.
+            request (_SearchRequest | None): Search request, or None for control commands.
+        Returns:
+            None: No return value.
+        '''
+        # Serialize response checks and writes against quit, completion, and stop.
+        with self._response_lock:
+            if request is not None:
+                if request.discard or request.responded:
+                    return
+                if any(line.startswith(('bestmove ', 'checkmate '))
+                       for line in message.splitlines()):
+                    request.responded = True
+            if message:
+                LOGGER.debug('USI response: %s', message)
+                self.writer.write(f'{message}\n')
+                self.writer.flush()
 
     def _get_timelimit(
         self,
-        remain_time: float = 0x7fffffff,
-        byoyomi_time: float = 0.0,
-        increment_time: float = 0.0,
+        remain_time: float,
+        byoyomi_time: float,
+        increment_time: float,
+        current_moves: int,
     ) -> float:
         '''Get thinking time.
         Args:
             remain_time (float): Remaining time
             byoyomi_time (float): Byoyomi time
             increment_time (float): Increment time
+            current_moves (int): Total moves already played by both sides.
         Returns:
             float: Thinking time
         '''
-        each_time = byoyomi_time + increment_time
-        margin_time = 20.0 if each_time < 2.0 else 0.0
-        timelimit = max(remain_time - margin_time, 0.0) * 0.1
-        timelimit += max(each_time - 2.0, 0.0)
+        # Ensure the active search draw limit is available.
+        if self.player is None:
+            raise ShogiException('player is not initialized')
 
+        # Calculate thinking time from the current move count and active draw limit.
+        timelimit = get_timelimit(
+            remain_time=remain_time,
+            byoyomi_time=byoyomi_time,
+            increment_time=increment_time,
+            current_moves=current_moves,
+            draw_turn=self.player.referee.draw_turn)
+
+        # Apply the thinking time cap configured for the USI engine.
         return min(self.timelimit, timelimit)
 
-    def _perform(self, command: str) -> None:
+    def _perform(self, command: str, request: _SearchRequest | None = None) -> None:
         '''Execute command.
         Args:
             command (str): Command
+            request (_SearchRequest | None): Search request, or None for control commands.
         '''
         while True:
             try:
                 # Execute process
-                stat, message, cont = self._perform_command(command)
+                if request is None:
+                    stat, message, cont = self._perform_command(command)
+                else:
+                    stat, message, cont = self._perform_command_go(
+                        command.split()[1:], request=request)
 
                 # Output response
                 if stat:
-                    LOGGER.debug('USI response: %s', message)
-                    self.writer.write(f'{message}\n')
-                    self.writer.flush()
+                    self._write_response(message, request)
                 elif len(message) > 0:
                     LOGGER.error('USI error: %s', message)
 
                 # If not continuing execution, break loop
-                if not cont or self.terminated:
+                if not cont or (request is not None and request.discard):
                     break
             except BaseException as e:
                 LOGGER.error('USI error: %s', e)
@@ -411,13 +518,15 @@ class USIEngine(object):
                 threads=self.threads,
                 max_visits=self.max_visits,
                 nyugyoku_scores=self.nyugyoku_scores,
-                draw_turn=self.draw_turn,
                 check_search_depth=self.check_search_depth,
                 check_search_node=self.check_search_node,
                 check_node_depth=self.check_node_depth,
                 pucb_constant_init=self.pucb_constant_init,
                 pucb_constant_base=self.pucb_constant_base,
                 pucb_min_visits_rate=self.pucb_min_visits_rate)
+
+            # Apply the configured draw limit to the initial position.
+            self.player.initialize(draw_turn=self.draw_turn)
 
         return (True, 'readyok', False)
 
@@ -437,7 +546,7 @@ class USIEngine(object):
         self.moves.clear()
 
         # Initialize player object
-        self.player.initialize(self.startsfen)
+        self.player.initialize(self.startsfen, draw_turn=self.draw_turn)
 
         return (False, '', False)
 
@@ -475,7 +584,7 @@ class USIEngine(object):
             moves = moves[len(self.moves):]
         # If not matching, initialize position
         else:
-            self.player.initialize(sfen)
+            self.player.initialize(sfen, draw_turn=self.draw_turn)
             self.startsfen = sfen
             self.moves.clear()
 
@@ -497,11 +606,13 @@ class USIEngine(object):
         self,
         args: List[str],
         analyze: bool = True,
+        request: _SearchRequest | None = None,
     ) -> Tuple[bool, str, bool]:
         '''Start thinking.
         Args:
             args (List[str]): Argument list
             analyze (bool): True to also output analysis results
+            request (_SearchRequest | None): Search request carrying stop and response state.
         Returns:
             Tuple[bool, str, bool]: (True to output, message, True to continue execution)
         '''
@@ -512,62 +623,77 @@ class USIEngine(object):
         # Parse arguments
         index = 0
         ponder = False
-        btime = -1.0
-        wtime = -1.0
-        byoyomi = 0.0
-        binc = 0.0
-        winc = 0.0
+        btime: float | None = None
+        wtime: float | None = None
+        byoyomi: float | None = None
+        binc: float | None = None
+        winc: float | None = None
 
         while index < len(args):
-            if args[index].lower() == 'ponder':
+            arg = args[index].lower()
+
+            if arg in ('ponder', 'infinite'):
                 ponder = True
                 index += 1
-            elif args[index].lower() == 'infinite':
-                ponder = True
-                index += 1
-            elif index + 1 < len(args) and args[index].lower() == 'btime':
+            elif arg == 'mate':
+                # Do not use mate-search time as the remaining time for normal search.
+                return (True, 'checkmate notimplemented', False)
+            elif index + 1 < len(args) and arg == 'btime':
                 btime = float(args[index + 1]) / 1000
                 index += 2
-            elif index + 1 < len(args) and args[index].lower() == 'wtime':
+            elif index + 1 < len(args) and arg == 'wtime':
                 wtime = float(args[index + 1]) / 1000
                 index += 2
-            elif index + 1 < len(args) and args[index].lower() == 'byoyomi':
+            elif index + 1 < len(args) and arg == 'byoyomi':
                 byoyomi = float(args[index + 1]) / 1000
                 index += 2
-            elif index + 1 < len(args) and args[index].lower() == 'binc':
+            elif index + 1 < len(args) and arg == 'binc':
                 binc = float(args[index + 1]) / 1000
                 index += 2
-            elif index + 1 < len(args) and args[index].lower() == 'winc':
+            elif index + 1 < len(args) and arg == 'winc':
                 winc = float(args[index + 1]) / 1000
                 index += 2
-            elif index + 1 < len(args) and args[index].lower() == 'mate':
-                if args[index + 1].lower() != 'infinite':
-                    btime = float(args[index + 1]) / 1000
-                    wtime = float(args[index + 1]) / 1000
-                index += 2
+            else:
+                # Skip unsupported or incomplete arguments without stalling the parser.
+                index += 1
 
-        # Calculate time limit
         # Use the default time limit when remaining time is unspecified.
+        board = self.player.get_board()
+        color = self.player.get_color()
+        remain_time = btime if color == COLOR_BLACK else wtime
+        increment_time = binc if color == COLOR_BLACK else winc
+
         # If ponder is specified in arguments, set time limit to 0.5 seconds
         if ponder:
+            # Use a 0.5-second update interval for pondering and infinite searches.
             timelimit = 0.5
-        elif self.player.get_color() == COLOR_BLACK and btime >= 0:
-            timelimit = self._get_timelimit(btime, byoyomi, binc)
-        elif self.player.get_color() == COLOR_WHITE and wtime >= 0:
-            timelimit = self._get_timelimit(wtime, byoyomi, winc)
+        elif remain_time is not None or byoyomi is not None or increment_time is not None:
+            # Default omitted time fields to zero and honor explicitly specified zeroes.
+            timelimit = self._get_timelimit(
+                remain_time=remain_time if remain_time is not None else 0.0,
+                byoyomi_time=byoyomi if byoyomi is not None else 0.0,
+                increment_time=increment_time if increment_time is not None else 0.0,
+                current_moves=board.get_turn())
         else:
-            timelimit = self._get_timelimit()
+            # Use the configured cap when no time fields are provided.
+            timelimit = self.timelimit
 
-        # Check game state
-        board = self.player.get_board()
-
+        # Check the game state.
         if len(board.get_legal_moves()) == 0:
+            # Defer terminal responses until stopped when pondering or searching infinitely.
+            if ponder:
+                return self._wait_terminal_response('bestmove resign', request)
+
             LOGGER.debug(
                 'GameEnd: winner=%s',
                 get_color_name(get_opposite_color(self.player.get_color())))
             return (True, 'bestmove resign', False)
 
         if board.is_nyugyoku():
+            # Defer winning declarations too when pondering or searching infinitely.
+            if ponder:
+                return self._wait_terminal_response('bestmove win', request)
+
             LOGGER.debug(
                 'GameEnd: winner=%s',
                 get_color_name(self.player.get_color()))
@@ -586,14 +712,18 @@ class USIEngine(object):
             and (not self.initial_white_only or self.player.get_color() == COLOR_WHITE))
 
         # Compute the move.
-        if random_move:
+        if request is not None and request.stop_event.is_set():
+            # Use available results without starting a new search after stopping.
+            candidates = request.candidates
+        elif random_move:
             LOGGER.debug('RandomMove: turn=%d', len(self.moves))
             candidates = [self.player.get_random_candidate(
                 width=self.initial_width,
                 timelimit=timelimit,
                 temperature=self.initial_temperature,
                 delta=self.initial_value_delta,
-                ponder=self.ponder)]
+                ponder=self.ponder,
+                stop_event=request.stop_event if request is not None else None)]
         else:
             LOGGER.debug(
                 'Evaluate: visits=%d, timelimit=%.1f, ponder=%s',
@@ -605,7 +735,21 @@ class USIEngine(object):
                 criterion=self.criterion,
                 equally=(self.multipv > 1),
                 candidate_width=self.multipv if self.multipv > 1 else 0,
-                ponder=self.ponder)
+                ponder=self.ponder,
+                stop_event=request.stop_event if request is not None else None)
+
+        # Return a legal move rather than resigning if stopped before evaluation.
+        if not candidates and request is not None and request.stop_event.is_set():
+            if request.candidates:
+                candidates = request.candidates
+            else:
+                src, dst, promote = board.get_legal_moves()[0]
+                move = usi_move_to_string(src, dst, promote)
+                return (True, f'bestmove {move}', False)
+
+        # Retain the latest results in case stopping occurs before the next update.
+        if request is not None:
+            request.candidates = candidates
 
         # Raise an error if no candidates exist, indicating invalid search settings.
         if candidates[0].src == -1:
@@ -616,7 +760,21 @@ class USIEngine(object):
 
         # When pondering, wait until the timeout expires.
         if ponder:
-            time.sleep(max(timelimit - elapsed_time, 0.0))
+            interval = max(timelimit - elapsed_time, 0.0)
+
+            if request is None:
+                # Wait for the update interval when no stop event is available.
+                time.sleep(interval)
+            else:
+                # Interrupt the update interval wait when stopping.
+                request.stop_event.wait(interval)
+
+        # Return results after stopping without further search or resignation checks.
+        stopped = request is not None and request.stop_event.is_set()
+
+        if stopped:
+            ponder = False
+            analyze = False
 
         # Create output
         results: List[str] = []
@@ -639,6 +797,7 @@ class USIEngine(object):
         win_chance = candidates[0].win_chance
 
         if (not ponder
+                and not stopped
                 and len(self.moves) > self.resign_turn
                 and win_chance < self.resign_threshold):
             LOGGER.debug('Resign: win_chance=%.2f', win_chance)
@@ -663,6 +822,25 @@ class USIEngine(object):
 
         return (True, '\n'.join(results), False)
 
+    def _wait_terminal_response(
+        self, message: str, request: _SearchRequest | None,
+    ) -> Tuple[bool, str, bool]:
+        '''Defer terminal pondering responses until a stop notification arrives.
+        Args:
+            message (str): Terminal response to return after stopping.
+            request (_SearchRequest | None): Current search request.
+        Returns:
+            Tuple[bool, str, bool]: Whether to output, response text, and whether to continue.
+        '''
+        # Keep requests from the input loop pending until a stop command arrives.
+        if request is None:
+            return (False, '', False)
+
+        # Wait for a stop notification.
+        request.stop_event.wait()
+
+        return (True, message, False)
+
     def _perform_command_stop(self, args: List[str]) -> Tuple[bool, str, bool]:
         '''Interrupt thinking.
         Args:
@@ -670,7 +848,10 @@ class USIEngine(object):
         Returns:
             Tuple[bool, str, bool]: (True to output, message, True to continue execution)
         '''
-        return self._perform_command_go(['btime', '0', 'wtime', '0'], analyze=False)
+        # Let the original search thread respond without starting another search.
+        self._stop_search()
+
+        return (False, '', False)
 
     def _perform_command_ponderhit(self, args: List[str]) -> Tuple[bool, str, bool]:
         '''Execute ponderhit command.
@@ -679,7 +860,16 @@ class USIEngine(object):
         Returns:
             Tuple[bool, str, bool]: (True to output, message, True to continue execution)
         '''
-        return self._perform_command_go(['btime', '0', 'wtime', '0'], analyze=False)
+        # Return existing results from the same search thread when pondering hits.
+        with self._response_lock:
+            request = self._request
+            pondering = request is not None and request.mode == 'ponder'
+
+        # Stop the search if it is pondering.
+        if pondering:
+            self._stop_search()
+
+        return (False, '', False)
 
     def _perform_command_gameover(self, args: List[str]) -> Tuple[bool, str, bool]:
         '''Notify game over.
@@ -693,7 +883,7 @@ class USIEngine(object):
             raise ShogiException('player is not initialized')
 
         # Initialize player object
-        self.player.initialize()
+        self.player.initialize(draw_turn=self.draw_turn)
 
         return (False, '', False)
 

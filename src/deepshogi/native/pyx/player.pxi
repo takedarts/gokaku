@@ -19,7 +19,6 @@ cdef class NativePlayer:
         threads: int,
         max_visits: int,
         nyugyoku_scores: Tuple[int, int],
-        draw_turn: int,
         sennichite_penalty: float,
         check_search_depth: int,
         check_search_node: int,
@@ -34,7 +33,6 @@ cdef class NativePlayer:
             threads (int): Number of threads.
             max_visits (int): Maximum node visit count.
             nyugyoku_scores (Tuple[int, int]): Points required for entering-king declarations.
-            draw_turn (int): Move count at which the game is drawn.
             sennichite_penalty (float): Penalty assigned to repetition evaluations.
             check_search_depth (int): Checkmate search depth.
             check_search_node (int): Checkmate search node capacity.
@@ -45,19 +43,21 @@ cdef class NativePlayer:
         '''
         self.player = new Player(
             processor.processor, threads, max_visits,
-            nyugyoku_scores[0], nyugyoku_scores[1], draw_turn,
+            nyugyoku_scores[0], nyugyoku_scores[1],
             sennichite_penalty, check_search_depth, check_search_node, check_node_depth,
             pucb_constant_init, pucb_constant_base, pucb_min_visits_rate)
 
-    def __dealloc__(self):
+    def __dealloc__(self) -> None:
+        '''Destroy the native player; return None.'''
         del self.player
 
-    def initialize(self, sfen: str) -> None:
+    def initialize(self, sfen: str, draw_turn: int) -> None:
         '''Reset the game to the initial position.
         Args:
             sfen (str): Position in SFEN format.
+            draw_turn (int): Total move count at which the game is drawn.
         '''
-        self.player.initialize(sfen.encode('utf-8'))
+        self.player.initialize(sfen.encode('utf-8'), draw_turn)
 
     def get_color(self) -> int:
         '''Returns the current turn color.
@@ -92,7 +92,24 @@ cdef class NativePlayer:
             temperature (float): Search temperature.
             noise (float): Strength of Gumbel noise during search.
         '''
-        self.player.startEvaluation(equally, candidate_width, temperature, noise)
+        cdef bool equally_bool = equally
+        cdef int32_t width_int = candidate_width
+        cdef float temperature_float = temperature
+        cdef float noise_float = noise
+
+        # Allow USI input while waiting for active tasks to finish.
+        with nogil:
+            self.player.startEvaluation(
+                equally_bool, width_int, temperature_float, noise_float)
+
+    def stop_evaluation(self) -> None:
+        '''Request stopping and wake waiting threads.
+        Returns:
+            None: No return value.
+        '''
+        # Allow other Python threads to run while notifying the C++ search.
+        with nogil:
+            self.player.stopEvaluation()
 
     def wait_evaluation(
         self,
@@ -122,7 +139,11 @@ cdef class NativePlayer:
             List[Tuple[Tuple[int, int], Tuple[int, int], bool, int, int, float, float,
                        float, List[int]]]: Candidate moves.
         '''
-        cdef vector[Candidate] candidates = self.player.getCandidates()
+        cdef vector[Candidate] candidates
+
+        # Allow stop and quit commands while draining search tasks.
+        with nogil:
+            candidates = self.player.getCandidates()
 
         results: List[Tuple[Tuple[int, int], Tuple[int, int], bool, int, int, float,
                             float, float, List[int]]] = []

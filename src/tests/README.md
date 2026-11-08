@@ -12,6 +12,11 @@ The Python tests need NumPy and CPU PyTorch, but do not require a trained model 
 `inference_test.py` traces a small probe model in a temporary directory to check the model layout.
 The threaded player lifecycle runs in a subprocess with a timeout to expose hangs.
 
+`usi_test.py` ports upstream's time allocation and asynchronous command regressions.
+`player_stop_test.py` ports its Python and native stop/restart regressions, using a small
+CPU model instead of the training model factory. It also checks changing draw limits.
+`board_test.py` ports native board reinitialization checks without record dependencies.
+
 Compile and run the standalone cache tests from the repository root:
 
 ```sh

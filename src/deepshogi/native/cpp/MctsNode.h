@@ -37,8 +37,9 @@ class MctsNode {
   /**
    * Sets this node as the initial board node specified in SFEN format.
    * @param sfen Board in SFEN format
+   * @param drawTurn Total move count at which the game is drawn.
    */
-  void initialize(const std::string sfen);
+  void initialize(const std::string sfen, int32_t drawTurn);
 
   /**
    * Apply inference results to this node's evaluation and move probabilities.

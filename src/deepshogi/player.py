@@ -2,6 +2,7 @@ import logging
 import math
 import random
 import time
+from threading import Event
 from typing import Dict, List, Tuple
 
 from .board import Board, is_hand_position
@@ -127,7 +128,7 @@ class Referee(object):
         '''Initialize referee object.
         Args:
             allowed_repeats (int): Allowed number of repeats of the same position (default is 3)
-            draw_turn (int): Number of moves for a draw (default is 512)
+            draw_turn (int): Number of moves for a draw (default is 512).
         '''
         self.allowed_repeats = allowed_repeats
         self.draw_turn = draw_turn
@@ -215,7 +216,6 @@ class Player(object):
         max_visits: int = DEFAULT_MAX_VISITS,
         initial_sfen: str = DEFAULT_INITIAL_SFEN,
         nyugyoku_scores: Tuple[int, int] = DEFAULT_NYUGYOKU_SCORES,
-        draw_turn: int = DEFAULT_DRAW_TURN,
         sennichite_penalty: float = 0.0,
         check_search_depth: int = DEFAULT_CHECK_SEARCH_DEPTH,
         check_search_node: int = DEFAULT_CHECK_SEARCH_NODE,
@@ -233,7 +233,6 @@ class Player(object):
             max_visits (int): Maximum node visit count.
             initial_sfen (str): Initial position in SFEN format.
             nyugyoku_scores (Tuple[int, int]): Points required for entering-king declarations.
-            draw_turn (int): Move count at which the game is drawn.
             sennichite_penalty (float): Penalty assigned to repetition evaluations.
             check_search_depth (int): Checkmate search depth.
             check_search_node (int): Checkmate search node capacity.
@@ -249,29 +248,36 @@ class Player(object):
 
         # Create the native object.
         self.native = NativePlayer(
-            processor.native, threads, max_visits, nyugyoku_scores, draw_turn,
+            processor.native, threads, max_visits, nyugyoku_scores,
             sennichite_penalty, check_search_depth, check_search_node, check_node_depth,
             pucb_constant_init, pucb_constant_base, pucb_min_visits_rate)
 
-        self.native.initialize(initial_sfen)
         self.sennichite_penalty = sennichite_penalty
 
         # Create the game referee.
-        self.referee = Referee(
-            allowed_repeats=allowed_repeats, draw_turn=draw_turn)
+        self.referee = Referee(allowed_repeats=allowed_repeats)
         self.check_next_repeats = check_next_repeats
 
-    def initialize(self, sfen: str = DEFAULT_INITIAL_SFEN) -> None:
+        # Set the initial position and default draw limit.
+        self.initialize(initial_sfen)
+
+    def initialize(
+        self,
+        sfen: str = DEFAULT_INITIAL_SFEN,
+        draw_turn: int = DEFAULT_DRAW_TURN,
+    ) -> None:
         '''Initialize state.
         Args:
             sfen (str): Initial board in SFEN format
+            draw_turn (int): Total move count at which the game is drawn.
         '''
         # Stop pondering if it is active.
         self.native.wait_evaluation(0, 0.0, True)
 
         # Initialize the position.
-        self.native.initialize(sfen)
+        self.native.initialize(sfen, draw_turn)
         self.referee.clear()
+        self.referee.draw_turn = draw_turn
 
     def play(
         self,
@@ -310,6 +316,7 @@ class Player(object):
         noise: float = 0.0,
         delta: float = 0.1,
         ponder: bool = False,
+        stop_event: Event | None = None,
     ) -> Candidate:
         '''Return a candidate sampled from the policy distribution.
         Args:
@@ -319,15 +326,28 @@ class Player(object):
             noise (float): Strength of Gumbel noise during search.
             delta (float): Acceptable drop in win probability.
             ponder (bool): True to continue searching.
+            stop_event (Event | None): Optional event requesting cancellation.
         Returns:
             Candidate: Selected candidate move.
         '''
         # Evaluate the position.
-        self.native.start_evaluation(True, width, 1.0, noise)
-        self.native.wait_evaluation(width + 1, timelimit, not ponder)
+        if stop_event is None or not stop_event.is_set():
+            self.native.start_evaluation(True, width, 1.0, noise)
+
+            # Notify stopping after startup if a stop request raced with startup.
+            if stop_event is not None and stop_event.is_set():
+                self.stop_evaluation()
+
+            self.native.wait_evaluation(width + 1, timelimit, not ponder)
 
         # Build the candidate list.
         candidates = [Candidate(*c) for c in self.native.get_candidates()]
+
+        # Return a legal fallback move when stopped before the first evaluation.
+        if not candidates and stop_event is not None and stop_event.is_set():
+            board = self.get_board()
+            src, dst, promote = board.get_legal_moves()[0]
+            return Candidate(src, dst, promote, board.get_color(), 0, 1.0, 0.0, 0.0, [])
 
         # Get the maximum predicted win rate
         max_win_chance = max(c.win_chance for c in candidates)
@@ -362,6 +382,7 @@ class Player(object):
         noise: float = 0.0,
         ponder: bool = False,
         extends: int = 0,
+        stop_event: Event | None = None,
     ) -> List[Candidate]:
         '''Evaluate the position.
         Args:
@@ -373,6 +394,7 @@ class Player(object):
             temperature (float): Search temperature.
             noise (float): Strength of Gumbel noise during search.
             ponder (bool): True to continue searching.
+            stop_event (Event | None): Optional event requesting cancellation.
             extends (int): Maximum number of search extensions.
         Returns:
             List[Candidate]: Candidate moves.
@@ -388,6 +410,10 @@ class Player(object):
 
         # Run the initial search and at most the requested number of extensions.
         while repeats <= extends:
+            # Honor stop requests before starting or extending a search.
+            if stop_event is not None and stop_event.is_set():
+                break
+
             # Skip extensions when less than one second remains.
             remaining_time = max(deadline - time.monotonic(), 0.0)
 
@@ -400,6 +426,10 @@ class Player(object):
             # Evaluate the position.
             LOGGER.debug('Evaluation: %d visits, %.1f seconds', target_visits, remaining_time)
             self.native.start_evaluation(equally, candidate_width, temperature, noise)
+
+            # Preserve stop requests even if native startup clears its stopped state.
+            if stop_event is not None and stop_event.is_set():
+                self.stop_evaluation()
 
             # Include time spent waiting for search startup in the time limit.
             remaining_time = max(deadline - time.monotonic(), 0.0)
@@ -414,6 +444,10 @@ class Player(object):
 
             # Reflect adjudicated game results in the evaluations.
             for candidate in candidates:
+                # Skip further candidate adjudication after stopping.
+                if stop_event is not None and stop_event.is_set():
+                    break
+
                 # Create a board after making the candidate move
                 board = self.get_board()
                 board.play(candidate.src, candidate.dst, candidate.promote)
@@ -436,6 +470,10 @@ class Player(object):
                 candidates.sort(key=lambda cand: cand.visits, reverse=True)
             else:
                 candidates.sort(key=lambda cand: cand.win_chance_lcb, reverse=True)
+
+            # Return available results without starting another search after stopping.
+            if stop_event is not None and stop_event.is_set():
+                break
 
             # Output log
             if LOGGER.isEnabledFor(logging.DEBUG):
@@ -462,8 +500,8 @@ class Player(object):
         return candidates
 
     def stop_evaluation(self) -> None:
-        '''Stop pondering if it is active.'''
-        self.native.wait_evaluation(0, 0.0, True)
+        '''Request stopping and wake native search waits; return None.'''
+        self.native.stop_evaluation()
 
     def get_color(self) -> int:
         '''Return the side to move.

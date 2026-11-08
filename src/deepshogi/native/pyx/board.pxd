@@ -10,8 +10,8 @@ from pyx.position cimport Position
 cdef extern from "cpp/Board.h" namespace "deepshogi":
     cdef cppclass Board:
         Board() except +
-        Board(int8_t nyugyokuScoreBlack, int8_t nyugyokuScoreWhite, int16_t drawTurn)
-        void initialize(const string& sfen)
+        Board(int8_t nyugyokuScoreBlack, int8_t nyugyokuScoreWhite)
+        void initialize(const string& sfen, int16_t drawTurn)
         MoveResult play(const Move& move) except +
         void undo(const MoveResult& result)
         vector[Position] getAttackers(const Position& position) const

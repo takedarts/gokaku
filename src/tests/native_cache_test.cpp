@@ -11,18 +11,18 @@ using namespace deepshogi;
 int main() {
   // Equal positions with different rule settings must use different inference keys.
   const std::string sfen = "4k4/9/9/9/9/9/9/9/4K4 b R 1";
-  Board first(28, 27, 20), second(31, 31, 20), third(28, 27, 21);
-  first.initialize(sfen);
-  second.initialize(sfen);
-  third.initialize(sfen);
+  Board first(28, 27), second(31, 31), third(28, 27);
+  first.initialize(sfen, 20);
+  second.initialize(sfen, 20);
+  third.initialize(sfen, 21);
   InferenceHash a(&first), b(&second), c(&third);
   assert((a < b || b < a) && (a < c || c < a));
   assert(BoardHash(&first).getCacheKey() == BoardHash(&second).getCacheKey());
 
   // Draw distances greater than fifty share the same normalized input and key.
-  Board distant(28, 27, 200), more_distant(28, 27, 300);
-  distant.initialize(sfen);
-  more_distant.initialize(sfen);
+  Board distant(28, 27), more_distant(28, 27);
+  distant.initialize(sfen, 200);
+  more_distant.initialize(sfen, 300);
   InferenceHash d(&distant), e(&more_distant);
   assert(!(d < e) && !(e < d));
 

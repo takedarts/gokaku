@@ -96,11 +96,11 @@ void InferenceProcessor::submit(
  */
 float InferenceProcessor::predict(Board* board) {
   // Create a temporary node.
-  MctsManager manager(MctsParameter(28, 27, 512, 0.0f, 1.0f, 18200.0f, 0.0f));
+  MctsManager manager(MctsParameter(28, 27, 0.0f, 1.0f, 18200.0f, 0.0f));
   MctsNode node(&manager);
 
   // Assign the board to the node.
-  node.initialize(board->getSfen());
+  node.initialize(board->getSfen(), board->getDrawTurn());
 
   // Create a mutex and condition variable to wait for inference to complete
   std::mutex mutex;
