@@ -23,13 +23,14 @@ class MoveResult {
   /**
    * Creates an object holding the specified move and captured piece.
    * Specify PIECE_EMPTY as the captured piece if no piece was captured.
-   * @param move Move object
+   * @param move Move being recorded
    * @param captured Integer value representing the type of the captured piece
    */
   MoveResult(const Move& move, uint8_t captured);
 
   /**
    * Uses the default copy constructor implementation.
+   * @param other Source object to copy.
    */
   MoveResult(const MoveResult& other) = default;
 
@@ -40,7 +41,7 @@ class MoveResult {
 
   /**
    * Returns the move.
-   * @return Move object representing the move
+   * @return Recorded move
    */
   inline Move getMove() const {
     return _move;

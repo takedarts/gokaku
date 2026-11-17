@@ -27,6 +27,7 @@ class PnSearchNode {
 
   /**
    * Deleted copy constructor.
+   * @param node Source object; copying is disabled.
    */
   PnSearchNode(const PnSearchNode& node) = delete;
 
@@ -37,30 +38,27 @@ class PnSearchNode {
 
   /**
    * Initialize this node as a leaf for the specified position.
-   * @param board const Board* target position.
-   * @param depth int32_t remaining search depth in moves.
-   * @return void
+   * @param board Target position.
+   * @param depth Remaining search depth in moves.
    */
   void initialize(const Board* board, int32_t depth);
 
   /**
    * Copy child references and search values without cloning the children themselves.
-   * @param node const PnSearchNode* source node.
-   * @return void
+   * @param node Source node.
    */
   void copyFrom(const PnSearchNode* node);
 
   /**
    * Expand the node into children, retaining already expanded children.
-   * @param engine PnSearchEngine* search engine.
-   * @param board Board* working position, restored on return.
-   * @return bool; false only when node capacity is exhausted.
+   * @param engine Search engine.
+   * @param board Working position, restored on return.
+   * @return False only when node capacity is exhausted.
    */
   bool expand(PnSearchEngine* engine, Board* board);
 
   /**
    * Update this node's PN/DN values, preserving terminal values when there are no children.
-   * @return void
    */
   void update();
 
@@ -68,7 +66,7 @@ class PnSearchNode {
    * Get the next child to search.
    * Return nullptr as the child when this node is terminal.
    * Minimize PN for attackers and DN for defenders, breaking ties by subtree size.
-   * @param depth int32_t current requested remaining depth.
+   * @param depth Current requested remaining depth.
    * @return Pair of the next move and child node.
    */
   std::pair<Move, PnSearchNode*> getNextNode(int32_t depth);
@@ -103,7 +101,7 @@ class PnSearchNode {
 
   /**
    * Return the PN value without a move limit.
-   * @return int32_t PN value without a move limit.
+   * @return PN value without a move limit.
    */
   inline int32_t getContPn() const {
     return _contPn;
@@ -111,7 +109,7 @@ class PnSearchNode {
 
   /**
    * Return the DN value without a move limit.
-   * @return int32_t DN value without a move limit.
+   * @return DN value without a move limit.
    */
   inline int32_t getContDn() const {
     return _contDn;
@@ -119,7 +117,7 @@ class PnSearchNode {
 
   /**
    * Return the PN value with a move limit.
-   * @return int32_t PN value with a move limit.
+   * @return PN value with a move limit.
    */
   inline int32_t getTermPn() const {
     return _termPn;
@@ -127,7 +125,7 @@ class PnSearchNode {
 
   /**
    * Return the DN value with a move limit.
-   * @return int32_t DN value with a move limit.
+   * @return DN value with a move limit.
    */
   inline int32_t getTermDn() const {
     return _termDn;
@@ -135,7 +133,7 @@ class PnSearchNode {
 
   /**
    * Return the depth associated with term values.
-   * @return int32_t depth associated with term values.
+   * @return Depth associated with term values.
    */
   inline int32_t getTermDepth() const {
     return _termDepth;
@@ -143,7 +141,7 @@ class PnSearchNode {
 
   /**
    * Return the internal value used to compare checkmate sequence lengths.
-   * @return int32_t internal value for comparing checkmate sequence lengths.
+   * @return Internal value for comparing checkmate sequence lengths.
    */
   inline int32_t getStep() const {
     return _step;
@@ -151,7 +149,7 @@ class PnSearchNode {
 
   /**
    * Return the aggregate subtree size used for search priority.
-   * @return int32_t aggregate subtree size.
+   * @return Aggregate subtree size.
    */
   inline int32_t getSize() const {
     return _size;
@@ -216,8 +214,8 @@ class PnSearchNode {
 
   /**
    * Return this child's PN and DN for the requested depth.
-   * @param depth int32_t requested remaining depth.
-   * @return std::pair<int32_t, int32_t> PN and DN values.
+   * @param depth Requested remaining depth.
+   * @return PN and DN values.
    */
   std::pair<int32_t, int32_t> _getValues(int32_t depth) const;
 };

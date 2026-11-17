@@ -27,7 +27,10 @@ class ProbeModel(torch.nn.Module):
     '''Expose input features and predictable values without a trained model dependency.'''
 
     def forward(self, inputs: torch.Tensor) -> torch.Tensor:
-        '''Map inputs (Tensor) to output features and game values (Tensor).'''
+        '''Map inputs (Tensor) to output features and game values (Tensor).
+        Returns:
+            torch.Tensor: Batched policy, game value, and auxiliary outputs.
+        '''
         # Echo all input features so native unpacking errors remain visible.
         policy = torch.cat((inputs, inputs), dim=1)[:, :MODEL_VALUE_OFFSET]
         info = inputs[:, MODEL_INFO_OFFSET:]
@@ -37,7 +40,10 @@ class ProbeModel(torch.nn.Module):
 
 
 def unpack(inputs: np.ndarray) -> np.ndarray:
-    '''Decode packed inputs (ndarray) into model features (ndarray).'''
+    '''Decode packed inputs (ndarray) into model features (ndarray).
+    Returns:
+        np.ndarray: Unpacked floating-point model input features.
+    '''
     # Decode the binary region independently using NumPy, then restore scalar features.
     bits = ((inputs[:, :-5, None].astype(np.uint32) >> np.arange(32)) & 1)
     expanded = bits.reshape(len(inputs), -1)[:, :MODEL_INPUT_SIZE].astype(np.float32)

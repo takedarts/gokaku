@@ -1,5 +1,7 @@
 #include "ThreadPool.h"
 
+#include <algorithm>
+
 namespace deepshogi {
 
 /**
@@ -12,7 +14,10 @@ ThreadPool::ThreadPool(int32_t threads)
       _threads(),
       _tasks(),
       _terminated(false) {
-  for (int32_t i = 0; i < threads; i++) {
+  // Ensure at least one worker exists to process tasks.
+  const int32_t thread_size = std::max(threads, 1);
+
+  for (int32_t i = 0; i < thread_size; i++) {
     _threads.emplace_back([this]() { _run(); });
   }
 }

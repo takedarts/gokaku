@@ -53,7 +53,7 @@ class Candidate {
 
   /**
    * Returns the move.
-   * @return Move
+   * @return Selected move.
    */
   inline Move getMove() const {
     return _move;
@@ -110,7 +110,7 @@ class Candidate {
   /**
    * Writes the candidate move information to an output stream.
    * @param os Output stream.
-   * @param candidate Candidate move object.
+   * @param candidate Candidate to format.
    * @return Output stream.
    */
   friend std::ostream& operator<<(std::ostream& os, const Candidate& candidate) {

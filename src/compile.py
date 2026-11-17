@@ -19,7 +19,10 @@ LOGGER = logging.getLogger(__name__)
 
 
 def parse_args() -> argparse.Namespace:
-    '''Parse TensorRT compilation arguments; return argparse.Namespace.'''
+    '''Parse TensorRT compilation arguments; return argparse.Namespace.
+    Returns:
+        argparse.Namespace: Parsed command-line arguments.
+    '''
     parser = argparse.ArgumentParser(description='Compile the TorchScript model to TensorRT model.')
     parser.add_argument('input', type=str, help='Path to the input TorchScript model.')
     parser.add_argument('output', type=str, help='Path to the output TensorRT model.')

@@ -47,6 +47,7 @@ class Position {
 
   /**
    * Creates an object by copying the specified coordinate.
+   * @param other Source object to copy.
    */
   Position(const Position& other) = default;
 
@@ -95,6 +96,8 @@ class Position {
 
   /**
    * Returns whether the coordinates are equal.
+   * @param other Position to compare with this object.
+   * @return True if this object and the compared object are equal.
    */
   inline bool operator==(const Position& other) const {
     return _index == other._index;
@@ -102,6 +105,8 @@ class Position {
 
   /**
    * Returns whether the coordinates are not equal.
+   * @param other Position to compare with this object.
+   * @return True if this object and the compared object differ.
    */
   inline bool operator!=(const Position& other) const {
     return _index != other._index;
@@ -109,6 +114,8 @@ class Position {
 
   /**
    * Returns true if this coordinate is less than the specified coordinate.
+   * @param other Position to compare with this object.
+   * @return True if this object precedes the compared object in ordering.
    */
   inline bool operator<(const Position& other) const {
     return _index < other._index;

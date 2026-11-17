@@ -1,6 +1,9 @@
 #include "Player.h"
 
+#include <algorithm>
+#include <limits>
 #include <sstream>
+#include <stdexcept>
 
 namespace deepshogi {
 
@@ -24,10 +27,9 @@ constexpr char DEFAULT_SFEN[] = "lnsgkgsnl/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1
  */
 Player::Player(
     InferenceProcessor* processor, int32_t threads, int32_t searchMaxVisits,
-    int32_t nyugyokuScoreBlack, int32_t nyugyokuScoreWhite,
-    float sennichitePenalty, int32_t checkSearchDepth, int32_t checkSearchNode,
-    int32_t checkNodeDepth, float pucbConstantInit, float pucbConstantBase,
-    float pucbMinVisitsRate)
+    int32_t nyugyokuScoreBlack, int32_t nyugyokuScoreWhite, float sennichitePenalty,
+    int32_t checkSearchDepth, int32_t checkSearchNode, int32_t checkNodeDepth,
+    float pucbConstantInit, float pucbConstantBase, float pucbMinVisitsRate)
     : _mutex(),
       _searchCondition(),
       _updateCondition(),
@@ -39,10 +41,11 @@ Player::Player(
       _searchThread(),
       _updateThread(),
       _manager(MctsParameter(
-          nyugyokuScoreBlack, nyugyokuScoreWhite,
-          sennichitePenalty, pucbConstantInit, pucbConstantBase, pucbMinVisitsRate)),
-      _root(_manager.createNode()),
-      _searchMaxVisits(searchMaxVisits),
+          nyugyokuScoreBlack, nyugyokuScoreWhite, sennichitePenalty,
+          pucbConstantInit, pucbConstantBase, pucbMinVisitsRate)),
+      _root(nullptr),
+      _searchMaxVisits(std::max(searchMaxVisits, 1)),
+      _maxEvaluatingSize(0),
       _checkSearchDepth(checkSearchDepth),
       _checkNodeDepth(checkNodeDepth),
       _searchEqually(false),
@@ -51,13 +54,32 @@ Player::Player(
       _searchNoise(0.0f),
       _runnings(0),
       _updatingNodes(0),
+      _pendingInferences(0),
       _paused(false),
       _stopped(true),
       _stopRequested(false),
+      _stopSequence(0),
       _terminated(false),
       _canceled(false),
       _evaluatingNodes(),
       _checkingNodes() {
+  // Reject a missing processor before creating the root or starting search threads.
+  if (processor == nullptr) {
+    throw std::invalid_argument("processor must not be null.");
+  }
+
+  // Validate the evaluation queue limit in a wider type and reuse it during search.
+  const int64_t evaluating_size =
+      static_cast<int64_t>(processor->getBatchSize()) * processor->getThreadSize();
+
+  if (evaluating_size > std::numeric_limits<int32_t>::max() / 10) {
+    throw std::invalid_argument("Evaluation queue size exceeds int32 range.");
+  }
+
+  _maxEvaluatingSize = static_cast<int32_t>(evaluating_size * 10);
+
+  // Create the board and start search and update threads after validating settings.
+  _root = _manager.createNode();
   _root->initialize(DEFAULT_SFEN, 0x7fff);
   _searchThread = std::thread(&Player::_runSearch, this);
   _updateThread = std::thread(&Player::_runUpdate, this);
@@ -69,6 +91,8 @@ Player::Player(
 Player::~Player() {
   {
     std::lock_guard<std::mutex> lock(_mutex);
+    // Cancel queued checkmate searches through normal shutdown and await running work.
+    _stopRequested = true;
     _canceled.store(true, std::memory_order_release);
     _terminated = true;
   }
@@ -87,6 +111,17 @@ Player::~Player() {
 void Player::initialize(const std::string& sfen, int32_t drawTurn) {
   std::unique_lock<std::mutex> lock(_mutex);
 
+  // Initialize the new position before changing the original board or execution state.
+  MctsNode* new_root = _manager.createNode();
+
+  try {
+    new_root->initialize(sfen, drawTurn);
+  } catch (...) {
+    // Return only the failed temporary node and preserve the original search tree.
+    _manager.releaseNode(new_root);
+    throw;
+  }
+
   // Pause the threads.
   _paused = true;
   _canceled.store(true, std::memory_order_release);
@@ -97,9 +132,8 @@ void Player::initialize(const std::string& sfen, int32_t drawTurn) {
   // Save the current root node.
   MctsNode* old_root = _root;
 
-  // Set the initial node as the root node
-  _root = _manager.createNode();
-  _root->initialize(sfen, drawTurn);
+  // Set the initial node as the root.
+  _root = new_root;
 
   // Release the search tree including the old root node
   _manager.releaseTree(old_root);
@@ -126,18 +160,34 @@ int32_t Player::getColor() {
 void Player::play(const Move& move) {
   std::unique_lock<std::mutex> lock(_mutex);
 
+  // Save paused and canceled states for restoration if the move fails.
+  const bool paused = _paused;
+  const bool canceled = _canceled.load(std::memory_order_acquire);
+
   // Pause the threads.
   _paused = true;
   _canceled.store(true, std::memory_order_release);
-  _stopCondition.wait(lock, [this]() {
-    return _isSearchIdle();
-  });
+
+  // Keep the original root until the move succeeds.
+  MctsNode* new_root;
+  try {
+    _stopCondition.wait(lock, [this]() {
+      return _isSearchIdle();
+    });
+    new_root = _root->getChild(move);
+  } catch (...) {
+    // Preserve stops received while waiting and resume if the search was runnable.
+    _paused = paused;
+    _canceled.store(canceled || _stopRequested, std::memory_order_release);
+    _searchCondition.notify_one();
+    throw;
+  }
 
   // Save the current root node.
   MctsNode* old_root = _root;
 
   // Set the new root node.
-  _root = old_root->getChild(move);
+  _root = new_root;
   _root->copyAppearedBoardHashes(old_root);
   _root->setAsRootNode();
 
@@ -203,11 +253,14 @@ void Player::startEvaluation(
 void Player::waitEvaluation(int32_t visits, float timelimit, bool stop) {
   std::unique_lock<std::mutex> lock(_mutex);
 
-  // If a positive search target is specified,
-  // wait until the root has been visited at least once.
+  // Distinguish a search that has not started from one stopped after waiting began.
+  const uint64_t stop_sequence = _stopSequence;
+
+  // Wait for a first visit or checkmate, also waking when stopped during the wait.
   if (visits > 0) {
-    _waitCondition.wait(lock, [this]() {
-      return _stopRequested || _root->getVisits() > 0;
+    _waitCondition.wait(lock, [this, stop_sequence]() {
+      return _stopRequested || _stopSequence != stop_sequence || _root->getVisits() > 0 ||
+             !_root->getCheckmateMoves().empty();
     });
   }
 
@@ -219,8 +272,8 @@ void Player::waitEvaluation(int32_t visits, float timelimit, bool stop) {
   std::chrono::milliseconds timeout(static_cast<int32_t>(timelimit * 1000.0f));
 
   _waitCondition.wait_for(
-      lock, timeout, [this, visits]() {
-        if (_stopRequested) {
+      lock, timeout, [this, visits, stop_sequence]() {
+        if (_stopped || _stopRequested || _stopSequence != stop_sequence) {
           return true;
         } else if (_root->getVisits() >= _searchMaxVisits) {
           return true;
@@ -235,13 +288,17 @@ void Player::waitEvaluation(int32_t visits, float timelimit, bool stop) {
         }
       });
 
-  // Stop the search.
-  _stopped = _stopped || stop;
+  // Do not let an older wait stop a search restarted after a stop.
+  if (stop && _stopSequence == stop_sequence) {
+    _stopped = true;
+    ++_stopSequence;
+    lock.unlock();
+    _waitCondition.notify_all();
+  }
 }
 
 /**
  * Request stopping and wake threads waiting for search results.
- * @return void
  */
 void Player::stopEvaluation() {
   {
@@ -249,6 +306,7 @@ void Player::stopEvaluation() {
     std::lock_guard<std::mutex> lock(_mutex);
     _stopRequested = true;
     _stopped = true;
+    ++_stopSequence;
     _canceled.store(true, std::memory_order_release);
   }
 
@@ -280,7 +338,7 @@ std::vector<Candidate> Player::getCandidates() {
   if (!checkmate_moves.empty()) {
     candidates.emplace_back(
         checkmate_moves[0], _root->getBoard().getColor(),
-        _root->getVisits() - 1,
+        std::max(_root->getVisits() - 1, 0),
         1.0f, _root->getBoard().getColor(),
         static_cast<float>(checkmate_moves.size()), checkmate_moves);
   }
@@ -338,7 +396,7 @@ int32_t Player::getVisits() {
 
 /**
  * Copies the board state to the specified board object.
- * @param board Board object
+ * @param board Destination for the current position
  */
 void Player::copyBoardTo(Board* board) {
   std::unique_lock<std::mutex> lock(_mutex);
@@ -400,13 +458,9 @@ std::string Player::toString() {
 }
 
 /**
- * Executes search.
+ * Run the search.
  */
 void Player::_runSearch() {
-  // Calculate the maximum number of evaluating nodes
-  const int32_t max_evaluating_size =
-      _processor->getBatchSize() * _processor->getThreadSize() * 10;
-
   // Create a variable to save the root node pointer
   // Used to detect changes in the root node
   MctsNode* last_root_node = nullptr;
@@ -418,15 +472,15 @@ void Player::_runSearch() {
     {
       std::unique_lock<std::mutex> lock(_mutex);
 
-      // Wait until search processing becomes executable
-      // Search can proceed under any of the following conditions.
-      // - [Stop] Termination is requested and no threads are running,
-      //   with no nodes being evaluated or awaiting checkmate search.
-      // - [Checkmate] Nodes are waiting for checkmate search.
-      // - [Search] No termination, stop, or pause is requested,
-      //   fewer threads are running than the thread pool capacity,
-      //   pending evaluations and visits remain below their respective limits.
-      _searchCondition.wait(lock, [this, max_evaluating_size, &last_root_node]() {
+      // Wait until search work can run.
+      // Wake when any of the following conditions holds.
+      // - [Stop] Shutdown is requested, no worker is running,
+      //     and no evaluation or queued checkmate search remains.
+      // - [Checkmate] A node is queued for checkmate search.
+      // - [Expand] No shutdown, stop, or pause is requested,
+      //     the number of running workers is below the pool size,
+      //     and evaluation queue and root visit counts are below their limits.
+      _searchCondition.wait(lock, [this, &last_root_node]() {
         if (_terminated && _isSearchIdle()) {
           return true;
         } else if (_stopRequested && last_root_node != nullptr) {
@@ -436,7 +490,7 @@ void Player::_runSearch() {
         } else if (
             !_terminated && !_stopped && !_paused &&
             _runnings < _threadPool.getSize() &&
-            _evaluatingNodes.size() < max_evaluating_size &&
+            _evaluatingNodes.size() < _maxEvaluatingSize &&
             _root->getVisits() < _searchMaxVisits) {
           return true;
         } else {
@@ -449,8 +503,13 @@ void Player::_runSearch() {
         while (!_checkingNodes.empty()) {
           _checkingNodes.pop();
         }
+
         last_root_node = nullptr;
         _stopCondition.notify_all();
+
+        // Wake the update thread too, since clearing the queue may allow it to exit.
+        _updateCondition.notify_one();
+
         if (_terminated && _isSearchIdle()) {
           break;
         }
@@ -498,8 +557,7 @@ void Player::_runSearch() {
       _runnings += 1;
     }
 
-    // If there is a checkmate search node, register the checkmate search processing in the thread
-    // pool
+    // Submit queued checkmate searches to the thread pool.
     if (checkmate_search_node != nullptr) {
       _threadPool.submit([this, checkmate_search_node]() {
         _runCheckmateSearch(checkmate_search_node);
@@ -533,12 +591,12 @@ void Player::_runSearch() {
 }
 
 /**
- * Return true if all search work is idle.
- * Call this method while holding the synchronization mutex.
- * @return True if all search work is idle.
+ * Return true when the search is idle.
+ * Call this function while holding the synchronization lock.
+ * @return True when the search is idle.
  */
 bool Player::_isSearchIdle() const {
-  return _runnings == 0 && _updatingNodes == 0 &&
+  return _runnings == 0 && _updatingNodes == 0 && _pendingInferences == 0 &&
          _evaluatingNodes.empty() && _checkingNodes.empty();
 }
 
@@ -583,21 +641,13 @@ void Player::_runExpand() {
     depth += 1;
   }
 
-  // The visit and playout count have been updated by the last executed `node->pickupNextNode()`
-  // Notify the waiting thread that the visit and playout count have been updated
-  _waitCondition.notify_all();
-
-  // If not yet evaluated
+  // If the node has not been evaluated,
   if (!node->isEvaluated()) {
-    // Register the node as a target in the board evaluation inference model
-    _processor->submit(node, [this](MctsNode* node) {
-      std::unique_lock<std::mutex> lock(_mutex);
-      _updateCondition.notify_one();
-    });
+    // submit it to the inference processor.
+    _submitInference(node);
 
-    // If the node is shallower than the specified depth and checkmate search has not been
-    // performed,
-    // add the node to the checkmate search waiting queue
+    // If the node is below the specified depth and checkmate search has not run,
+    // add it to the checkmate search queue.
     if (depth < _checkNodeDepth && !node->isCheckmateSearched()) {
       std::unique_lock<std::mutex> lock(_mutex);
       _checkingNodes.push(node);
@@ -611,10 +661,47 @@ void Player::_runExpand() {
     _evaluatingNodes.push(node);
     _updateCondition.notify_one();
   }
+
+  // Notify after passing through the waiters' mutex to prevent missed wakeups.
+  _waitCondition.notify_all();
+}
+
+/**
+ * Submit an inference request while tracking callback completion.
+ * @param node Node to evaluate.
+ */
+void Player::_submitInference(MctsNode* node) {
+  {
+    // Count the request before submission so the evaluated flag alone cannot imply idleness.
+    std::lock_guard<std::mutex> lock(_mutex);
+    _pendingInferences += 1;
+  }
+
+  // Submit outside the lock so a synchronous cache-hit callback can acquire the same mutex.
+  try {
+    _processor->submit(node, [this](MctsNode*) { _finishInference(); });
+  } catch (...) {
+    // Restore the pending count if submission fails before the request is accepted.
+    _finishInference();
+    throw;
+  }
+}
+
+/**
+ * Record inference completion or submission failure and notify waiting threads.
+ */
+void Player::_finishInference() {
+  // Hold the mutex through the last access because the player may be destroyed at zero.
+  std::lock_guard<std::mutex> lock(_mutex);
+  --_pendingInferences;
+  _updateCondition.notify_one();
+  _searchCondition.notify_one();
+  _stopCondition.notify_all();
 }
 
 /**
  * Executes checkmate search.
+ * @param node Node whose position is searched for checkmate.
  */
 void Player::_runCheckmateSearch(MctsNode* node) {
   {
@@ -633,8 +720,13 @@ void Player::_runCheckmateSearch(MctsNode* node) {
   node->searchCheckmateMoves(engine, search_depth);
   _pnsearch.release(engine);
 
-  // If a checkmate sequence is found in the root node, notify the waiting thread
-  if (node == _root && !node->getCheckmateMoves().empty()) {
+  // After releasing the node lock, synchronize mate notification with the waiters' mutex.
+  bool notify_waiters;
+  {
+    std::lock_guard<std::mutex> lock(_mutex);
+    notify_waiters = node == _root && !node->getCheckmateMoves().empty();
+  }
+  if (notify_waiters) {
     _waitCondition.notify_all();
   }
 }

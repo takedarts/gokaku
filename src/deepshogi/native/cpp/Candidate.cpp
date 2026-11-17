@@ -8,6 +8,7 @@ namespace deepshogi {
 /**
  * Create candidate move data.
  * @param move Move.
+ * @param color Side to move for this candidate.
  * @param visits Visit count.
  * @param policy Predicted move probability.
  * @param value Evaluation value.

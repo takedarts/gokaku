@@ -1,5 +1,9 @@
 #include "InferenceProcessor.h"
 
+#include <algorithm>
+#include <limits>
+#include <stdexcept>
+
 namespace deepshogi {
 
 /**
@@ -21,11 +25,41 @@ InferenceProcessor::InferenceProcessor(
       _cache(cacheSize),
       _executors(),
       _terminated(false),
-      _threadSize(static_cast<int32_t>(gpus.size()) * threadsPerGpu),
-      _batchSize(batchSize) {
-  for (int32_t gpu : gpus) {
-    _executors.emplace_back(std::make_unique<InferenceExecutor>(
-        this, model, gpu, fp16, deterministic, batchSize, threadsPerGpu));
+      _threadSize(0),
+      _batchSize(std::max(batchSize, 1)) {
+  // Validate the device list.
+  const int32_t max_value = std::numeric_limits<int32_t>::max();
+
+  if (gpus.empty() || gpus.size() > static_cast<size_t>(max_value)) {
+    throw std::invalid_argument("gpus must contain devices within int32 range.");
+  }
+
+  // Validate the thread count.
+  const int32_t threads_per_gpu = std::max(threadsPerGpu, 1);
+  const int64_t thread_size = static_cast<int64_t>(gpus.size()) * threads_per_gpu;
+
+  if (thread_size > max_value) {
+    throw std::invalid_argument("Inference thread count exceeds int32 range.");
+  }
+
+  // Set the thread count.
+  _threadSize = static_cast<int32_t>(thread_size);
+
+  // Let each owning class validate its devices and buffers.
+  try {
+    for (int32_t gpu : gpus) {
+      _executors.emplace_back(std::make_unique<InferenceExecutor>(
+          this, model, gpu, fp16, deterministic, _batchSize, threadsPerGpu));
+    }
+  } catch (...) {
+    {
+      std::lock_guard<std::mutex> lock(_queueMutex);
+      _terminated = true;
+    }
+
+    _queueCondition.notify_all();
+    _executors.clear();
+    throw;
   }
 }
 
@@ -105,12 +139,20 @@ float InferenceProcessor::predict(Board* board) {
   // Create a mutex and condition variable to wait for inference to complete
   std::mutex mutex;
   std::condition_variable cv;
+  bool finished = false;
+
+  // Submit without holding the mutex so synchronous callbacks can acquire it.
+  submit(&node, [&mutex, &cv, &finished](MctsNode*) {
+    std::lock_guard<std::mutex> lock(mutex);
+    finished = true;
+    // Protect local objects through their last access, including after setting completion.
+    cv.notify_one();
+  });
 
   // Run inference and wait for the node's evaluation value to be updated
   {
     std::unique_lock<std::mutex> lock(mutex);
-    submit(&node, [&cv](MctsNode*) { cv.notify_one(); });
-    cv.wait(lock, [&node] { return node.isEvaluated(); });
+    cv.wait(lock, [&finished]() { return finished; });
   }
 
   return node.getNodeValue();

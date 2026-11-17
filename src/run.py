@@ -12,10 +12,14 @@ from deepshogi.gpu import get_default_gpus
 from deepshogi.log import start_logging
 from deepshogi.processor import Processor
 from deepshogi.usi import USIEngine
+from deepshogi.validation import validate_inference_sizes, validate_positive_int
 
 
 def parse_args() -> argparse.Namespace:
-    '''Parse and normalize engine arguments; return argparse.Namespace.'''
+    '''Parse and normalize engine arguments; return argparse.Namespace.
+    Returns:
+        argparse.Namespace: Parsed command-line arguments.
+    '''
     parser = argparse.ArgumentParser(description='Run with USI mode.')
     parser.add_argument(
         'model', type=str, help='Path to the model file')
@@ -112,11 +116,25 @@ def parse_args() -> argparse.Namespace:
 
     args = parser.parse_args()
 
-    # Resolve the default GPU settings.
-    args.gpus, args.fp16 = get_default_gpus(args.gpus, args.fp16)
+    # Validate input settings before normalization or native construction.
+    try:
+        for name in ('threads', 'max_visits', 'batch_size', 'threads_per_gpu'):
+            validate_positive_int(name, getattr(args, name))
 
-    # Ensure the maximum visit count is at least the requested visit count.
+        # Resolve default devices and validate size calculations for the actual configuration.
+        args.gpus, args.fp16 = get_default_gpus(args.gpus, args.fp16)
+        validate_inference_sizes(len(args.gpus), args.batch_size, args.threads_per_gpu)
+    except ValueError as error:
+        parser.error(str(error))
+
+    # Ensure the maximum visits cover the requested visit count.
     args.max_visits = max(args.max_visits, args.visits)
+
+    # Reject overflow caused by increasing the maximum to match requested visits.
+    try:
+        validate_positive_int('max_visits', args.max_visits)
+    except ValueError as error:
+        parser.error(str(error))
 
     # Use the requested visit count when no cache size is specified.
     if args.cache_size is None:

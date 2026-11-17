@@ -6,7 +6,7 @@ namespace deepshogi {
 
 /**
  * Create a hash for caching inference results.
- * @param board Board object.
+ * @param board Position and rule settings used to form the inference cache key.
  */
 InferenceHash::InferenceHash(const Board* board)
     : _boardHash(board) {

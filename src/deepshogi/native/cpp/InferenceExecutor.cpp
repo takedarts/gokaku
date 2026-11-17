@@ -1,5 +1,9 @@
 #include "InferenceExecutor.h"
 
+#include <algorithm>
+#include <limits>
+#include <stdexcept>
+
 #include "InferenceProcessor.h"
 
 namespace deepshogi {
@@ -18,8 +22,8 @@ constexpr int32_t DIR_KL = 10;  // Move: knight left
 
 /**
  * Returns the policy index for the specified move.
- * @param board Board
- * @param move Move
+ * @param board Current position.
+ * @param move Move being examined.
  * @return Policy index
  */
 static int32_t getPolicyIndex(const Board* board, Move move) {
@@ -235,7 +239,7 @@ static int32_t getPolicyIndex(const Board* board, Move move) {
 
 /**
  * Creates the output mask data for the specified board.
- * @param board Board
+ * @param board Current position.
  * @param mask Buffer for mask data
  */
 static void getOutputMask(const Board* board, int32_t* mask) {
@@ -267,70 +271,96 @@ static void getOutputMask(const Board* board, int32_t* mask) {
 InferenceExecutor::InferenceExecutor(
     InferenceProcessor* processor, std::string file, int32_t gpu, bool fp16,
     bool deterministic, int32_t batchSize, int32_t threads)
-    : _mutex(),
-      _processor(processor),
+    : _processor(processor),
       _model(nullptr),
-      _file(file),
-      _gpu(gpu),
-      _fp16(fp16),
-      _deterministic(deterministic),
-      _batchSize(batchSize),
-      _threads(threads),
+      _batchSize(std::max(batchSize, 1)),
+      _threads(),
       _terminated(false),
-      _batchFillRates(threads) {
-  for (int32_t i = 0; i < threads; i++) {
-    _threads[i] = std::thread(&InferenceExecutor::_run, this, i);
+      _batchFillRates(),
+      _inputBuffers(),
+      _maskBuffers(),
+      _outputBuffers() {
+  // Validate the required processor pointer.
+  if (processor == nullptr) {
+    throw std::invalid_argument("processor must not be null.");
+  }
+
+  // Validate inference buffer capacities.
+  const int32_t buffer_width =
+      std::max({MODEL_INPUT_PACK_SIZE, MODEL_OUTPUT_PACK_SIZE, MODEL_OUTPUT_SIZE});
+
+  if (_batchSize > std::numeric_limits<int32_t>::max() / buffer_width) {
+    throw std::invalid_argument("batch_size is too large for inference buffers.");
+  }
+
+  // Validate the device and load the model during construction so errors reach the caller.
+  _model = std::make_unique<InferenceModel>(file, gpu, fp16, deterministic);
+
+  // Allocate all per-thread buffers and statistics before starting workers.
+  const int32_t thread_size = std::max(threads, 1);
+
+  _threads.reserve(thread_size);
+  _batchFillRates = std::vector<std::atomic<float>>(thread_size);
+  _inputBuffers.resize(thread_size);
+  _maskBuffers.resize(thread_size);
+  _outputBuffers.resize(thread_size);
+
+  for (int32_t i = 0; i < thread_size; i++) {
+    _inputBuffers[i].resize(_batchSize * MODEL_INPUT_PACK_SIZE);
+    _maskBuffers[i].resize(_batchSize * MODEL_OUTPUT_PACK_SIZE);
+    _outputBuffers[i].resize(_batchSize * MODEL_OUTPUT_SIZE);
     _batchFillRates[i].store(0.0f, std::memory_order_relaxed);
+  }
+
+  try {
+    for (int32_t i = 0; i < thread_size; i++) {
+      _threads.emplace_back(&InferenceExecutor::_run, this, i);
+    }
+  } catch (...) {
+    {
+      std::lock_guard<std::mutex> lock(_processor->_queueMutex);
+      _terminated = true;
+    }
+
+    _processor->_queueCondition.notify_all();
+
+    for (auto& thread : _threads) {
+      thread.join();
+    }
+
+    throw;
   }
 }
 
 /**
- * Destroys the inference manager object.
+ * Destroy the inference executor.
  */
 InferenceExecutor::~InferenceExecutor() {
-  // Wait for threads to finish
+  {
+    std::lock_guard<std::mutex> lock(_processor->_queueMutex);
+    _terminated = true;
+  }
+
+  _processor->_queueCondition.notify_all();
+
   for (auto& thread : _threads) {
     thread.join();
   }
-
-  // Destroy the inference model object
-  {
-    std::lock_guard<std::mutex> lock(_mutex);
-
-    if (_model != nullptr) {
-      delete _model;
-      _model = nullptr;
-    }
-  }
 }
 
 /**
- * Runs inference synchronously.
- * @param inputs Input data
- * @param masks Output data mask
- * @param outputs Output data
- * @param size Number of evaluation data items
+ * Run inference synchronously.
+ * @param inputs Input data.
+ * @param masks Output mask.
+ * @param outputs Output data.
+ * @param size Number of input samples.
  */
 void InferenceExecutor::execute(int32_t* inputs, int32_t* masks, float* outputs, int32_t size) {
-  // Set the device to use
-  torch::DeviceGuard device_guard(InferenceModel::getDevice(_gpu));
-
-  // Get the model object
-  // Create the model object if it has not been created yet
-  InferenceModel* model = nullptr;
-
-  {
-    std::lock_guard<std::mutex> lock(_mutex);
-
-    if (_model == nullptr) {
-      _model = new InferenceModel(_file, _gpu, _fp16, _deterministic);
-    }
-
-    model = _model;
-  }
+  // Set the execution device.
+  torch::DeviceGuard device_guard(_model->getDevice());
 
   // For non-CPU devices, run inference with a fixed batch size
-  if (!_model->isCpu()) {
+  if (!_model->getDevice().is_cpu()) {
     std::vector<int32_t> input_buffer(_batchSize * MODEL_INPUT_PACK_SIZE);
     std::vector<int32_t> mask_buffer(_batchSize * MODEL_OUTPUT_PACK_SIZE);
     std::vector<float> output_buffer(_batchSize * MODEL_OUTPUT_SIZE);
@@ -346,35 +376,26 @@ void InferenceExecutor::execute(int32_t* inputs, int32_t* masks, float* outputs,
 
       std::copy(inputs_begin, inputs_begin + inputs_size, input_buffer.data());
       std::copy(masks_begin, masks_begin + masks_size, mask_buffer.data());
-      model->forward(input_buffer.data(), mask_buffer.data(), output_buffer.data(), _batchSize);
+      _model->forward(input_buffer.data(), mask_buffer.data(), output_buffer.data(), _batchSize);
       std::copy(output_buffer.data(), output_buffer.data() + outputs_size, outputs_begin);
     }
   } else {
-    model->forward(inputs, masks, outputs, size);
+    _model->forward(inputs, masks, outputs, size);
   }
 }
 
 /**
- * Method executed on a thread.
- * @param threadIndex Thread index
+ * Run an inference worker.
+ * @param threadIndex Worker thread index.
  */
 void InferenceExecutor::_run(int32_t threadIndex) {
-  // Set the device to use
-  torch::DeviceGuard device_guard(InferenceModel::getDevice(_gpu));
+  // Set the execution device.
+  torch::DeviceGuard device_guard(_model->getDevice());
 
-  // Create buffers for input data, mask data, and output data
-  std::vector<int32_t> input_buffer(_batchSize * MODEL_INPUT_PACK_SIZE);
-  std::vector<int32_t> mask_buffer(_batchSize * MODEL_OUTPUT_PACK_SIZE);
-  std::vector<float> output_buffer(_batchSize * MODEL_OUTPUT_SIZE);
-
-  // Create the model object if it has not been created yet
-  {
-    std::lock_guard<std::mutex> lock(_mutex);
-
-    if (_model == nullptr) {
-      _model = new InferenceModel(_file, _gpu, _fp16, _deterministic);
-    }
-  }
+  // Use the per-thread buffers allocated during construction.
+  auto& input_buffer = _inputBuffers[threadIndex];
+  auto& mask_buffer = _maskBuffers[threadIndex];
+  auto& output_buffer = _outputBuffers[threadIndex];
 
   // Repeatedly dequeue scheduled inference executions, build batches,
   // run inference, and apply results to nodes
@@ -386,11 +407,11 @@ void InferenceExecutor::_run(int32_t threadIndex) {
       // Acquire the lock for synchronization
       std::unique_lock<std::mutex> lock(_processor->_queueMutex);
 
-      // Wait if there are no scheduled inference executions
-      // [Stop] End the wait when termination is requested and the queue is empty.
-      // [inference] If there are scheduled inference executions, exit the wait
+      // Wait until an inference request arrives.
+      // [Stop] Wake when shutdown is requested and the queue is empty.
+      // [Infer] Wake when an inference request is queued.
       _processor->_queueCondition.wait(lock, [this] {
-        if (_processor->_terminated && _processor->_queue.empty()) {
+        if ((_terminated || _processor->_terminated) && _processor->_queue.empty()) {
           return true;
         } else if (!_processor->_queue.empty()) {
           return true;
@@ -399,8 +420,8 @@ void InferenceExecutor::_run(int32_t threadIndex) {
         }
       });
 
-      // Exit the loop if inference processing should terminate
-      if (_processor->_terminated && _processor->_queue.empty()) {
+      // Exit the loop when inference should terminate.
+      if ((_terminated || _processor->_terminated) && _processor->_queue.empty()) {
         break;
       }
 
@@ -431,7 +452,8 @@ void InferenceExecutor::_run(int32_t threadIndex) {
     // Run inference
     // On CPU, match the batch size to the actual number of inputs.
     // For non-CPU devices, run inference with a fixed batch size
-    int32_t batch_size = (_model->isCpu()) ? static_cast<int32_t>(batch.size()) : _batchSize;
+    int32_t batch_size =
+        _model->getDevice().is_cpu() ? static_cast<int32_t>(batch.size()) : _batchSize;
 
     _model->forward(input_buffer.data(), mask_buffer.data(), output_buffer.data(), batch_size);
 

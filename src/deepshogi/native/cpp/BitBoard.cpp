@@ -131,7 +131,7 @@ int8_t BitBoard::popRightmostBitIndex() {
 
 /**
  * Returns the result of computing the bitwise NOT of the bit string.
- * @return BitBoard object with the bitwise NOT applied
+ * @return Bit string with the bitwise NOT applied
  */
 BitBoard BitBoard::operator~() const {
   return BitBoard(~_lower & LOWER_MASK, ~_upper & UPPER_MASK);
@@ -140,7 +140,7 @@ BitBoard BitBoard::operator~() const {
 /**
  * Left-shifts the bit string and assigns the result to this object.
  * @param shift Number of bits to shift
- * @return Reference to the BitBoard object with the left-shifted result
+ * @return Reference to the Bit string with the left-shifted result
  */
 BitBoard& BitBoard::operator<<=(int32_t shift) {
   if (shift < UPPER_SIZE) {
@@ -163,7 +163,7 @@ BitBoard& BitBoard::operator<<=(int32_t shift) {
 /**
  * Right-shifts the bit string and assigns the result to this object.
  * @param shift Number of bits to shift
- * @return Reference to the BitBoard object with the right-shifted result
+ * @return Reference to the Bit string with the right-shifted result
  */
 BitBoard& BitBoard::operator>>=(int32_t shift) {
   if (shift < UPPER_SIZE) {

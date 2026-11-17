@@ -20,9 +20,9 @@ class PnSearchEngine {
  private:
   /**
    * Allow PnSearchNode::expand() to obtain search nodes.
-   * @param engine PnSearchEngine* search engine.
-   * @param board Board* working search position.
-   * @return bool; false only when node capacity is exhausted.
+   * @param engine Search engine.
+   * @param board Working search position.
+   * @return False only when node capacity is exhausted.
    */
   friend bool PnSearchNode::expand(PnSearchEngine* engine, Board* board);
 
@@ -104,6 +104,7 @@ class PnSearchEngine {
 
   /**
    * Deleted copy constructor.
+   * @param engine Source object; copying is disabled.
    */
   PnSearchEngine(const PnSearchEngine& engine) = delete;
 
@@ -116,14 +117,14 @@ class PnSearchEngine {
    * Search for and return a checkmating move sequence.
    * Return an empty vector if no checkmate is found.
    * @param board Object holding the board position.
-   * @param depth int32_t initial depth, rounded to odd; may increase during search.
+   * @param depth Initial depth, rounded to odd; may increase during search.
    * @return Checkmating move sequence.
    */
   std::vector<Move> getCheckmateMoves(const Board* board, int32_t depth);
 
   /**
    * Return the number of search nodes in use.
-   * @return int32_t number of search nodes in use.
+   * @return Number of search nodes in use.
    */
   inline int32_t getNodeCount() const {
     return _nodeCount;
@@ -131,7 +132,7 @@ class PnSearchEngine {
 
   /**
    * Return the number of nodes cloned to handle loops.
-   * @return int32_t number of search nodes cloned to handle loops.
+   * @return Number of search nodes cloned to handle loops.
    */
   inline int32_t getCloneCount() const {
     return _cloneCount;
@@ -175,19 +176,19 @@ class PnSearchEngine {
 
   /**
    * Return effective frame thresholds from the current aggregates.
-   * @param frame const SearchFrame& search frame.
-   * @param choice const SearchChoice& latest aggregates.
-   * @return SearchLimits effective thresholds.
+   * @param frame Search frame.
+   * @param choice Latest aggregates.
+   * @return Effective frame thresholds.
    */
   SearchLimits _getLimits(
       const SearchFrame& frame, const SearchChoice& choice) const;
 
   /**
    * Return the selected child's frame from parent thresholds and sibling values.
-   * @param frame const SearchFrame& parent frame.
-   * @param choice const SearchChoice& selection result.
-   * @param limits const SearchLimits& effective parent thresholds.
-   * @return SearchFrame child frame.
+   * @param frame Parent frame.
+   * @param choice Selection result.
+   * @param limits Effective parent thresholds.
+   * @return Child search frame.
    */
   SearchFrame _makeChildFrame(
       const SearchFrame& frame, const SearchChoice& choice,
@@ -195,8 +196,8 @@ class PnSearchEngine {
 
   /**
    * Return the preferred child, runner-up value, and unsaturated PN and DN.
-   * @param node PnSearchNode* node to aggregate.
-   * @return SearchChoice selection result.
+   * @param node Node to aggregate.
+   * @return Preferred child and aggregate search values.
    */
   SearchChoice _selectDfpn(const PnSearchNode* node) const;
 
@@ -205,8 +206,8 @@ class PnSearchEngine {
    * Obtain a regular node even when the remaining depth is zero.
    * Return nullptr when the node capacity is exhausted.
    * @param board Position to search.
-   * @param depth int32_t remaining search depth in moves.
-   * @param noCache bool; true skips both cache lookup and insertion.
+   * @param depth Remaining search depth in moves.
+   * @param noCache True to skip both cache lookup and insertion.
    * @return Pointer to the search node.
    */
   PnSearchNode* _getNode(
@@ -214,14 +215,14 @@ class PnSearchEngine {
 
   /**
    * Replace the detected path's defensive node with the shared terminal and align the path.
-   * @param board Board* detected position; replacement position on success.
-   * @param parents std::vector<PnSearchNode*>& ancestor list.
-   * @param history std::vector<MoveResult>& move history.
-   * @param pathHashes std::vector<BoardHash>& ancestor positions.
-   * @param loopIndex size_t index of the loop ancestor.
-   * @param node PnSearchNode* regular node where the loop was detected.
-   * @param attacker bool indicating whether the current position is attacking.
-   * @return bool; false on capacity exhaustion, without changing connections.
+   * @param board Detected position; replacement position on success.
+   * @param parents Ancestor list.
+   * @param history Move history.
+   * @param pathHashes Ancestor positions.
+   * @param loopIndex Index of the loop ancestor.
+   * @param node Regular node where the loop was detected.
+   * @param attacker True if the current position is attacking.
+   * @return False on capacity exhaustion, without changing connections.
    */
   bool _replaceLoop(
       Board* board, std::vector<PnSearchNode*>& parents,
@@ -230,11 +231,11 @@ class PnSearchEngine {
 
   /**
    * Clone nodes after the loop ancestor through the current node's parent outside the cache.
-   * @param board Board* current position, preserved on return.
+   * @param board Current position, preserved on return.
    * @param parents Reference to the ancestor array; updated over the cloned segment.
-   * @param history const std::vector<MoveResult>& move history from the root.
-   * @param loopIndex size_t index of the loop ancestor.
-   * @return bool; false on capacity exhaustion, without changing connections.
+   * @param history Move history from the root.
+   * @param loopIndex Index of the loop ancestor.
+   * @return False on capacity exhaustion, without changing connections.
    */
   bool _detachLoop(
       Board* board, std::vector<PnSearchNode*>& parents,

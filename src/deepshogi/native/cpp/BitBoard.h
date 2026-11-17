@@ -41,6 +41,7 @@ class BitBoard {
 
   /**
    * Constructs an object by copying the specified bit string.
+   * @param other Source object to copy.
    */
   BitBoard(const BitBoard& other) = default;
 
@@ -97,21 +98,21 @@ class BitBoard {
 
   /**
    * Returns the result of computing the bitwise NOT of the bit string.
-   * @return BitBoard object with the bitwise NOT applied
+   * @return Bit string with the bitwise NOT applied
    */
   BitBoard operator~() const;
 
   /**
    * Left-shifts the bit string and assigns the result to this object.
    * @param shift Number of bits to shift
-   * @return Reference to the BitBoard object with the left-shifted result
+   * @return Reference to the Bit string with the left-shifted result
    */
   BitBoard& operator<<=(int32_t shift);
 
   /**
    * Right-shifts the bit string and assigns the result to this object.
    * @param shift Number of bits to shift
-   * @return Reference to the BitBoard object with the right-shifted result
+   * @return Reference to the Bit string with the right-shifted result
    */
   BitBoard& operator>>=(int32_t shift);
 
@@ -157,6 +158,8 @@ class BitBoard {
 
   /**
    * Returns true if the bit strings are equal.
+   * @param other Bit string to compare with this object.
+   * @return True if this object and the compared object are equal.
    */
   inline bool operator==(const BitBoard& other) const {
     return _lower == other._lower && _upper == other._upper;
@@ -164,6 +167,8 @@ class BitBoard {
 
   /**
    * Returns true if the bit strings are different.
+   * @param other Bit string to compare with this object.
+   * @return True if this object and the compared object differ.
    */
   inline bool operator!=(const BitBoard& other) const {
     return !(*this == other);
@@ -171,8 +176,8 @@ class BitBoard {
 
   /**
    * Computes the bitwise AND with the bit string and assigns the result to this object.
-   * @param other BitBoard object to AND with
-   * @return Reference to the BitBoard object with the AND result
+   * @param other Bit string to AND with
+   * @return Reference to the Bit string with the AND result
    */
   inline BitBoard& operator&=(const BitBoard& other) {
     _lower &= other._lower;
@@ -182,8 +187,8 @@ class BitBoard {
 
   /**
    * Computes the bitwise OR with the bit string and assigns the result to this object.
-   * @param other BitBoard object to OR with
-   * @return Reference to the BitBoard object with the OR result
+   * @param other Bit string to OR with
+   * @return Reference to the Bit string with the OR result
    */
   inline BitBoard& operator|=(const BitBoard& other) {
     _lower |= other._lower;
@@ -193,8 +198,8 @@ class BitBoard {
 
   /**
    * Computes the bitwise XOR with the bit string and assigns the result to this object.
-   * @param other BitBoard object to XOR with
-   * @return Reference to the BitBoard object with the XOR result
+   * @param other Bit string to XOR with
+   * @return Reference to the Bit string with the XOR result
    */
   inline BitBoard& operator^=(const BitBoard& other) {
     _lower ^= other._lower;
@@ -204,8 +209,8 @@ class BitBoard {
 
   /**
    * Returns the bitwise AND of the bit strings.
-   * @param other BitBoard object to AND with
-   * @return BitBoard object with the AND result
+   * @param other Bit string to AND with
+   * @return Bit string with the AND result
    */
   inline BitBoard operator&(const BitBoard& other) const {
     return BitBoard(_lower & other._lower, _upper & other._upper);
@@ -213,8 +218,8 @@ class BitBoard {
 
   /**
    * Returns the bitwise OR of the bit strings.
-   * @param other BitBoard object to OR with
-   * @return BitBoard object with the OR result
+   * @param other Bit string to OR with
+   * @return Bit string with the OR result
    */
   inline BitBoard operator|(const BitBoard& other) const {
     return BitBoard(_lower | other._lower, _upper | other._upper);
@@ -222,8 +227,8 @@ class BitBoard {
 
   /**
    * Returns the bitwise XOR of the bit strings.
-   * @param other BitBoard object to XOR with
-   * @return BitBoard object with the XOR result
+   * @param other Bit string to XOR with
+   * @return Bit string with the XOR result
    */
   inline BitBoard operator^(const BitBoard& other) const {
     return BitBoard(_lower ^ other._lower, _upper ^ other._upper);
@@ -232,7 +237,7 @@ class BitBoard {
   /**
    * Returns the result of left-shifting the bit string.
    * @param shift Number of bits to shift
-   * @return BitBoard object with the left-shifted result
+   * @return Bit string with the left-shifted result
    */
   inline BitBoard operator<<(int32_t shift) const {
     BitBoard result(*this);
@@ -243,7 +248,7 @@ class BitBoard {
   /**
    * Returns the result of right-shifting the bit string.
    * @param shift Number of bits to shift
-   * @return BitBoard object with the right-shifted result
+   * @return Bit string with the right-shifted result
    */
   inline BitBoard operator>>(int32_t shift) const {
     BitBoard result(*this);
@@ -254,7 +259,7 @@ class BitBoard {
   /**
    * Compares the bit strings in order.
    * The upper part is compared first; if equal, the lower part is compared.
-   * @param other BitBoard object to compare against
+   * @param other Bit string to compare against
    * @return true if this object's bit string is less than the other's
    */
   inline bool operator<(const BitBoard& other) const {
@@ -268,7 +273,7 @@ class BitBoard {
   /**
    * Writes the string representation of the bit string to an output stream.
    * @param os Output stream
-   * @param bitboard BitBoard object
+   * @param bitboard Bit string
    * @return Output stream
    */
   friend std::ostream& operator<<(std::ostream& os, const BitBoard& bitboard) {

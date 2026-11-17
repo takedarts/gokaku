@@ -3,6 +3,7 @@
 #include "BoardHash.h"
 
 #include <algorithm>
+#include <cmath>
 #include <random>
 
 namespace deepshogi {
@@ -171,6 +172,12 @@ MctsNode* MctsNode::pickupNextNode(
     current_node = current_node->_parent;
   }
 
+  // Preserve PN checkmate results found before the first visit instead of rerunning short search.
+  if (!_checkmateMoves.empty()) {
+    _evaluated = true;
+    return this;
+  }
+
   // With no legal moves, mark the node as a terminal loss.
   if (_board.getLegalMoves(true, false).empty()) {
     _nodeValue = static_cast<float>(OPPOSITE_COLOR(_board.getColor()));
@@ -180,8 +187,7 @@ MctsNode* MctsNode::pickupNextNode(
     return this;
   }
 
-  // If not the root node and an entering-king declaration is possible, set this node's state to
-  // terminal (win)
+  // Mark a nonroot node as a terminal win when an entering-king declaration is possible.
   if (_parent != nullptr && _board.isNyugyoku(_board.getColor())) {
     _nodeValue = static_cast<float>(_board.getColor());
     _evaluated = true;
@@ -192,8 +198,9 @@ MctsNode* MctsNode::pickupNextNode(
 
   // Treat repeated positions as repetition draws outside the root.
   if (_parent != nullptr && _isSennichite()) {
+    // Use the current side's sign to penalize the opponent who returned to this position.
     _nodeValue =
-        static_cast<float>(_board.getColor()) * -1 *
+        static_cast<float>(_board.getColor()) *
         _manager->getParameter().getSennichitePenalty();
     _evaluated = true;
     _policies.clear();
@@ -254,26 +261,34 @@ void MctsNode::searchCheckmateMoves(PnSearchEngine* engine, int32_t depth) {
     }
   }
 
-  // Execute checkmate search
-  std::vector<Move> checkmateMoves = engine->getCheckmateMoves(&_board, depth);
-
-  // If a checkmate sequence is found, save it
-  // Update the evaluation value to win on the next move and clear the candidate move list
-  if (!checkmateMoves.empty()) {
-    std::unique_lock<std::shared_mutex> lock(_mutex);
-
-    // Save the search result
-    _checkmateMoves = checkmateMoves;
-
-    // Update the evaluation value to win on the next move
-    _nodeValue = static_cast<float>(_board.getColor());
-    _mctsValue.setValue(_nodeValue);
-
-    // Clear the candidate move list
-    _policies.clear();
-    _waitingPolicies = std::queue<MctsPolicy>();
-    _waitingMoves.clear();
+  // Do not start another checkmate search once the draw move limit is reached.
+  const int32_t remaining_moves = _board.getDrawTurn() - _board.getTurn();
+  if (remaining_moves <= 0) {
+    return;
   }
+
+  // Run checkmate search.
+  std::vector<Move> checkmate_moves = engine->getCheckmateMoves(&_board, depth);
+
+  // PN search can exceed its initial depth; accept only mates within the draw move limit.
+  if (checkmate_moves.empty() ||
+      checkmate_moves.size() > static_cast<std::size_t>(remaining_moves)) {
+    return;
+  }
+
+  std::unique_lock<std::shared_mutex> lock(_mutex);
+
+  // Save the checkmate line that fits within the draw move limit.
+  _checkmateMoves = checkmate_moves;
+
+  // Update the evaluation value to win on the next move
+  _nodeValue = static_cast<float>(_board.getColor());
+  _mctsValue.setValue(_nodeValue);
+
+  // Clear the candidate move list
+  _policies.clear();
+  _waitingPolicies = std::queue<MctsPolicy>();
+  _waitingMoves.clear();
 }
 
 /**
@@ -407,7 +422,7 @@ std::vector<MctsNode*> MctsNode::getChildren() {
  * Gets the node object for when the specified move is made.
  * If no node object exists, returns a newly created object.
  * The created node object is not registered as a child node of this node object.
- * @param move Move
+ * @param move Move being examined.
  * @return Pointer to the node object
  */
 MctsNode* MctsNode::getChild(const Move& move) {
@@ -420,22 +435,28 @@ MctsNode* MctsNode::getChild(const Move& move) {
     return it->second;
   }
 
-  // If no child node exists, create a new node object and return it
-  // The created node object is not registered as a child node of this node object
+  // Create and return a new node if the child does not exist.
+  // Do not register the new node as a child of this node.
   MctsNode* child = _manager->createNode();
 
-  child->_resetNode();
-  child->_board.copyFrom(&_board);
-  child->_board.play(move);
-  child->_move = move;
-  child->_probability = 0.0f;
+  try {
+    child->_resetNode();
+    child->_board.copyFrom(&_board);
+    child->_board.play(move);
+    child->_move = move;
+    child->_probability = 0.0f;
+  } catch (...) {
+    // Return the temporary node after a failed move and preserve the original tree.
+    _manager->releaseNode(child);
+    throw;
+  }
 
   return child;
 }
 
 /**
  * Removes the node object for when the specified move is made from the child node list.
- * @param move Move
+ * @param move Move being examined.
  */
 void MctsNode::removeChild(const Move& move) {
   std::unique_lock<std::shared_mutex> lock(_mutex);
@@ -489,7 +510,9 @@ std::pair<bool, float> MctsNode::getPriorityByPUCB(
   float pucb_constant_init = _manager->getParameter().getPucbConstantInit();
   float pucb_min_visits_rate = _manager->getParameter().getPucbMinVisitsRate();
   float value = _mctsValue.getValue(_nodeValue) * OPPOSITE_COLOR(_board.getColor());
-  float c_pucb_inc = std::log((1 + totalVisits + pucb_constant_base) / pucb_constant_base);
+  // Validate a finite positive base at construction and use double precision for tiny divisors.
+  float c_pucb_inc = static_cast<float>(
+      std::log1p((1.0 + totalVisits) / static_cast<double>(pucb_constant_base)));
   float c_pucb = pucb_constant_init * (1.0f + c_pucb_inc);
   float ucb = _probability * std::sqrt((float)totalVisits) / (1 + visits);
   float avg_visits = static_cast<float>(totalVisits) / static_cast<float>(childrenSize);
@@ -668,8 +691,7 @@ bool MctsNode::_isSennichite() const {
  * @return Next node to evaluate.
  */
 MctsNode* MctsNode::_pickupNextNode(bool equally, int32_t width, float temperature, float noise) {
-  // If policy candidates remain and there is room in the search width, add a new move as an
-  // expansion candidate
+  // Consider a new move if policies remain and the search width permits expansion.
   int32_t children_size = (int32_t)(_children.size() + _waitingMoves.size());
 
   if (children_size < _policies.size() && (width < 1 || children_size < width)) {
@@ -687,8 +709,7 @@ MctsNode* MctsNode::_pickupNextNode(bool equally, int32_t width, float temperatu
     float noise_scale = (children_size <= 4) ? 0.0f : noise;
     std::extreme_value_distribution<float> noise_dist(0.0f, noise_scale);
 
-    // Select the next candidate based on predicted probability, temperature, Gumbel noise, and
-    // unexpanded priority
+    // Select using policy, temperature, Gumbel noise, and unexpanded-node priority.
     for (int i = 0; i < _policies.size(); i++) {
       MctsPolicy& policy = _policies[i];
       float probability = policy.getProbability();
@@ -764,10 +785,8 @@ MctsNode* MctsNode::_pickupNextNode(bool equally, int32_t width, float temperatu
     _policies[max_index].incrementVisits();
   }
 
-  // If no search width is specified or the number of child nodes has not reached the specified
-  // width,
-  // if there are candidates in the waiting list, create a new child node and return it as the next
-  // search target
+  // If no width is specified or the child count is below the search width,
+  // create a child from the waiting list and return it as the next search node.
   if (_waitingPolicies.size() > 0 && (width <= 0 || _children.size() < width)) {
     // Get the first registered waiting candidate
     MctsPolicy policy = _waitingPolicies.front();
@@ -776,9 +795,8 @@ MctsNode* MctsNode::_pickupNextNode(bool equally, int32_t width, float temperatu
     _waitingPolicies.pop();
     _waitingMoves.erase(policy_index);
 
-    // If the candidate is not yet registered, create a new child node and return it as the next
-    // search target
-    // Tentatively set the node evaluation value to the minimum evaluation value
+    // Create and return a child for an unregistered candidate.
+    // Initialize the node with the minimum evaluation value.
     if (_children.find(policy_index) == _children.end()) {
       // Create a new child node
       MctsNode* node = _manager->createNode();

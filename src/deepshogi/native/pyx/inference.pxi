@@ -7,6 +7,7 @@ import numpy
 cimport numpy
 
 from deepshogi.config import MODEL_OUTPUT_PACK_SIZE, MODEL_OUTPUT_SIZE
+from deepshogi.validation import validate_device_ids, validate_inference_sizes
 from pyx.inference cimport InferenceModel, InferenceProcessor
 
 
@@ -54,16 +55,9 @@ cdef class NativeInferenceModel:
 
         return outputs
 
-    def is_cuda(self) -> bool:
-        '''Returns whether CUDA is being used.
-        Returns:
-            bool: True if CUDA is being used
-        '''
-        return self.model.isCuda()
-
 
 cdef class NativeInferenceProcessor:
-    cdef InferenceProcessor *processor
+    cdef InferenceProcessor* processor
 
     def __cinit__(
         self, model: str,
@@ -74,16 +68,20 @@ cdef class NativeInferenceProcessor:
         threads_per_gpu: int,
         cache_size: int,
     ) -> None:
-        '''Creates an inference processor object.
+        '''Create the native inference processor.
         Args:
-            model (str): Path to the model file
-            gpus (list[int]): List of GPU IDs to use
-            fp16 (bool): True to compute with FP16
-            deterministic (bool): True to make computation results reproducible
-            batch_size (int): Batch size for inference
-            threads_per_gpu (int): Number of threads per GPU
-            cache_size (int): Cache size for inference results
+            model (str): Model file path.
+            gpus (list[int]): Device IDs to use (CPU: -1).
+            fp16 (bool): True to use half precision.
+            deterministic (bool): True for reproducible results.
+            batch_size (int): Inference batch size.
+            threads_per_gpu (int): Inference threads per device.
+            cache_size (int): Inference cache capacity.
         '''
+        # Validate configuration and integer ranges before C++ conversion or thread creation.
+        validate_inference_sizes(len(gpus), batch_size, threads_per_gpu)
+        validate_device_ids(gpus, InferenceModel.getAvailableGPUs())
+
         cdef vector[int32_t] gpu_vector
         for gpu in gpus:
             gpu_vector.push_back(gpu)

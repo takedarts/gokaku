@@ -13,7 +13,10 @@ SRC_PATH = Path(__file__).parent.absolute()
 
 
 def parse_args() -> argparse.Namespace:
-    '''Parse build arguments; return argparse.Namespace.'''
+    '''Parse build arguments; return argparse.Namespace.
+    Returns:
+        argparse.Namespace: Parsed command-line arguments.
+    '''
     parser = argparse.ArgumentParser(
         description='Build native codes',
         formatter_class=argparse.RawTextHelpFormatter)
@@ -31,7 +34,12 @@ def make_files(
     torch_path: str | None = None,
     debug: bool = False,
 ) -> None:
-    '''Create Config.h'''
+    '''Create Config.h
+    Args:
+        base_path (str): Native source directory relative to this build script.
+        torch_path (str | None): LibTorch directory; infer it from PyTorch when omitted.
+        debug (bool): True to generate debug compiler settings.
+    '''
     work_path = Path(__file__).parent / base_path
 
     # If the path to libtorch is not specified, infer it from `torch.__file__`
@@ -80,7 +88,10 @@ def make_files(
 
 
 def run_cmake(path: str) -> None:
-    '''Run cmake to create the Cython library'''
+    '''Run cmake to create the Cython library
+    Args:
+        path (str): Native source directory to configure and build.
+    '''
     # Get the path to the cmake executable
     if hasattr(cmake, 'CMAKE_BIN_DIR'):
         cmake_path = os.path.join(cmake.CMAKE_BIN_DIR, 'cmake')

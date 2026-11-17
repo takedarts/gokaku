@@ -42,6 +42,7 @@ class Move {
 
   /**
    * Copy constructor.
+   * @param move Source object to copy.
    */
   Move(const Move& move) = default;
 
@@ -98,6 +99,8 @@ class Move {
 
   /**
    * Returns true if the moves are equal.
+   * @param move Move to compare with this object.
+   * @return True if this object and the compared object are equal.
    */
   inline bool operator==(const Move& move) const {
     return _move == move._move;
@@ -105,6 +108,8 @@ class Move {
 
   /**
    * Returns true if the moves are not equal.
+   * @param move Move to compare with this object.
+   * @return True if this object and the compared object differ.
    */
   inline bool operator!=(const Move& move) const {
     return _move != move._move;
@@ -112,6 +117,8 @@ class Move {
 
   /**
    * Returns true if this move is less than the specified move.
+   * @param move Move to compare with this object.
+   * @return True if this object precedes the compared object in ordering.
    */
   inline bool operator<(const Move& move) const {
     return _move < move._move;
@@ -120,7 +127,7 @@ class Move {
   /**
    * Writes the string representation of the move to the output stream.
    * @param os Output stream.
-   * @param move Move object.
+   * @param move Move to format.
    * @return Output stream.
    */
   friend std::ostream& operator<<(std::ostream& os, const Move& move) {

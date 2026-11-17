@@ -10,8 +10,6 @@ class PlayerExtendsTest(unittest.TestCase):
 
     def test_evaluate_extends(self) -> None:
         '''Check extension control using mocked results and time.
-        Returns:
-            None: No return value.
         '''
         # Combine visit targets, ranking criteria, candidates, and time boundaries.
         cases: list[tuple[
@@ -79,8 +77,6 @@ class PlayerExtendsTest(unittest.TestCase):
 
     def test_win_chance_boundaries(self) -> None:
         '''Check extension decisions at and around win-probability boundaries.
-        Returns:
-            None: No return value.
         '''
         # Satisfy the visit condition to isolate the win-probability condition.
         for win_chance, searches in (
@@ -111,8 +107,6 @@ class PlayerExtendsTest(unittest.TestCase):
 
     def test_win_chance_after_extension(self) -> None:
         '''Check termination when an extension moves the win probability outside the range.
-        Returns:
-            None: No return value.
         '''
         # Change the selected probability to zero or one only after the extension.
         for value in (-1.0, 1.0):
@@ -141,8 +135,6 @@ class PlayerExtendsTest(unittest.TestCase):
 
     def test_elapsed_time_and_latest_candidates(self) -> None:
         '''Check time accounting and returning candidates from the latest extension.
-        Returns:
-            None: No return value.
         '''
         # Leave one second after the first search and half a second after the extension.
         player = object.__new__(Player)

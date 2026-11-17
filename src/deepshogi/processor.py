@@ -6,7 +6,8 @@ import numpy as np
 from .board import Board
 from .config import (DEFAULT_BATCH_SIZE, DEFAULT_THREADS_PER_GPU,
                      MODEL_VALUE_OFFSET)
-from .native import NativeInferenceProcessor
+from .native import NativeInferenceModel, NativeInferenceProcessor
+from .validation import validate_device_ids, validate_inference_sizes
 
 
 class Processor(object):
@@ -24,13 +25,17 @@ class Processor(object):
         '''Initialize the inference processor.
         Args:
             model (str | Path): Model file path.
-            gpus (List[int]): GPU IDs to use.
-            fp16 (bool): Whether to use FP16.
-            deterministic (bool): True to request reproducible results.
-            batch_size (int): Maximum batch size.
-            threads_per_gpu (int): Number of threads per GPU.
-            cache_size (int): Evaluation cache capacity.
+            gpus (List[int]): Device IDs to use (CPU: -1).
+            fp16 (bool): True to use half precision.
+            deterministic (bool): True for reproducible results.
+            batch_size (int): Inference batch size.
+            threads_per_gpu (int): Inference threads per device.
+            cache_size (int): Inference cache capacity.
         '''
+        # Validate devices and size calculations before starting inference threads.
+        validate_inference_sizes(len(gpus), batch_size, threads_per_gpu)
+        validate_device_ids(gpus, NativeInferenceModel.get_available_gpus())
+
         if not Path(model).exists():
             raise FileNotFoundError(f'File not found: {model}')
 

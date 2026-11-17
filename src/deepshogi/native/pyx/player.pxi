@@ -1,17 +1,23 @@
 from typing import List, Tuple
 
+cimport cython
 from libc.stdint cimport int32_t
 from libcpp cimport bool
 from libcpp.vector cimport vector
+from deepshogi.validation import validate_positive_float, validate_positive_int
 from pyx.candidate cimport Candidate
 from pyx.move cimport Move
 from pyx.player cimport Player
 from pyx.position cimport Position
 
 
+@cython.no_gc_clear
 cdef class NativePlayer:
-    '''Class that manages game state and decides moves as a player.'''
+    '''Manage game state and choose moves as a player.
+    Keep the inference processor alive until the native player has been destroyed.
+    '''
     cdef Player* player
+    cdef NativeInferenceProcessor _processor # type: ignore
 
     def __cinit__(
         self,
@@ -27,20 +33,31 @@ cdef class NativePlayer:
         pucb_constant_base: float,
         pucb_min_visits_rate: float,
     )->None:
-        '''Initialize the player.
+        '''Initialize the native player.
         Args:
-            processor (NativeInferenceProcessor): Native inference processor.
-            threads (int): Number of threads.
+            processor (NativeInferenceProcessor): Inference processor.
+            threads (int): Number of search threads.
             max_visits (int): Maximum node visit count.
             nyugyoku_scores (Tuple[int, int]): Points required for entering-king declarations.
-            sennichite_penalty (float): Penalty assigned to repetition evaluations.
+            sennichite_penalty (float): Finite repetition penalty; negative values are clamped to
+                zero.
             check_search_depth (int): Checkmate search depth.
-            check_search_node (int): Checkmate search node capacity.
-            check_node_depth (int): Node depth at which to run checkmate search.
-            pucb_constant_init (float): Initial PUCB exploration coefficient.
-            pucb_constant_base (float): Base controlling the PUCB exploration coefficient.
+            check_search_node (int): Checkmate node capacity.
+            check_node_depth (int): Node depth at which to search for checkmate.
+            pucb_constant_init (float): Initial PUCB coefficient.
+            pucb_constant_base (float): PUCB base; must remain finite and positive as a 32-bit
+                float.
             pucb_min_visits_rate (float): Minimum visit ratio for prioritizing PUCB children.
         '''
+        # Reject implicit conversions of fractions and booleans in direct native API calls.
+        validate_positive_int('threads', threads)
+        validate_positive_int('max_visits', max_visits)
+        validate_positive_float('pucb_constant_base', pucb_constant_base)
+
+        # Retain the processor until destruction of the C++ player is complete.
+        self._processor = processor
+
+        # Construct the C++ player.
         self.player = new Player(
             processor.processor, threads, max_visits,
             nyugyoku_scores[0], nyugyoku_scores[1],
@@ -49,6 +66,7 @@ cdef class NativePlayer:
 
     def __dealloc__(self) -> None:
         '''Destroy the native player; return None.'''
+        # Cython releases the retained processor reference after this method completes.
         del self.player
 
     def initialize(self, sfen: str, draw_turn: int) -> None:

@@ -103,17 +103,22 @@ def convert_sfen_to_psfen(sfen: str) -> bytes:
         'P': 0, 'L': 0, 'N': 0, 'S': 0, 'G': 0, 'B': 0, 'R': 0,
         'p': 0, 'l': 0, 'n': 0, 's': 0, 'g': 0, 'b': 0, 'r': 0,
     }
-    hand_num = 1
+    hand_num = 0
 
     for c in hand_sfen:
         if c == '-':
             continue
         elif c.isdigit():
-            hand_num = int(c)
+            # Accumulate consecutive digits as a decimal piece count.
+            hand_num = hand_num * 10 + int(c)
         else:
-            piece_counts[c.upper()] -= hand_num
-            hand_counts[c] += hand_num
-            hand_num = 1
+            # Use one for omitted counts when updating hand and remaining pieces.
+            count = hand_num if hand_num > 0 else 1
+            piece_counts[c.upper()] -= count
+            hand_counts[c] += count
+
+            # Reset the accumulated count for the next piece.
+            hand_num = 0
 
     # Set turn
     if color_sfen == 'w':

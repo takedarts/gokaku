@@ -11,8 +11,6 @@ class BoardTest(unittest.TestCase):
 
     def test_native_reinitialize(self) -> None:
         '''Preserve entering-king scores while resetting the position and draw limit.
-        Returns:
-            None: No return value.
         '''
         # Repeatedly initialize one board with nondefault entering-king scores.
         scores = (31, 24)

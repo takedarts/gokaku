@@ -12,7 +12,6 @@ cdef extern from "cpp/InferenceModel.h" namespace "deepshogi":
 
         InferenceModel(string filename, int32_t gpu, cpp_bool fp16, cpp_bool deterministic) except +
         void forward(int32_t* inputs, int32_t* masks, float* outputs, int32_t size) except +
-        cpp_bool isCuda()
 
 
 cdef extern from "cpp/InferenceProcessor.h" namespace "deepshogi":

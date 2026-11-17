@@ -24,15 +24,17 @@ class InferenceModel {
   /**
    * Returns the device available in the current execution environment.
    * @param gpu GPU index
+   * @return Execution device selected for the requested device index.
    */
-  static at::Device getDevice(int32_t gpu);
+  static at::Device getSuitableDevice(int32_t gpu);
 
   /**
    * Returns the scalar type available in the current execution environment.
    * @param gpu GPU index
    * @param fp16 True to compute with 16-bit precision
+   * @return Scalar type selected for the requested precision and device.
    */
-  static at::ScalarType getScalarType(int32_t gpu, bool fp16);
+  static at::ScalarType getSuitableScalarType(int32_t gpu, bool fp16);
 
   /**
    * Creates a model object.
@@ -50,28 +52,20 @@ class InferenceModel {
   virtual ~InferenceModel() = default;
 
   /**
-   * Runs inference.
-   * @param inputs Input data
-   * @param masks Output data mask
-   * @param outputs Output data
-   * @param size Number of evaluation data items
+   * Run inference.
+   * @param inputs Input data.
+   * @param masks Output mask.
+   * @param outputs Output data.
+   * @param size Number of input samples.
    */
   void forward(int32_t* inputs, int32_t* masks, float* outputs, int32_t size);
 
   /**
-   * Returns True if using CUDA.
-   * @return True if using CUDA
+   * Return the execution device determined at construction.
+   * @return Execution device.
    */
-  inline bool isCuda() const {
-    return _device.is_cuda();
-  }
-
-  /**
-   * Returns True if using CPU.
-   * @return True if using CPU
-   */
-  inline bool isCpu() const {
-    return _cpu;
+  inline const at::Device& getDevice() const {
+    return _device;
   }
 
  private:
@@ -105,10 +99,6 @@ class InferenceModel {
    */
   torch::Tensor _bitShift;
 
-  /**
-   * True if computing on CPU.
-   */
-  bool _cpu;
 };
 
 }  // namespace deepshogi

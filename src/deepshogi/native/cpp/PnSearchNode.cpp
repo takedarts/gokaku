@@ -36,9 +36,8 @@ PnSearchNode::~PnSearchNode() = default;
 
 /**
  * Initialize this node as a leaf for the specified position.
- * @param board const Board* target position.
- * @param depth int32_t remaining search depth in moves.
- * @return void
+ * @param board Target position.
+ * @param depth Remaining search depth in moves.
  */
 void PnSearchNode::initialize(const Board* board, int32_t depth) {
   // Set terminal non-mate values without storing a board.
@@ -108,8 +107,7 @@ void PnSearchNode::initialize(const Board* board, int32_t depth) {
 
 /**
  * Copy child references and search values without cloning the children themselves.
- * @param node const PnSearchNode* source node.
- * @return void
+ * @param node Source node.
  */
 void PnSearchNode::copyFrom(const PnSearchNode* node) {
   // Keep vectors independent so child references can be changed safely along a path.
@@ -128,9 +126,9 @@ void PnSearchNode::copyFrom(const PnSearchNode* node) {
 
 /**
  * Expand the node into children, retaining already expanded children.
- * @param engine PnSearchEngine* search engine.
- * @param board Board* working position, restored on return.
- * @return bool; false only when node capacity is exhausted.
+ * @param engine Search engine.
+ * @param board Working position, restored on return.
+ * @return False only when node capacity is exhausted.
  */
 bool PnSearchNode::expand(PnSearchEngine* engine, Board* board) {
   // Retain connections without generating children for solved, depth-zero, or expanded nodes.
@@ -165,7 +163,6 @@ bool PnSearchNode::expand(PnSearchEngine* engine, Board* board) {
 
 /**
  * Update this node's PN/DN values, preserving terminal values when there are no children.
- * @return void
  */
 void PnSearchNode::update() {
   // Do not overwrite childless terminal evaluations with an empty aggregation.
@@ -244,8 +241,8 @@ void PnSearchNode::update() {
 
 /**
  * Select this child's PN/DN values for the requested depth.
- * @param depth int32_t requested remaining depth.
- * @return std::pair<int32_t, int32_t> PN/DN values.
+ * @param depth Requested remaining depth.
+ * @return PN/DN values.
  */
 std::pair<int32_t, int32_t> PnSearchNode::_getValues(int32_t depth) const {
   // Prefer solved cont values; also use cont when the stored term depth is insufficient.
@@ -260,7 +257,7 @@ std::pair<int32_t, int32_t> PnSearchNode::_getValues(int32_t depth) const {
  * Get the next child to search.
  * Return nullptr as the child when this node is terminal.
  * Minimize PN for attackers and DN for defenders, breaking ties by subtree size.
- * @param depth int32_t current requested remaining depth.
+ * @param depth Current requested remaining depth.
  * @return Pair of the next move and child node.
  */
 std::pair<Move, PnSearchNode*> PnSearchNode::getNextNode(int32_t depth) {

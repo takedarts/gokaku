@@ -19,9 +19,8 @@ class MctsParameter {
    * @param pucbMinVisitsRate Minimum visit ratio for prioritizing PUCB children.
    */
   MctsParameter(
-      int32_t nyugyokuScoreBlack, int32_t nyugyokuScoreWhite,
-      float sennichitePenalty, float pucbConstantInit, float pucbConstantBase,
-      float pucbMinVisitsRate);
+      int32_t nyugyokuScoreBlack, int32_t nyugyokuScoreWhite, float sennichitePenalty,
+      float pucbConstantInit, float pucbConstantBase, float pucbMinVisitsRate);
 
   /**
    * Copy the parameter object.

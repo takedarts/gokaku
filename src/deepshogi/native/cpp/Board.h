@@ -84,10 +84,9 @@ class Board {
 
   /**
    * Generate legal moves while reusing the existing capacity.
-   * @param moves std::vector<Move>& output vector, whose contents are replaced.
-   * @param removeUnpromote bool flag to omit selected unpromoted moves.
-   * @param checkOnly bool flag to generate only checking moves.
-   * @return void
+   * @param moves Output vector, whose contents are replaced.
+   * @param removeUnpromote True to omit selected unpromoted moves.
+   * @param checkOnly True to generate only checking moves.
    */
   void getLegalMoves(std::vector<Move>& moves, bool removeUnpromote, bool checkOnly) const;
 
@@ -179,8 +178,7 @@ class Board {
 
   /**
    * Return the piece at the specified coordinates.
-   * @param x X coordinate.
-   * @param y Y coordinate.
+   * @param position Board coordinate to inspect.
    * @return Piece type.
    */
   inline uint8_t getPiece(const Position& position) const {
@@ -200,7 +198,7 @@ class Board {
   /**
    * Write a string representation of the board to the output stream.
    * @param os Output stream.
-   * @param board Board object.
+   * @param board Position to format.
    * @return Output stream.
    */
   friend std::ostream& operator<<(std::ostream& os, const Board& board) {
@@ -331,7 +329,8 @@ class Board {
    * @param color Color of the side under attack.
    * @param posIndex Square to check for attacking pieces.
    * @param additionalOccIndex Additional occupied square, or -1 for none.
-   * @return bool when returnOnFirstAttacker is true; otherwise std::vector<int8_t> positions.
+   * @return Whether an attacker exists when returnOnFirstAttacker is true;
+   * otherwise, the positions of attacking pieces.
    */
   template <bool returnOnFirstAttacker, bool removeOwnKing>
   std::conditional_t<returnOnFirstAttacker, bool, std::vector<int8_t>> _getAttackers(

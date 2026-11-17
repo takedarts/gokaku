@@ -13,7 +13,7 @@ class InferenceHash {
  public:
   /**
    * Create a hash for caching inference results.
-   * @param board Board object.
+   * @param board Position and rule settings used to form the inference cache key.
    */
   InferenceHash(const Board* board);
 
@@ -30,7 +30,7 @@ class InferenceHash {
 
   /**
    * Compare whether this object is less than the specified object.
-   * @param other InferenceHash object to compare.
+   * @param other Inference cache key to compare.
    * @return True if this object is less than the specified object.
    */
   inline bool operator<(const InferenceHash& other) const {

@@ -1,5 +1,7 @@
 #include "PnSearchManager.h"
 
+#include <algorithm>
+
 namespace deepshogi {
 
 /**
@@ -10,11 +12,23 @@ namespace deepshogi {
 PnSearchManager::PnSearchManager(int32_t nodes, int32_t size)
     : _mutex(),
       _condition(),
-      _engines(new PnSearchEngine*[size]),
+      _engines(new PnSearchEngine*[std::max(size, 1)]()),
       _availableEngines() {
-  for (int32_t i = 0; i < size; ++i) {
-    _engines[i] = new PnSearchEngine(nodes);
-    _availableEngines.push(_engines[i]);
+  // Construct engines using the same clamped count as the pointer array.
+  const int32_t engine_size = std::max(size, 1);
+
+  try {
+    // Create each engine and add it to the pool.
+    for (int32_t i = 0; i < engine_size; i++) {
+      _engines[i] = new PnSearchEngine(nodes);
+      _availableEngines.push(_engines[i]);
+    }
+  } catch (...) {
+    // Free constructed engines if construction fails; the pointer array does not own them.
+    for (int32_t i = 0; i < engine_size; i++) {
+      delete _engines[i];
+    }
+    throw;
   }
 }
 

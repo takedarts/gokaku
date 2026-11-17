@@ -17,7 +17,7 @@ MoveResult::MoveResult()
 /**
  * Creates an object holding the specified move and captured piece.
  * Specify PIECE_EMPTY as the captured piece if no piece was captured.
- * @param move Move object
+ * @param move Move being recorded
  * @param captured Integer value representing the type of the captured piece
  */
 MoveResult::MoveResult(const Move& move, uint8_t captured)

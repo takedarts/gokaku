@@ -246,9 +246,15 @@ class Board(object):
         self.native.copy_from(board.native)
 
     def __str__(self) -> str:
-        '''Return the board as a string.'''
+        '''Return the board as a string.
+        Returns:
+            str: Formatted board representation.
+        '''
         return self.native.to_string()
 
     def __repr__(self) -> str:
-        '''Return the board as a string.'''
+        '''Return the board as a string.
+        Returns:
+            str: Formatted board representation.
+        '''
         return self.__str__()

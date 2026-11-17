@@ -4,7 +4,7 @@ namespace deepshogi {
 
 /**
  * Creates an object that holds the hash value of a board state.
- * @param board Board object
+ * @param board Position whose hash is computed
  */
 BoardHash::BoardHash(const Board* board) {
   _cellHash = board->_cellHash;

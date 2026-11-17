@@ -7,7 +7,10 @@
 
 using namespace deepshogi;
 
-/** Run cache key, eviction, and collision regressions; return int exit status. */
+/**
+ * Run cache key, eviction, and collision regressions; return int exit status.
+ * @return Exit status; zero indicates success.
+ */
 int main() {
   // Equal positions with different rule settings must use different inference keys.
   const std::string sfen = "4k4/9/9/9/9/9/9/9/4K4 b R 1";

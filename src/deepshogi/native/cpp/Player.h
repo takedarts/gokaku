@@ -2,6 +2,7 @@
 
 #include <atomic>
 #include <condition_variable>
+#include <cstddef>
 #include <cstdint>
 #include <mutex>
 #include <queue>
@@ -40,10 +41,9 @@ class Player {
    */
   Player(
       InferenceProcessor* processor, int32_t threads, int32_t searchMaxVisits,
-      int32_t nyugyokuScoreBlack, int32_t nyugyokuScoreWhite,
-      float sennichitePenalty, int32_t checkSearchDepth, int32_t checkSearchNode,
-      int32_t checkNodeDepth, float pucbConstantInit, float pucbConstantBase,
-      float pucbMinVisitsRate);
+      int32_t nyugyokuScoreBlack, int32_t nyugyokuScoreWhite, float sennichitePenalty,
+      int32_t checkSearchDepth, int32_t checkSearchNode, int32_t checkNodeDepth,
+      float pucbConstantInit, float pucbConstantBase, float pucbMinVisitsRate);
 
   /**
    * Destroy the player object.
@@ -90,7 +90,6 @@ class Player {
 
   /**
    * Request stopping and wake threads waiting for search results.
-   * @return void
    */
   void stopEvaluation();
 
@@ -108,7 +107,7 @@ class Player {
 
   /**
    * Copies the board state to the specified board object.
-   * @param board Board object
+   * @param board Destination for the current position
    */
   void copyBoardTo(Board* board);
 
@@ -121,7 +120,7 @@ class Player {
   /**
    * Writes the state of the player object to an output stream.
    * @param os Output stream
-   * @param player Player object
+   * @param player Player whose state is written
    * @return Output stream
    */
   friend std::ostream& operator<<(std::ostream& os, Player& player) {
@@ -191,9 +190,14 @@ class Player {
   MctsNode* _root;
 
   /**
-   * Maximum visit count for a node.
+   * Maximum node visit count.
    */
   int32_t _searchMaxVisits;
+
+  /**
+   * Evaluation queue limit, validated for size overflow at construction.
+   */
+  int32_t _maxEvaluatingSize;
 
   /**
    * Depth for long-sequence checkmate search.
@@ -231,9 +235,14 @@ class Player {
   int32_t _runnings;
 
   /**
-   * Number of nodes currently being updated.
+   * Number of nodes being updated.
    */
   int32_t _updatingNodes;
+
+  /**
+   * Inference requests awaiting callback completion; protected by _mutex.
+   */
+  std::size_t _pendingInferences;
 
   /**
    * True while the search is paused.
@@ -246,9 +255,14 @@ class Player {
   bool _stopped;
 
   /**
-   * True if an explicit search stop has been requested.
+   * True after an explicit external stop request.
    */
   bool _stopRequested;
+
+  /**
+   * Sequence number of normal or explicit stops; protected by _mutex.
+   */
+  uint64_t _stopSequence;
 
   /**
    * True if the search has terminated.
@@ -286,6 +300,17 @@ class Player {
    * Expand the search tree.
    */
   void _runExpand();
+
+  /**
+   * Submit an inference request while tracking callback completion.
+   * @param node Node to evaluate.
+   */
+  void _submitInference(MctsNode* node);
+
+  /**
+   * Record inference completion or submission failure and notify waiting threads.
+   */
+  void _finishInference();
 
   /**
    * Executes checkmate search.

@@ -7,8 +7,8 @@ namespace deepshogi {
 
 /**
  * Hash the board and hand pieces for cache lookup.
- * @param key const std::array<uint64_t, 6>& position key.
- * @return uint64_t lookup hash.
+ * @param key Position key.
+ * @return Lookup hash.
  */
 uint64_t PnSearchCache::Hash(const std::array<uint64_t, 6>& key) {
   // Mix positions with different hand pieces and use the low bits as the slot index.
@@ -22,7 +22,7 @@ uint64_t PnSearchCache::Hash(const std::array<uint64_t, 6>& key) {
 
 /**
  * Create a cache with at least twice as many slots as its entry capacity.
- * @param capacity uint32_t maximum entry count.
+ * @param capacity Maximum entry count.
  */
 PnSearchCache::PnSearchCache(uint32_t capacity)
     : _entries(std::bit_ceil(std::max(size_t(1), size_t(capacity) * 2))),
@@ -44,9 +44,9 @@ void PnSearchCache::Clear() {
 
 /**
  * Return the matching slot or the first empty slot.
- * @param key const std::array<uint64_t, 6>& position key.
- * @param hash uint64_t lookup hash.
- * @return size_t slot index; never insert more entries than the capacity.
+ * @param key Position key.
+ * @param hash Lookup hash.
+ * @return Slot index; never insert more entries than the capacity.
  */
 size_t PnSearchCache::Find(
     const std::array<uint64_t, 6>& key, uint64_t hash) const {
@@ -68,11 +68,10 @@ size_t PnSearchCache::Find(
 /**
  * Insert the position key and search node index
  * into the empty slot found during lookup.
- * @param slot size_t empty slot index.
- * @param key const std::array<uint64_t, 6>& position key.
- * @param hash uint64_t lookup hash.
- * @param nodeIndex uint32_t search node index.
- * @return void
+ * @param slot Empty slot index.
+ * @param key Position key.
+ * @param hash Lookup hash.
+ * @param nodeIndex Search node index.
  */
 void PnSearchCache::Insert(
     size_t slot, const std::array<uint64_t, 6>& key,

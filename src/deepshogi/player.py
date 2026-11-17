@@ -19,6 +19,7 @@ from .exception import ShogiException
 from .native import NativePlayer
 from .processor import Processor
 from .psfen import convert_sfen_to_psfen
+from .validation import INT32_MAX, validate_positive_float, validate_positive_int
 
 LOGGER = logging.getLogger(__name__)
 
@@ -101,7 +102,10 @@ class Candidate(object):
         return self.value_lcb * self.color * 0.5 + 0.5
 
     def __str__(self) -> str:
-        '''Return a readable description of the candidate as str.'''
+        '''Return a readable description of the candidate as str.
+        Returns:
+            str: Formatted candidate evaluation and principal variation.
+        '''
         return (
             f'Candidate('
             f'src={self.src}, dst={self.dst}, promote={self.promote},'
@@ -113,7 +117,10 @@ class Candidate(object):
             f' variations={self.variations})')
 
     def __repr__(self) -> str:
-        '''Return the candidate representation as str.'''
+        '''Return the candidate representation as str.
+        Returns:
+            str: Formatted candidate evaluation and principal variation.
+        '''
         return str(self)
 
 
@@ -142,7 +149,10 @@ class Referee(object):
         self.check_counts = [0, 0]
 
     def update(self, board: Board) -> None:
-        '''Update the state.'''
+        '''Update the state.
+        Args:
+            board (Board): Position to register in the repetition and consecutive-check history.
+        '''
         # Register the current board position in the history
         repeat_key = convert_sfen_to_psfen(board.get_sfen())
         repeat_values = self.board_repeats.get(repeat_key, (0, board.get_turn()))
@@ -224,25 +234,30 @@ class Player(object):
         pucb_constant_base: float = DEFAULT_PUCB_CONSTANT_BASE,
         pucb_min_visits_rate: float = DEFAULT_PUCB_MIN_VISITS_RATE,
         allowed_repeats: int = DEFAULT_ALLOWED_REPEATS,
-        check_next_repeats: bool = True,
     ) -> None:
         '''Initialize the player.
         Args:
             processor (Processor): Inference processor.
-            threads (int): Number of threads to use.
+            threads (int): Number of search threads.
             max_visits (int): Maximum node visit count.
-            initial_sfen (str): Initial position in SFEN format.
+            initial_sfen (str): Initial board in SFEN format.
             nyugyoku_scores (Tuple[int, int]): Points required for entering-king declarations.
-            sennichite_penalty (float): Penalty assigned to repetition evaluations.
+            sennichite_penalty (float): Finite repetition penalty; negative values are clamped to
+                zero.
             check_search_depth (int): Checkmate search depth.
-            check_search_node (int): Checkmate search node capacity.
-            check_node_depth (int): Node depth at which to run checkmate search.
-            pucb_constant_init (float): Initial PUCB exploration coefficient.
-            pucb_constant_base (float): Base controlling the PUCB exploration coefficient.
+            check_search_node (int): Checkmate node capacity.
+            check_node_depth (int): Node depth at which to search for checkmate.
+            pucb_constant_init (float): Initial PUCB coefficient.
+            pucb_constant_base (float): PUCB base; must remain finite and positive as a 32-bit
+                float.
             pucb_min_visits_rate (float): Minimum visit ratio for prioritizing PUCB children.
-            allowed_repeats (int): Allowed position repetitions; defaults to three.
-            check_next_repeats (bool): Whether to check repetition on the following turn.
+            allowed_repeats (int): Allowed repetitions of the same position (default: three).
         '''
+        # Reject unusable search configurations before constructing the native player.
+        validate_positive_int('threads', threads)
+        validate_positive_int('max_visits', max_visits)
+        validate_positive_float('pucb_constant_base', pucb_constant_base)
+
         # Keep a reference to the processor object so it is not destroyed
         self.processor = processor
 
@@ -252,11 +267,11 @@ class Player(object):
             sennichite_penalty, check_search_depth, check_search_node, check_node_depth,
             pucb_constant_init, pucb_constant_base, pucb_min_visits_rate)
 
-        self.sennichite_penalty = sennichite_penalty
+        # Use the same clamped penalty as native code when evaluating terminal positions.
+        self.sennichite_penalty = max(sennichite_penalty, 0.0)
 
         # Create the game referee.
         self.referee = Referee(allowed_repeats=allowed_repeats)
-        self.check_next_repeats = check_next_repeats
 
         # Set the initial position and default draw limit.
         self.initialize(initial_sfen)
@@ -286,25 +301,28 @@ class Player(object):
         promote: bool = False,
         piece: int | None = None,
     ) -> Tuple[Tuple[int, int], Tuple[int, int], bool]:
-        '''Move a piece.
-        Return the move information (source, destination, True if promote).
+        '''Play a move.
+        Return the source coordinates, destination coordinates, and promotion flag.
         Args:
-            src (Tuple[int, int]): Source coordinates
-            dst (Tuple[int, int]): Destination coordinates
-            promote (bool): True if promote
-            piece (int): Type of piece after moving
+            src (Tuple[int, int]): Source coordinates.
+            dst (Tuple[int, int]): Destination coordinates.
+            promote (bool): True to promote.
+            piece (int | None): Piece type after the move.
         Returns:
-            Tuple[Tuple[int, int], Tuple[int, int], bool]: Move information
+            Tuple[Tuple[int, int], Tuple[int, int], bool]: Source, destination, and promotion flag.
         '''
-        # determine whether to promote based on the piece type
-        if piece is not None and not is_hand_position(src):
-            promote = (self.get_board().get_piece(src) != piece)
+        # Save the previous board to determine promotion and record successful moves.
+        board = self.get_board()
 
-        # Update the repetition judgment object
-        self.referee.update(self.get_board())
+        # Infer promotion from the requested piece type after the move.
+        if piece is not None and not is_hand_position(src):
+            promote = (board.get_piece(src) != piece)
 
         # Play the move.
         self.native.play(src, dst, promote)
+
+        # Record the previous board for repetition checks only after a successful move.
+        self.referee.update(board)
 
         return src, dst, promote
 
@@ -356,8 +374,14 @@ class Player(object):
         candidates = [
             c for c in candidates if c.win_chance >= max_win_chance - delta]
 
-        # Convert policy values to selection probabilities
-        probs = [c.policy**(1 / max(temperature, 1e-3)) for c in candidates]
+        # Scale the largest weight to one to prevent all weights vanishing at low temperatures.
+        max_policy = max(c.policy for c in candidates)
+        if max_policy > 0.0:
+            temperature_power = 1.0 / max(temperature, 1e-3)
+            probs = [(c.policy / max_policy)**temperature_power for c in candidates]
+        else:
+            # Choose uniformly among remaining candidates when policies contain no preference.
+            probs = [1.0] * len(candidates)
 
         # Randomly select a candidate.
         candidate = random.choices(candidates, weights=probs, k=1)[0]
@@ -384,18 +408,20 @@ class Player(object):
         extends: int = 0,
         stop_event: Event | None = None,
     ) -> List[Candidate]:
-        '''Evaluate the position.
+        '''Evaluate the board.
+        Wait without a deadline until the first visit or confirmed checkmate.
+        Cap extension visit targets at the signed 32-bit integer limit.
         Args:
-            visits (int): Target visit count.
-            timelimit (float): Total time limit in seconds, including search extensions.
-            equally (bool): True for equal visits, False for PUCB or similar selection.
+            visits (int): Target node visit count.
+            timelimit (float): Time limit in seconds, including extensions.
+            equally (bool): True for equal visits; False for PUCB selection.
             criterion (str): Candidate ranking criterion: 'value' or 'visits'.
-            candidate_width (int): Search width; zero adjusts the width automatically.
+            candidate_width (int): Candidate search width (zero selects it automatically).
             temperature (float): Search temperature.
-            noise (float): Strength of Gumbel noise during search.
+            noise (float): Gumbel noise strength.
             ponder (bool): True to continue searching.
-            stop_event (Event | None): Optional event requesting cancellation.
             extends (int): Maximum number of search extensions.
+            stop_event (Event | None): Stop notification for this search.
         Returns:
             List[Candidate]: Candidate moves.
         '''
@@ -420,8 +446,8 @@ class Player(object):
             if repeats > 0 and remaining_time < 1.0:
                 break
 
-            # Increase the cumulative visit target relative to the original request.
-            target_visits = visits + repeats * additional_visits
+            # Keep extended visit targets within the int32_t range used by native waits.
+            target_visits = min(visits + repeats * additional_visits, INT32_MAX)
 
             # Evaluate the position.
             LOGGER.debug('Evaluation: %d visits, %.1f seconds', target_visits, remaining_time)
@@ -484,6 +510,10 @@ class Player(object):
                     self.processor.get_cache_hit_rate())
                 for candidate in candidates:
                     LOGGER.debug(candidate)
+
+            # Stop extending once the visit target reaches the integer limit.
+            if target_visits == INT32_MAX:
+                break
 
             # Stop if the selected move's win probability is outside the extension range.
             if not (0.05 < candidates[0].win_chance < 0.95):

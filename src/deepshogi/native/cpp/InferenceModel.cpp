@@ -5,6 +5,7 @@
 #endif
 
 #include <fstream>
+#include <stdexcept>
 
 #include "Config.h"
 
@@ -65,7 +66,7 @@ std::vector<std::int32_t> InferenceModel::getAvailableGPUs() {
   if (torch::cuda::is_available()) {
     int32_t gpu_count = torch::cuda::device_count();
 
-    for (int32_t i = 0; i < gpu_count; ++i) {
+    for (int32_t i = 0; i < gpu_count; i++) {
       device_ids.push_back(i);
     }
   }
@@ -80,8 +81,9 @@ std::vector<std::int32_t> InferenceModel::getAvailableGPUs() {
 /**
  * Returns the device available in the current execution environment.
  * @param gpu GPU index
+ * @return Execution device selected for the requested device index.
  */
-at::Device InferenceModel::getDevice(int32_t gpu) {
+at::Device InferenceModel::getSuitableDevice(int32_t gpu) {
   // Use CPU if the GPU index is negative
   if (gpu < 0) {
     return at::Device(at::kCPU);
@@ -97,8 +99,8 @@ at::Device InferenceModel::getDevice(int32_t gpu) {
     return at::Device(at::kMPS);
   }
 
-  // Otherwise throw an exception
-  throw std::runtime_error("Specified GPU device is not available.");
+  // Throw an exception for an unavailable device.
+  throw std::invalid_argument("Specified GPU device is not available.");
 }
 
 /**
@@ -107,7 +109,7 @@ at::Device InferenceModel::getDevice(int32_t gpu) {
  * @param fp16 True to compute with 16-bit precision
  * @return Scalar type
  */
-at::ScalarType InferenceModel::getScalarType(int32_t gpu, bool fp16) {
+at::ScalarType InferenceModel::getSuitableScalarType(int32_t gpu, bool fp16) {
   // Use Half precision when computing with CUDA and fp16 is enabled
   if (torch::cuda::is_available() && gpu >= 0 && fp16) {
     return at::kHalf;
@@ -134,10 +136,13 @@ InferenceModel::InferenceModel(
     std::string filename, int32_t gpu, bool fp16, bool deterministic)
     : _ioMutex(),
       _computeMutex(),
-      _device(InferenceModel::getDevice(gpu)),
-      _dtype(InferenceModel::getScalarType(gpu, fp16)),
-      _bitShift(),
-      _cpu(gpu < 0) {
+      _device(at::kCPU),
+      _dtype(at::kFloat),
+      _bitShift() {
+  // Validate the device and determine the scalar type before loading the model.
+  _device = getSuitableDevice(gpu);
+  _dtype = getSuitableScalarType(gpu, fp16);
+
   // Configure CuDNN settings when using CUDA
   if (_device.is_cuda()) {
     torch::globalContext().setUserEnabledCuDNN(true);

@@ -67,7 +67,12 @@ def get_color_name(color: int) -> str:
 
 
 def get_result_name(result: int) -> str:
-    '''Get the name of the end reason.'''
+    '''Get the name of the end reason.
+    Args:
+        result (int): Game termination reason code.
+    Returns:
+        str: Game termination reason name, or 'unknown' for an unsupported code.
+    '''
     if result == RESULT_NONE:
         return 'none'
     elif result == RESULT_TSUMI:

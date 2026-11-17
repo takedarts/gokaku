@@ -126,6 +126,7 @@ static constexpr int8_t HAND_BIT_OFFSETS[PIECE_HAND_END - PIECE_HAND_BEGIN] = {
  * Sets the specified bit.
  * @param inputs Bit string
  * @param index Position of the bit to set
+ * @param value Bit value to insert; defaults to one.
  */
 inline void setInputBit(int32_t* inputs, int32_t index, int32_t value = 1) {
   inputs[index / 32] |= (value << (index % 32));
@@ -136,7 +137,7 @@ inline void setInputBit(int32_t* inputs, int32_t index, int32_t value = 1) {
  * Returns an array with the checkmate move sequence in reverse order.
  * Returns an empty array if no checkmate is found.
  * Note that the Board object's contents change during the search.
- * @param board Board object
+ * @param board Working position; contents may change during search
  * @param depth Search depth
  * @return List of moves leading to checkmate
  */
@@ -531,10 +532,9 @@ std::vector<Move> Board::getLegalMoves(bool removeUnpromote, bool checkOnly) con
 
 /**
  * Generate legal moves while retaining the output vector's capacity.
- * @param moves std::vector<Move>& output vector.
- * @param removeUnpromote bool flag to omit selected unpromoted moves.
- * @param checkOnly bool flag to generate only checking moves.
- * @return void
+ * @param moves Output vector.
+ * @param removeUnpromote True to omit selected unpromoted moves.
+ * @param checkOnly True to generate only checking moves.
  */
 void Board::getLegalMoves(
     std::vector<Move>& moves, bool removeUnpromote, bool checkOnly) const {
@@ -1010,7 +1010,8 @@ void Board::_removeHand(int8_t color, uint8_t piece) {
  * @param color Color of the side under attack.
  * @param posIndex Square to check for attacking pieces.
  * @param additionalOccIndex Additional occupied square, or -1 for none.
- * @return bool when returnOnFirstAttacker is true; otherwise std::vector<int8_t> positions.
+ * @return Whether an attacker exists when returnOnFirstAttacker is true;
+ * otherwise, the positions of attacking pieces.
  */
 template <bool returnOnFirstAttacker, bool removeOwnKing>
 std::conditional_t<returnOnFirstAttacker, bool, std::vector<int8_t>>

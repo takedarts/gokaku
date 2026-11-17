@@ -15,7 +15,7 @@ class BoardHash {
  public:
   /**
    * Creates an object that holds the hash value of a board state.
-   * @param board Board object
+   * @param board Position whose hash is computed
    */
   BoardHash(const Board* board);
 
@@ -32,7 +32,7 @@ class BoardHash {
 
   /**
    * Convert all comparison fields into an integer array for cache lookup.
-   * @return std::array<uint64_t, 6> position key.
+   * @return Position key.
    */
   inline std::array<uint64_t, 6> getCacheKey() const {
     // Preserve all comparison fields without virtual-table data or padding.
@@ -44,7 +44,7 @@ class BoardHash {
 
   /**
    * Compare whether this object is greater than the specified object.
-   * @param other BoardHash object to compare.
+   * @param other Position hash to compare.
    * @return True if this object is less than the specified object.
    */
   inline bool operator<(const BoardHash& other) const {
@@ -71,9 +71,9 @@ class BoardHash {
    * Hash collisions are considered sufficiently rare to ignore here.
    * To check the hand-piece condition, the set bits in this hand representation
    * must form a subset of those in the other hand representation.
-   * @param other const BoardHash& position to compare.
-   * @param color int8_t color whose hand pieces are compared.
-   * @return bool; true for an identical or inferior position.
+   * @param other Position to compare.
+   * @param color Color whose hand pieces are compared.
+   * @return True for an identical or inferior position.
    */
   inline bool isLesserThanOrEqual(const BoardHash& other, int8_t color) const {
     // Different hashes, including the side to move, indicate different positions.
@@ -96,9 +96,9 @@ class BoardHash {
 
   /**
    * Return true if this position is inferior to the specified position.
-   * @param other const BoardHash& position to compare.
-   * @param color int8_t color whose hand pieces are compared.
-   * @return bool; true for an inferior position.
+   * @param other Position to compare.
+   * @param color Color whose hand pieces are compared.
+   * @return True for an inferior position.
    */
   inline bool isLesserThan(const BoardHash& other, int8_t color) const {
     // Different hashes, including the side to move, indicate different positions.

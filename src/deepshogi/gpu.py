@@ -1,9 +1,7 @@
-import logging
 from typing import List, Sequence, Tuple
 
 from .native import NativeInferenceModel
-
-LOGGER = logging.getLogger(__name__)
+from .validation import validate_device_ids
 
 
 def get_default_gpus(
@@ -31,14 +29,11 @@ def get_default_gpus(
             new_gpus = [gpu for gpu in available_gpus if gpu >= 0]
         else:
             new_gpus = available_gpus
-    # Otherwise, exclude unavailable GPU IDs
+    # Keep the requested configuration and reject unavailable devices.
     else:
-        new_gpus = [gpu for gpu in gpus if gpu in available_gpus]
-        # If unavailable GPU IDs are included, display a warning
-        if len(new_gpus) != len(gpus):
-            LOGGER.warning(
-                'Invalid GPU ID is ignored: %s',
-                [gpu for gpu in gpus if gpu not in new_gpus])
+        new_gpus = list(gpus)
+
+    validate_device_ids(new_gpus, available_gpus)
 
     # If -1 is included in the GPU ID list, disable FP16 usage
     if -1 in new_gpus:

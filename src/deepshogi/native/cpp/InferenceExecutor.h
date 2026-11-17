@@ -1,7 +1,7 @@
 #pragma once
 
 #include <condition_variable>
-#include <mutex>
+#include <memory>
 #include <string>
 #include <thread>
 #include <vector>
@@ -68,39 +68,14 @@ class InferenceExecutor {
 
  private:
   /**
-   * Mutex object for model synchronization.
-   */
-  std::mutex _mutex;
-
-  /**
-   * Inference manager object.
+   * Inference processor.
    */
   InferenceProcessor* _processor;
 
   /**
-   * Inference model object.
+   * Inference model.
    */
-  InferenceModel* _model;
-
-  /**
-   * Path to the inference model file.
-   */
-  std::string _file;
-
-  /**
-   * ID of the GPU to use.
-   */
-  int32_t _gpu;
-
-  /**
-   * Whether to use half-precision floating point.
-   */
-  bool _fp16;
-
-  /**
-   * Whether to enable deterministic behavior.
-   */
-  bool _deterministic;
+  std::unique_ptr<InferenceModel> _model;
 
   /**
    * Batch size.
@@ -118,9 +93,24 @@ class InferenceExecutor {
   bool _terminated;
 
   /**
-   * Variable to store the ratio of inference requests included in a batch.
+   * Per-thread fraction of batch capacity occupied by inference requests.
    */
   std::vector<std::atomic<float>> _batchFillRates;
+
+  /**
+   * Per-thread input buffers allocated before workers start.
+   */
+  std::vector<std::vector<int32_t>> _inputBuffers;
+
+  /**
+   * Per-thread output mask buffers allocated before workers start.
+   */
+  std::vector<std::vector<int32_t>> _maskBuffers;
+
+  /**
+   * Per-thread inference result buffers allocated before workers start.
+   */
+  std::vector<std::vector<float>> _outputBuffers;
 
   /**
    * Method executed on a thread.

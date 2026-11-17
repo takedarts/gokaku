@@ -147,14 +147,14 @@ class MctsNode {
    * Gets the node object for when the specified move is made.
    * If no node object exists, returns a newly created object.
    * The created node object is not registered as a child node of this node object.
-   * @param move Move
+   * @param move Move being examined.
    * @return Pointer to the node object
    */
   MctsNode* getChild(const Move& move);
 
   /**
    * Removes the node object for when the specified move is made from the child node list.
-   * @param move Move
+   * @param move Move being examined.
    */
   void removeChild(const Move& move);
 
@@ -211,7 +211,7 @@ class MctsNode {
 
   /**
    * Returns the board object of this node.
-   * @return Board object of this node
+   * @return Position stored in this node
    */
   inline const Board& getBoard() const {
     return _board;
