@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <functional>
 
 #include "Board.h"
 #include "Move.h"
@@ -53,9 +54,13 @@ class PnSearchNode {
    * Expand the node into children, retaining already expanded children.
    * @param engine Search engine.
    * @param board Working position, restored on return.
-   * @return False only when node capacity is exhausted.
+   * @param isPreviousPosition Function that identifies positions before the search started
+   *     (empty for the conventional search).
+   * @return False when node capacity is exhausted or an abort is requested, otherwise true.
    */
-  bool expand(PnSearchEngine* engine, Board* board);
+  bool expand(
+      PnSearchEngine* engine, Board* board,
+      const std::function<bool(const BoardHash&)>& isPreviousPosition = {});
 
   /**
    * Update this node's PN/DN values, preserving terminal values when there are no children.

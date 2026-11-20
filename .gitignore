@@ -18,3 +18,4 @@ src/deepshogi/native/cpp/Config.h
 
 # Instruction files for local development
 AGENTS.md
+CLAUDE.md

@@ -1,28 +1,28 @@
 import argparse
 import sys
+from contextlib import ExitStack
+from functools import partial
 
-from deepshogi.config import (DEFAULT_BATCH_SIZE, DEFAULT_CHECK_NODE_DEPTH,
-                              DEFAULT_CHECK_SEARCH_DEPTH,
-                              DEFAULT_CHECK_SEARCH_NODE, DEFAULT_DRAW_TURN,
-                              DEFAULT_MAX_VISITS, DEFAULT_PUCB_CONSTANT_BASE,
-                              DEFAULT_PUCB_CONSTANT_INIT,
-                              DEFAULT_PUCB_MIN_VISITS_RATE,
-                              DEFAULT_THREADS_PER_GPU, NAME, VERSION)
-from deepshogi.gpu import get_default_gpus
+from deepshogi.config import (DEFAULT_CHECK_NODE_DEPTH, DEFAULT_CHECK_SEARCH_DEPTH,
+                              DEFAULT_CHECK_SEARCH_NODE, DEFAULT_DRAW_TURN, DEFAULT_MAX_VISITS,
+                              DEFAULT_PUCB_CONSTANT_BASE, DEFAULT_PUCB_CONSTANT_INIT,
+                              DEFAULT_PUCB_MIN_VISITS_RATE, DEFAULT_THREADS_PER_GPU, NAME, VERSION)
+from deepshogi.gpu import parse_gpu_ids
+from deepshogi.loader import open_processor
 from deepshogi.log import start_logging
 from deepshogi.processor import Processor
 from deepshogi.usi import USIEngine
-from deepshogi.validation import validate_inference_sizes, validate_positive_int
+from deepshogi.validation import validate_nonnegative_float, validate_positive_int
 
 
 def parse_args() -> argparse.Namespace:
-    '''Parse and normalize engine arguments; return argparse.Namespace.
+    '''Parse the USI engine startup arguments before opening the model.
     Returns:
-        argparse.Namespace: Parsed command-line arguments.
+        argparse.Namespace: Startup settings with visits and cache size normalized.
     '''
     parser = argparse.ArgumentParser(description='Run with USI mode.')
     parser.add_argument(
-        'model', type=str, help='Path to the model file')
+        'model', type=str, help='Path to an ExportedProgram (.ep) or a compiled model (.pt2).')
     parser.add_argument(
         '--visits', type=int, default=50,
         help='Number of visits (default: 50)')
@@ -58,7 +58,7 @@ def parse_args() -> argparse.Namespace:
         help='Temperature parameter for random moves (default: 1.0)')
     parser.add_argument(
         '--initial-value-delta', type=float, default=0.01,
-        help='Delta value for random moves (default: 0.01)')
+        help='Maximum win probability drop for random moves (finite and >= 0, default: 0.01)')
     parser.add_argument(
         '--initial-white-only', default=False, action='store_true',
         help='Only move randomly when playing as white')
@@ -96,14 +96,10 @@ def parse_args() -> argparse.Namespace:
         '--threads', type=int, default=16,
         help='Number of threads (default: 16)')
     parser.add_argument(
-        '--batch-size', type=int, default=DEFAULT_BATCH_SIZE,
-        help=f'Batch size of each GPU (default: {DEFAULT_BATCH_SIZE})')
-    parser.add_argument(
-        '--gpus', type=lambda x: list(map(int, x.split(','))), default=None,
-        help='GPU IDs (comma-separated) (default: all available GPUs)')
-    parser.add_argument(
-        '--fp16', default=False, action='store_true',
-        help='Use FP16')
+        '--gpus', type=parse_gpu_ids, default=None,
+        help='GPU IDs (comma-separated), or -1 for CPU. EP compilation uses the first ID '
+             '(default: all GPUs of the same model as the first for EP, '
+             'all compatible devices for PT2)')
     parser.add_argument(
         '--threads-per-gpu', type=int, default=DEFAULT_THREADS_PER_GPU,
         help=f'Number of threads per GPU (default: {DEFAULT_THREADS_PER_GPU})')
@@ -118,20 +114,12 @@ def parse_args() -> argparse.Namespace:
 
     # Validate input settings before normalization or native construction.
     try:
-        for name in ('threads', 'max_visits', 'batch_size', 'threads_per_gpu'):
+        for name in ('threads', 'max_visits', 'threads_per_gpu'):
             validate_positive_int(name, getattr(args, name))
+        validate_nonnegative_float('--initial-value-delta', args.initial_value_delta)
 
-        # Resolve default devices and validate size calculations for the actual configuration.
-        args.gpus, args.fp16 = get_default_gpus(args.gpus, args.fp16)
-        validate_inference_sizes(len(args.gpus), args.batch_size, args.threads_per_gpu)
-    except ValueError as error:
-        parser.error(str(error))
-
-    # Ensure the maximum visits cover the requested visit count.
-    args.max_visits = max(args.max_visits, args.visits)
-
-    # Reject overflow caused by increasing the maximum to match requested visits.
-    try:
+        # Ensure the maximum visits adjusted by the visit count fits in the native integer.
+        args.max_visits = max(args.max_visits, args.visits)
         validate_positive_int('max_visits', args.max_visits)
     except ValueError as error:
         parser.error(str(error))
@@ -143,53 +131,59 @@ def parse_args() -> argparse.Namespace:
     return args
 
 
+def create_processor(args: argparse.Namespace, stack: ExitStack) -> Processor:
+    '''Open the processor at isready and keep the model until the USI loop ends.
+    Args:
+        args (argparse.Namespace): Model path, devices, thread count, and cache settings.
+        stack (ExitStack): Stack that closes the model context when the USI loop ends.
+    Returns:
+        Processor: Processor reused across games.
+    '''
+    # If initialization fails, the next isready opens a new context.
+    return stack.enter_context(open_processor(
+        args.model, gpus=args.gpus,
+        threads_per_gpu=args.threads_per_gpu,
+        cache_size=args.cache_size))
+
+
 def main() -> None:
-    '''Create the inference processor and run the USI engine; return None.'''
+    '''Start the USI engine, which prepares the processor at the first isready.'''
     args = parse_args()
 
     # Configure logging.
     start_logging(debug=args.verbose, console=sys.stderr)
 
-    # Create inference object
-    processor = Processor(
-        model=args.model,
-        gpus=args.gpus,
-        fp16=args.fp16,
-        batch_size=args.batch_size,
-        threads_per_gpu=args.threads_per_gpu,
-        cache_size=args.cache_size)
-
-    # Create the USI engine.
-    engine = USIEngine(
-        processor=processor,
-        threads=args.threads,
-        visits=args.visits,
-        extends=args.extends,
-        timelimit=args.timelimit,
-        criterion=args.criterion,
-        ponder=args.ponder,
-        max_visits=args.max_visits,
-        resign_threshold=args.resign,
-        resign_turn=args.min_turn,
-        initial_turn=args.initial_turn,
-        initial_width=args.initial_width,
-        initial_temperature=args.initial_temperature,
-        initial_value_delta=args.initial_value_delta,
-        initial_white_only=args.initial_white_only,
-        nyugyoku_scores=(31, 31) if args.nyugyoku_rule == '24' else (28, 27),
-        draw_turn=args.draw_turn,
-        check_search_depth=args.check_search_depth,
-        check_search_node=args.check_search_node,
-        check_node_depth=args.check_node_depth,
-        pucb_constant_init=args.pucb_constant_init,
-        pucb_constant_base=args.pucb_constant_base,
-        pucb_min_visits_rate=args.pucb_min_visits_rate,
-        client_name=args.client_name,
-        client_version=args.client_version,
-    )
-
-    # Run the game.
-    engine.run()
+    # Respond to usi first, and keep the model opened at isready until the search ends.
+    with ExitStack() as stack:
+        engine = USIEngine(
+            processor=None,
+            processor_factory=partial(create_processor, args, stack),
+            threads=args.threads,
+            visits=args.visits,
+            extends=args.extends,
+            timelimit=args.timelimit,
+            criterion=args.criterion,
+            ponder=args.ponder,
+            max_visits=args.max_visits,
+            resign_threshold=args.resign,
+            resign_turn=args.min_turn,
+            initial_turn=args.initial_turn,
+            initial_width=args.initial_width,
+            initial_temperature=args.initial_temperature,
+            initial_value_delta=args.initial_value_delta,
+            initial_white_only=args.initial_white_only,
+            nyugyoku_scores=(31, 31) if args.nyugyoku_rule == '24' else (28, 27),
+            draw_turn=args.draw_turn,
+            check_search_depth=args.check_search_depth,
+            check_search_node=args.check_search_node,
+            check_node_depth=args.check_node_depth,
+            pucb_constant_init=args.pucb_constant_init,
+            pucb_constant_base=args.pucb_constant_base,
+            pucb_min_visits_rate=args.pucb_min_visits_rate,
+            client_name=args.client_name,
+            client_version=args.client_version,
+        )
+        engine.run()
 
 
 if __name__ == '__main__':

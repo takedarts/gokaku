@@ -190,7 +190,7 @@ BitBoard& BitBoard::operator>>=(int32_t shift) {
 std::string BitBoard::toString() const {
   std::stringstream ss;
 
-  for (int32_t y = 0; y < BOARD_SIZE; ++y) {
+  for (int32_t y = 0; y < BOARD_SIZE; y++) {
     for (int32_t x = BOARD_SIZE - 1; x >= 0; --x) {
       uint8_t index = y + x * BOARD_SIZE;
 

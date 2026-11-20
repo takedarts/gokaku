@@ -36,10 +36,13 @@ class BoardHash {
    */
   inline std::array<uint64_t, 6> getCacheKey() const {
     // Preserve all comparison fields without virtual-table data or padding.
-    return {_cellHash, _colorBitBoards[0].getLower(), _colorBitBoards[1].getLower(),
-            _handBits[0], _handBits[1],
-            uint64_t(_colorBitBoards[0].getUpper()) |
-                (uint64_t(_colorBitBoards[1].getUpper()) << 32)};
+    return {
+        _cellHash,
+        _colorBitBoards[0].getLower(),
+        _colorBitBoards[1].getLower(),
+        _handBits[0], _handBits[1],
+        uint64_t(_colorBitBoards[0].getUpper()) |
+            (uint64_t(_colorBitBoards[1].getUpper()) << 32)};
   }
 
   /**
@@ -61,6 +64,19 @@ class BoardHash {
     } else {
       return false;
     }
+  }
+
+  /**
+   * Compare the side to move, the pieces on the board, and both players' pieces in hand.
+   * @param other Position to compare.
+   * @return True for an identical position.
+   */
+  inline bool operator==(const BoardHash& other) const {
+    return _cellHash == other._cellHash &&
+           _colorBitBoards[0] == other._colorBitBoards[0] &&
+           _colorBitBoards[1] == other._colorBitBoards[1] &&
+           _handBits[0] == other._handBits[0] &&
+           _handBits[1] == other._handBits[1];
   }
 
   /**

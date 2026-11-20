@@ -43,6 +43,19 @@ def validate_positive_float(name: str, value: float) -> None:
         raise ValueError(message)
 
 
+def validate_nonnegative_float(name: str, value: float) -> None:
+    '''Validate that a setting is finite and nonnegative.
+    Args:
+        name (str): Setting name.
+        value (float): Setting value.
+    Raises:
+        ValueError: If the value is not finite or is negative.
+    '''
+    # Accept only finite values usable in comparisons, including the lower bound of zero.
+    if value < 0.0 or not math.isfinite(value):
+        raise ValueError(f'{name} must be finite and nonnegative.')
+
+
 def validate_device_ids(gpus: Sequence[int], available_gpus: Sequence[int]) -> None:
     '''Validate that devices are specified and all are available.
     Args:

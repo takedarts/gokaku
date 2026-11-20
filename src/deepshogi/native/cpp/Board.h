@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <functional>
 #include <ostream>
 #include <string>
 #include <type_traits>
@@ -12,6 +13,8 @@
 #include "Position.h"
 
 namespace deepshogi {
+
+class BoardHash;
 
 /**
  * Hold the board position.
@@ -93,9 +96,12 @@ class Board {
   /**
    * Return a checkmating move sequence for the current position.
    * @param depth Checkmate search depth.
+   * @param isPreviousPosition Function that identifies positions before the search started
+   *     (empty for the conventional search).
    * @return Checkmating move sequence.
    */
-  std::vector<Move> getCheckmateMoves(int32_t depth) const;
+  std::vector<Move> getCheckmateMoves(
+      int32_t depth, const std::function<bool(const BoardHash&)>& isPreviousPosition = {}) const;
 
   /**
    * Return the piece score, counting major pieces as five and minor pieces as one.

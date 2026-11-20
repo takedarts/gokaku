@@ -8,8 +8,8 @@ Gokaku is a sibling program of the computer Go program [Maru](https://github.com
 You can track Gokaku's playing strength improvements on [this page](https://takeda-lab.jp/gokaku/).
 
 A model file is required to run Gokaku.
-You can download the TorchScript model from [this release page](https://github.com/takedarts/gokaku/releases/tag/v2.4).
-To create a TensorRT model, convert the TorchScript model using `src/compile.py`.
+Gokaku runs an ExportedProgram model (`.ep`) or a PT2 package (`.pt2`) compiled from an ExportedProgram with `src/compile.py`.
+Model files are published on the [releases page](https://github.com/takedarts/gokaku/releases).
 
 **Note:** Gokaku version 2.4 changes the model specification, including its output format,
 so models from Gokaku version 2.3 or earlier cannot be used.
@@ -62,15 +62,19 @@ python src/build.py --clean
 
 ### Running the Program
 You can launch Gokaku by running the launch script `src/run.py`.
-Specify a TorchScript or TensorRT model as the argument (you can download a TorchScript model from [this release page](https://github.com/takedarts/gokaku/releases/tag/v2.4), or create a TensorRT model using `src/compile.py`).
+Specify an ExportedProgram model (`.ep`) or a PT2 package (`.pt2`) created with `src/compile.py` as the argument.
 ```
 python src/run.py <model_file>
 ```
 
+The model is loaded when the first `isready` command is received.
+When an ExportedProgram is specified, it is compiled for the execution device at that time, which requires a C++ compiler and takes some time.
+To avoid compiling at every startup, compile the model in advance with `src/compile.py` (see [Compiling the Model](#compiling-the-model)).
+
 Gokaku operates via the USI (Universal Shogi Interface) protocol.
 Here is a simple example of usage:
 ```
-% python src/run.py b10c512-1000.model
+% python src/run.py b10c512-1000.ep
 usi
 id name Gokaku 2.4
 id author Atsushi Takeda
@@ -113,28 +117,29 @@ To see the available options, run the script with the `--help` flag:
 python src/run.py --help
 ```
 
-### Running with TensorRT
-If you build in an environment where Torch-TensorRT is installed, you can run Gokaku using TensorRT.
-First, to use TensorRT, you need to compile Gokaku's inference model into a TensorRT model.
-Run the following command to compile the model file into a TensorRT model:
+### Compiling the Model
+You can compile an ExportedProgram model into a PT2 package for the execution device in advance with `src/compile.py`:
 ```
-python src/compile.py <torch-script-file> <tensorrt-file>
+python src/compile.py <exported-program-file> <pt2-file>
 ```
 
-For `<torch-script-file>`, specify a TorchScript model.
-When you run the above command, a TensorRT format model file will be generated at `<tensorrt-file>`.
+The backend is selected with the `--backend` option (`auto`, `aoti`, or `tensorrt`).
+With `auto` (the default), TensorRT is used when Torch-TensorRT is available on Linux with an NVIDIA CUDA GPU; otherwise AOTInductor is used.
+The target device is selected with the `--gpu` option (`-1` for the CPU); by default, CUDA/ROCm GPU 0, MPS GPU 0, or the CPU is used in this order.
+The device type, GPU runtime, precision, and batch size are stored in the PT2 package, and `src/run.py` reads them when loading the model, so you do not need to specify them when launching Gokaku.
+A PT2 package can only be used on the same kind of device and runtime as the one it was compiled for.
 
-You can launch Gokaku using TensorRT by running the startup script with the created TensorRT model file specified as an argument:
+You can launch Gokaku with the created PT2 package specified as an argument:
 ```
-python src/run.py <tensorrt-file>
+python src/run.py <pt2-file>
 ```
 
-When running Gokaku with TensorRT, the TensorRT model's compilation options and the execution options for `src/run.py` must match.
-If you specify the `--fp16` or `--batch-size` options when compiling the TensorRT model, specify the same options in the `src/run.py` execution command as well.
-The following example shows how to compile a TensorRT model with half-precision floating point (FP16) and batch size 16, and then launch Gokaku using that model (TensorRT model compilation only needs to be done once):
+If the ExportedProgram was exported with a dynamic batch dimension, you can choose any precision (`--fp16`) and batch size (`--batch-size`) when compiling.
+If it was exported with a fixed batch size, the precision and batch size must match those stored in the ExportedProgram.
+The following example compiles a model for TensorRT on GPU 0 and then launches Gokaku using that model (compilation only needs to be done once):
 ```
-python src/compile.py --fp16 --batch-size 16 b10c512-1000.model b10c512-1000.rt.model
-python src/run.py --fp16 --batch-size 16 b10c512-1000.rt.model
+python src/compile.py --backend tensorrt --gpu 0 b10c512-1000.ep b10c512-1000.pt2
+python src/run.py b10c512-1000.pt2
 ```
 
 ## Running with Docker
@@ -210,9 +215,7 @@ When running the startup script `src/run.py`, you can specify the following opti
 | `--client-name <S>`         | Client name to display                                         | `Gokaku`              |
 | `--client-version <S>`      | Version information to display                                 | `2.4`                 |
 | `--threads <N>`             | Number of threads to use for search                            | 16                    |
-| `--batch-size <N>`          | Batch size for board evaluation                                | 32                    |
-| `--gpus <N>`       | GPU ID(s) to use (comma-separated for multiple GPUs)           | All available GPUs    |
-| `--fp16`                    | Use half-precision floating point (FP16)                       | False                 |
+| `--gpus <N>`       | GPU ID(s) to use (comma-separated for multiple GPUs, -1 for the CPU); a `.ep` model is compiled on the first one | All GPUs of the same model as the first GPU for `.ep`, all compatible devices for `.pt2` |
 | `--threads-per-gpu <N>`     | Number of inference threads per GPU                            | 2                     |
 | `--cache-size <N>`          | Cache size for inference results                               | visits |
 | `--verbose`                 | Enable log output to standard error                            | False                 |
@@ -227,16 +230,17 @@ When running the startup script `src/run.py`, you can specify the following opti
 - Search ends early when the most visited child exceeds 60% of the target specified by `--visits`.
 - With `--extends N`, search can continue up to N more times when the selected move's win probability is strictly between 5% and 95% and another candidate has at least two thirds of its visits. Each extension increases the target visits by half the original requested value. No extension is performed when less than one second remains.
 - The search tree is reused after moves.
+- When the remaining time is given by `go`, a safety margin is subtracted from the thinking time: 2 seconds if byoyomi is at least 2 seconds, otherwise 10 seconds.
 
 ## Execution Examples
-To start Gokaku using the model file `b10c512-1000.model`, run the following command:
+To start Gokaku using the model file `b10c512-1000.ep`, run the following command:
 ```
-python src/run.py b10c512-1000.model
+python src/run.py b10c512-1000.ep
 ```
 
 To start Gokaku with the number of visits set to 1000 and the maximum thinking time set to 5 seconds, run the following command:
 ```
-python src/run.py b10c512-1000.model --visits 1000 --timelimit 5
+python src/run.py b10c512-1000.ep --visits 1000 --timelimit 5
 ```
 
 ## Tests
@@ -246,7 +250,8 @@ PYTHONPATH=src python -m unittest discover -s src/tests -p '*_test.py' -v
 MYPYPATH=src python -m mypy --explicit-package-bases src
 ```
 
-The tests generate and use a small model, so no trained model or GPU is required.
+The tests generate and compile a small model, so no trained model or GPU is required (CMake and a C++ compiler are required).
+The C++ tests are built with CMake and run as part of the Python tests.
 See [src/tests/README.md](src/tests/README.md) for details.
 
 ## License

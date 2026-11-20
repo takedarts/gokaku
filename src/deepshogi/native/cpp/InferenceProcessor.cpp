@@ -1,6 +1,10 @@
 #include "InferenceProcessor.h"
 
+#include <torch/torch.h>
+
 #include <algorithm>
+#include <exception>
+#include <future>
 #include <limits>
 #include <stdexcept>
 
@@ -27,39 +31,82 @@ InferenceProcessor::InferenceProcessor(
       _terminated(false),
       _threadSize(0),
       _batchSize(std::max(batchSize, 1)) {
-  // Validate the device list.
+  // Ensure the device list is not empty and the device count fits in int32_t.
   const int32_t max_value = std::numeric_limits<int32_t>::max();
 
   if (gpus.empty() || gpus.size() > static_cast<size_t>(max_value)) {
     throw std::invalid_argument("gpus must contain devices within int32 range.");
   }
 
-  // Validate the thread count.
+  // Clamp the threads per device to at least one and compute the total in a wider type.
   const int32_t threads_per_gpu = std::max(threadsPerGpu, 1);
   const int64_t thread_size = static_cast<int64_t>(gpus.size()) * threads_per_gpu;
 
+  // Ensure the total thread count can be converted to int32_t.
   if (thread_size > max_value) {
     throw std::invalid_argument("Inference thread count exceeds int32 range.");
   }
 
-  // Set the thread count.
+  // Keep the clamped and validated total thread count.
   _threadSize = static_cast<int32_t>(thread_size);
 
-  // Let each owning class validate its devices and buffers.
+  // Hold the results of the initialization tasks run in parallel for each device.
+  std::vector<std::future<std::unique_ptr<InferenceExecutor>>> tasks;
+
+  // Reserve storage so that registering results after starting tasks does not reallocate.
+  tasks.reserve(gpus.size());
+  _executors.reserve(gpus.size());
+
+  // Hold an exception from starting or running tasks and rethrow it after collecting all tasks.
+  std::exception_ptr initialization_error;
+
+  // Create the inference executor of each device in a separate asynchronous task.
   try {
     for (int32_t gpu : gpus) {
-      _executors.emplace_back(std::make_unique<InferenceExecutor>(
-          this, model, gpu, fp16, deterministic, _batchSize, threadsPerGpu));
+      tasks.emplace_back(std::async(
+          std::launch::async,
+          [this, model, gpu, fp16, deterministic, threads_per_gpu] {
+            // Set the target device on the thread running the initialization task.
+            torch::DeviceGuard device_guard(InferenceModel::getSuitableDevice(gpu));
+
+            // Create the inference model and per-thread buffers and start inference workers.
+            return std::make_unique<InferenceExecutor>(
+                this, model, gpu, fp16, deterministic, _batchSize, threads_per_gpu);
+          }));
     }
   } catch (...) {
+    // Even if starting fails midway, collect all tasks that have already started.
+    initialization_error = std::current_exception();
+  }
+
+  // Wait for all started tasks and register successful results in the specified device order.
+  for (auto& task : tasks) {
+    try {
+      _executors.emplace_back(task.get());
+    } catch (...) {
+      // Prefer the exception held first and keep collecting the remaining tasks after a failure.
+      if (!initialization_error) {
+        initialization_error = std::current_exception();
+      }
+    }
+  }
+
+  // After collecting all tasks, stop workers and destroy them after releasing the lock.
+  if (initialization_error) {
+    // Set the termination flag while holding the lock that workers use to check the queue.
     {
       std::lock_guard<std::mutex> lock(_queueMutex);
       _terminated = true;
     }
 
+    // Notify waiting workers of the updated termination flag.
     _queueCondition.notify_all();
+
+    // Destroy the created inference executors and wait for their workers to finish.
     _executors.clear();
-    throw;
+
+    // Rethrow the held exception to the caller after reclaiming the created resources.
+    std::rethrow_exception(initialization_error);
   }
 }
 
@@ -130,11 +177,11 @@ void InferenceProcessor::submit(
  */
 float InferenceProcessor::predict(Board* board) {
   // Create a temporary node.
-  MctsManager manager(MctsParameter(28, 27, 0.0f, 1.0f, 18200.0f, 0.0f));
+  MctsManager manager(MctsParameter(0.0f, 1.0f, 18200.0f, 0.0f));
   MctsNode node(&manager);
 
-  // Assign the board to the node.
-  node.initialize(board->getSfen(), board->getDrawTurn());
+  // Set Black 28 and White 27 as the nyugyoku scores for standalone inference.
+  node.initialize(board->getSfen(), board->getDrawTurn(), 28, 27);
 
   // Create a mutex and condition variable to wait for inference to complete
   std::mutex mutex;

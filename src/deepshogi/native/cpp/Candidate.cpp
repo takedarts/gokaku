@@ -61,7 +61,7 @@ std::string Candidate::toString() const {
   if (!_variations.empty()) {
     ss << ", Variations: [";
 
-    for (size_t i = 0; i < _variations.size(); ++i) {
+    for (size_t i = 0; i < _variations.size(); i++) {
       ss << _variations[i].toString();
 
       if (i < _variations.size() - 1) {

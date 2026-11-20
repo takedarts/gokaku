@@ -12,6 +12,7 @@ namespace deepshogi {
 PnSearchManager::PnSearchManager(int32_t nodes, int32_t size)
     : _mutex(),
       _condition(),
+      _engineSize(std::max(size, 1)),
       _engines(new PnSearchEngine*[std::max(size, 1)]()),
       _availableEngines() {
   // Construct engines using the same clamped count as the pointer array.
@@ -36,7 +37,7 @@ PnSearchManager::PnSearchManager(int32_t nodes, int32_t size)
  * Destroys the PnSearchManager object.
  */
 PnSearchManager::~PnSearchManager() {
-  for (size_t i = 0; i < _availableEngines.size(); ++i) {
+  for (int32_t i = 0; i < _engineSize; i++) {
     delete _engines[i];
   }
 }
@@ -47,11 +48,22 @@ PnSearchManager::~PnSearchManager() {
  * @return Pointer to the PN search engine object
  */
 PnSearchEngine* PnSearchManager::acquire() {
+  // Protect the available queue and engine preparation/abort notification with the same mutex
   std::unique_lock<std::mutex> lock(_mutex);
+
+  // While none is available, release the mutex and wait; recheck availability after a notification
   _condition.wait(lock, [this]() { return !_availableEngines.empty(); });
 
+  // Get the engine to lend from the head of the available queue
   PnSearchEngine* engine = _availableEngines.front();
+
+  // Remove the engine from the queue so that it is not lent to another worker
   _availableEngines.pop();
+
+  // Serialize lending and stop notification with the same mutex and keep aborts before the start
+  engine->_prepareSearch();
+
+  // Return the prepared engine; the mutex lock is released when the function exits
   return engine;
 }
 
@@ -61,8 +73,24 @@ PnSearchEngine* PnSearchManager::acquire() {
  */
 void PnSearchManager::release(PnSearchEngine* engine) {
   std::unique_lock<std::mutex> lock(_mutex);
+
+  // Ignore aborts after return and prepare a new search on the next lending
+  engine->_searchState.store(PnSearchEngine::SearchState::IDLE, std::memory_order_release);
   _availableEngines.push(engine);
   _condition.notify_one();
+}
+
+/**
+ * Request an abort of the lent search engines.
+ * Do not wait for them to finish.
+ */
+void PnSearchManager::abortSearch() {
+  // Available engines are IDLE, so they pass through without a state change
+  std::lock_guard<std::mutex> lock(_mutex);
+
+  for (int32_t i = 0; i < _engineSize; i++) {
+    _engines[i]->abortSearch();
+  }
 }
 
 }  // namespace deepshogi

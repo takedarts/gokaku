@@ -13,30 +13,16 @@ import torch
 
 from deepshogi.board import Board
 from deepshogi.config import (
-    COLOR_BLACK, COLOR_WHITE, MODEL_INFO_OFFSET, MODEL_INPUT_PACK_SIZE,
+    COLOR_BLACK, COLOR_WHITE, DEFAULT_BATCH_SIZE, MODEL_INFO_OFFSET, MODEL_INPUT_PACK_SIZE,
     MODEL_INPUT_SIZE, MODEL_OUTPUT_PACK_SIZE, MODEL_OUTPUT_SIZE, MODEL_VALUE_OFFSET,
 )
+from deepshogi.loader import open_processor
 from deepshogi.native import NativeInferenceModel
-from deepshogi.player import Candidate
 from deepshogi.processor import Processor
 from deepshogi.usi import USIEngine
+from tests.native import run_native_test
+from tests.probe_model import ProbeModel, save_compiled_probe, save_exported_probe
 from run import parse_args
-
-
-class ProbeModel(torch.nn.Module):
-    '''Expose input features and predictable values without a trained model dependency.'''
-
-    def forward(self, inputs: torch.Tensor) -> torch.Tensor:
-        '''Map inputs (Tensor) to output features and game values (Tensor).
-        Returns:
-            torch.Tensor: Batched policy, game value, and auxiliary outputs.
-        '''
-        # Echo all input features so native unpacking errors remain visible.
-        policy = torch.cat((inputs, inputs), dim=1)[:, :MODEL_VALUE_OFFSET]
-        info = inputs[:, MODEL_INFO_OFFSET:]
-        value = torch.sigmoid(info[:, 77:78] + info[:, 81:82])
-        remaining = info[:, 81:82] * 0.1 + 0.25
-        return torch.cat((policy, value, value * 0, remaining, info[:, :6]), dim=1)
 
 
 def unpack(inputs: np.ndarray) -> np.ndarray:
@@ -75,8 +61,7 @@ class InferenceTest(unittest.TestCase):
         expanded = torch.tensor(unpack(packed))
         expected = model(expanded).detach().numpy()
         with tempfile.TemporaryDirectory() as temporary:
-            path = Path(temporary) / 'probe.pt'
-            torch.jit.trace(model, expanded[:1]).save(str(path))
+            path = save_compiled_probe(Path(temporary), 'probe', model, 4)
             native = NativeInferenceModel(str(path), -1, False, True)
             masks = np.full((len(boards), MODEL_OUTPUT_PACK_SIZE), -1, dtype=np.int32)
             np.testing.assert_allclose(native.forward(packed, masks), expected, atol=1e-6)
@@ -100,11 +85,56 @@ class InferenceTest(unittest.TestCase):
                     capture_output=True, text=True, timeout=45)
                 self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
-    def test_candidate(self) -> None:
-        '''Check the new candidate tuple and nonnegative remaining moves; return None.'''
-        candidate = Candidate((0, 0), (0, 1), False, COLOR_BLACK, 1, 0.5, 0.0, -1.0, [])
-        self.assertEqual(candidate.remaining_turns, 0.0)
-        self.assertFalse(hasattr(candidate, 'playouts'))
+    def test_fixed_batch_split_and_padding(self) -> None:
+        '''Split inputs larger than the fixed batch and pad partial batches; return None.'''
+        boards = [Board(draw_turn=10 + index) for index in range(5)]
+        packed = np.stack([board.get_inputs() for board in boards])
+        model = ProbeModel().eval()
+        expected = model(torch.tensor(unpack(packed))).detach().numpy()
+        with tempfile.TemporaryDirectory() as temporary:
+            path = save_compiled_probe(Path(temporary), 'probe', model, 2)
+            native = NativeInferenceModel(str(path), -1, False, True)
+            masks = np.full((len(boards), MODEL_OUTPUT_PACK_SIZE), -1, dtype=np.int32)
+
+            # Evaluate two full batches and one padded row, and also an empty input.
+            np.testing.assert_allclose(native.forward(packed, masks), expected, atol=1e-6)
+            self.assertEqual(native.forward(packed[:0], masks[:0]).shape, (0, MODEL_OUTPUT_SIZE))
+
+            # Reject a precision that differs from the metadata stored in the package.
+            with self.assertRaises(ValueError):
+                NativeInferenceModel(str(path), -1, True, True)
+
+    def test_open_processor_formats(self) -> None:
+        '''Open a compiled PT2 and an ExportedProgram compiled at load time; return None.'''
+        boards = [Board(), Board(draw_turn=10)]
+        packed = np.stack([board.get_inputs() for board in boards])
+        model = ProbeModel().eval()
+        expected = model(torch.tensor(unpack(packed))).detach().numpy()
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            compiled = save_compiled_probe(directory, 'compiled', model, 3)
+            exported = directory / 'exported.ep'
+            save_exported_probe(exported, model, 2, dynamic=True)
+
+            # Use the batch size and precision recorded in the package.
+            for path, batch_size in ((compiled, 3), (exported, DEFAULT_BATCH_SIZE)):
+                with self.subTest(path=path.name), \
+                        open_processor(path, gpus=[-1], threads_per_gpu=1) as processor:
+                    self.assertEqual(processor.gpus, (-1,))
+                    self.assertFalse(processor.fp16)
+                    self.assertEqual(processor.batch_size, batch_size)
+                    np.testing.assert_allclose(processor.execute(packed), expected, atol=1e-6)
+
+            # Reject files that are neither an ExportedProgram nor a PT2 package.
+            invalid = directory / 'invalid.pt2'
+            invalid.write_bytes(b'invalid')
+            with self.assertRaisesRegex(ValueError, 'Expected an ExportedProgram'):
+                with open_processor(invalid):
+                    pass
+
+    def test_inference_cache(self) -> None:
+        '''Check inference cache eviction and keys and PN cache collisions in C++; return None.'''
+        run_native_test('inference_cache_test')
 
     def test_usi_and_arguments(self) -> None:
         '''Check new options and rejection of the removed playout argument; return None.'''

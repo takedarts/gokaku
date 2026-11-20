@@ -1,5 +1,6 @@
 import struct
 import unittest
+from io import StringIO
 from queue import Queue
 from threading import Condition, Event, Thread
 from unittest.mock import Mock, patch
@@ -7,10 +8,116 @@ from unittest.mock import Mock, patch
 from deepshogi.board import Board
 from deepshogi.config import (COLOR_BLACK, COLOR_NONE, COLOR_WHITE,
                               DEFAULT_INITIAL_SFEN, RESULT_NONE)
-from deepshogi.player import Candidate, Player
+from deepshogi.player import Candidate, Player, Referee
 from deepshogi.usi import (USIEngine, _SearchRequest, usi_candidate_to_string,
                            usi_move_to_string, usi_string_to_move)
 from deepshogi.validation import INT32_MAX
+
+
+class UsiInitializationTest(unittest.TestCase):
+    '''Check lazy creation of the inference processor and state management at isready.'''
+
+    def setUp(self) -> None:
+        '''Prepare an engine with model loading and player creation replaced.
+        '''
+        # Track the number of creations and when readyok is sent.
+        self.processor = Mock()
+        self.factory = Mock(return_value=self.processor)
+        self.writer = StringIO()
+        self.engine = USIEngine(
+            processor=None, threads=1, processor_factory=self.factory, writer=self.writer)
+        player_patch = patch('deepshogi.usi.Player')
+        self.player_class = player_patch.start()
+        self.player = self.player_class.return_value
+        self.addCleanup(player_patch.stop)
+
+    def test_requires_exactly_one_processor_source(self) -> None:
+        '''Reject specifying both a processor and a factory, and specifying neither.
+        '''
+        # Reject invalid combinations before loading the model.
+        with self.assertRaises(ValueError):
+            USIEngine(processor=None, threads=1)
+        with self.assertRaises(ValueError):
+            USIEngine(processor=self.processor, threads=1, processor_factory=self.factory)
+        self.factory.assert_not_called()
+
+    def test_usi_and_quit_do_not_create_processor(self) -> None:
+        '''Do not create the inference processor for usi and quit alone.
+        '''
+        # Engine information can be returned and the engine can exit without loading the model.
+        self.engine.reader = StringIO('usi\nquit\n')
+        self.engine.run()
+        self.assertIn('usiok', self.writer.getvalue().splitlines())
+        self.factory.assert_not_called()
+        self.player_class.assert_not_called()
+
+    def test_isready_waits_for_initialization_and_reuses_processor(self) -> None:
+        '''Respond after initialization and reuse the processor across settings and games.
+        '''
+        # Do not send readyok until the player initialization completes.
+        def initialize(**kwargs: object) -> None:
+            '''Check the response is not sent before the initialization.
+            Args:
+                kwargs (object): Keyword arguments of the player initialization.
+            '''
+            self.assertNotIn('readyok', self.writer.getvalue().splitlines())
+
+        self.player.initialize.side_effect = initialize
+        self.engine._perform('isready')
+        self.assertEqual(self.writer.getvalue(), 'readyok\n')
+        self.player_class.assert_called_once()
+        self.assertIs(self.player_class.call_args.kwargs['processor'], self.processor)
+        self.player.initialize.side_effect = None
+
+        # Do not recreate the player for the same settings, and apply only setting changes.
+        self.engine._perform('isready')
+        self.player_class.assert_called_once()
+        self.engine._perform('setoption name Threads value 2')
+        self.engine._perform('isready')
+        self.assertEqual(self.player_class.call_count, 2)
+        self.assertEqual(self.player_class.call_args.kwargs['threads'], 2)
+
+        # Do not reload the model at isready during or after a game.
+        for command in ('usinewgame', 'isready', 'gameover', 'isready'):
+            self.engine._perform(command)
+        self.factory.assert_called_once_with()
+        self.assertEqual(self.player_class.call_count, 2)
+
+    def test_processor_failure_does_not_respond_and_can_retry(self) -> None:
+        '''Do not send readyok on creation failure and retry creation at the next isready.
+        '''
+        # Do not expose the failed result or proceed to create a player.
+        self.factory.side_effect = [RuntimeError('model load failed'), self.processor]
+        with self.assertLogs('deepshogi.usi', level='ERROR'):
+            self.engine._perform('isready')
+        self.assertEqual(self.writer.getvalue(), '')
+        self.assertIsNone(self.engine.processor)
+        self.assertIsNone(self.engine.player)
+        self.player_class.assert_not_called()
+
+        # Send readyok only when the retry succeeds.
+        self.engine._perform('isready')
+        self.assertEqual(self.writer.getvalue(), 'readyok\n')
+        self.assertEqual(self.factory.call_count, 2)
+        self.assertIs(self.engine.processor, self.processor)
+
+    def test_player_failure_keeps_loaded_processor_for_retry(self) -> None:
+        '''Retry with the loaded processor after the player initialization fails.
+        '''
+        # Handle a successful model creation and the player readiness separately.
+        self.player.initialize.side_effect = [RuntimeError('player init failed'), None]
+        with self.assertLogs('deepshogi.usi', level='ERROR'):
+            self.engine._perform('isready')
+        self.assertEqual(self.writer.getvalue(), '')
+        self.assertIsNone(self.engine.player)
+        self.assertIsNone(self.engine._player_settings)
+        self.assertIs(self.engine.processor, self.processor)
+
+        # Recreate only the player and do not send readyok until it succeeds.
+        self.engine._perform('isready')
+        self.assertEqual(self.writer.getvalue(), 'readyok\n')
+        self.factory.assert_called_once_with()
+        self.assertEqual(self.player_class.call_count, 2)
 
 
 class UsiTest(unittest.TestCase):
@@ -90,8 +197,10 @@ class UsiTest(unittest.TestCase):
         self.engine._perform_command('setoption name Timelimit value 2147483500')
         self.player.native.get_candidates.return_value = [
             ((6, 6), (6, 5), False, COLOR_BLACK, 1, 1.0, 0.0, 1.0, [])]
-        self.player.get_random_candidate.side_effect = (
-            lambda **kwargs: Player.get_random_candidate(self.player, **kwargs))
+        player = object.__new__(Player)
+        player.native = self.player.native
+        player.referee = Referee()
+        self.player.get_random_candidate.side_effect = player.get_random_candidate
         _, message, _ = self.engine._perform_command('go')
         self.assertEqual(message.splitlines()[-1], 'bestmove 7g7f')
         visits, seconds, stop = self.player.native.wait_evaluation.call_args.args
@@ -266,15 +375,22 @@ class UsiTest(unittest.TestCase):
         '''
         # Check time passed to search in seconds against fixed expected values.
         cases = [
-            (COLOR_BLACK, 'btime 600000 wtime 300000', 344.0),
-            (COLOR_WHITE, 'btime 600000 wtime 300000', 44.0),
-            (COLOR_BLACK, 'btime 40000 wtime 50000 binc 10000 winc 20000', 49.0),
-            (COLOR_WHITE, 'btime 40000 wtime 50000 binc 10000 winc 20000', 69.0),
-            (COLOR_BLACK, 'btime 60000 wtime 50000 byoyomi 10000', 69.0),
-            (COLOR_WHITE, 'btime 60000 wtime 50000 byoyomi 10000', 59.0),
-            (COLOR_BLACK, 'byoyomi 10000', 9.0),
-            (COLOR_BLACK, 'binc 10000', 9.0),
-            (COLOR_WHITE, 'winc 10000', 9.0),
+            (COLOR_BLACK, 'btime 600000 wtime 300000', 335.0),
+            (COLOR_WHITE, 'btime 600000 wtime 300000', 35.0),
+            (COLOR_BLACK, 'btime 40000 wtime 50000 binc 10000 winc 20000', 40.0),
+            (COLOR_WHITE, 'btime 40000 wtime 50000 binc 10000 winc 20000', 60.0),
+            (COLOR_BLACK, 'btime 60000 wtime 50000 byoyomi 10000', 68.0),
+            (COLOR_WHITE, 'btime 60000 wtime 50000 byoyomi 10000', 58.0),
+            (COLOR_BLACK, 'byoyomi 10000', 8.0),
+            (COLOR_BLACK, 'binc 10000', 0.0),
+            (COLOR_WHITE, 'winc 10000', 0.0),
+            # Check the two-second byoyomi boundary; increments do not count toward the margin.
+            (COLOR_BLACK, 'btime 60000 byoyomi 1999', 51.999),
+            (COLOR_BLACK, 'btime 60000 byoyomi 2000', 60.0),
+            (COLOR_BLACK, 'btime 60000 byoyomi 2001', 60.001),
+            (COLOR_BLACK, 'btime 60000 byoyomi 1000 binc 10000', 61.0),
+            (COLOR_BLACK, 'byoyomi 1999', 0.0),
+            (COLOR_BLACK, 'byoyomi 2000', 0.0),
             (COLOR_BLACK, 'btime 0 wtime 600000', 0.0),
             (COLOR_BLACK, 'byoyomi 0', 0.0),
             (COLOR_BLACK, 'binc 0', 0.0),
@@ -340,13 +456,13 @@ class UsiTest(unittest.TestCase):
         self.engine.draw_turn = 300
         self.assertEqual(self.engine.moves, [])
         for draw_turn, current_moves, expected in (
-            (200, 100, 950.0),
-            (201, 100, 949.0),
-            (200, 197, 998.0),
-            (200, 198, 999.0),
-            (200, 199, 999.0),
-            (200, 200, 999.0),
-            (200, 201, 999.0),
+            (200, 100, 941.0),
+            (201, 100, 940.0),
+            (200, 197, 989.0),
+            (200, 198, 990.0),
+            (200, 199, 990.0),
+            (200, 200, 990.0),
+            (200, 201, 990.0),
         ):
             with self.subTest(draw_turn=draw_turn, current_moves=current_moves):
                 self.player.referee.draw_turn = draw_turn
@@ -420,6 +536,25 @@ class UsiTest(unittest.TestCase):
             self.assertEqual(constructor.call_args.kwargs['pucb_constant_base'], 1.0)
             self.engine._perform_command_isready([])
             constructor.assert_called_once()
+
+    def test_initial_value_delta_option_validation(self) -> None:
+        '''Apply the win probability tolerance and keep the setting on invalid values.
+        '''
+        # Divide the option value by 100 and set zero and a positive value.
+        for value, expected in (('0', 0.0), ('5', 0.05)):
+            with self.subTest(value=value):
+                result = self.engine._perform_command(
+                    f'setoption name InitialValueDelta value {value}')
+                self.assertEqual(result, (False, '', False))
+                self.assertEqual(self.engine.initial_value_delta, expected)
+
+        # Return an error and keep the last accepted value.
+        for value in ('-1', 'nan', 'inf', '-inf'):
+            with self.subTest(value=value):
+                _, error, _ = self.engine._perform_command(
+                    f'setoption name InitialValueDelta value {value}')
+                self.assertIn('InitialValueDelta', error)
+                self.assertEqual(self.engine.initial_value_delta, 0.05)
 
     def test_usi_ponder_alias_applies_to_search(self) -> None:
         '''Check the latest ponder alias controls predicted replies without continuing normal
@@ -514,6 +649,27 @@ class UsiTest(unittest.TestCase):
         self.assertFalse(self.player.get_random_candidate.call_args.kwargs['ponder'])
         self.player.evaluate.assert_not_called()
         self.player.play.assert_not_called()
+
+    def test_random_move_without_candidate_uses_regular_search(self) -> None:
+        '''Run a normal search with the remaining time if no nonrepeating random candidate exists.
+        '''
+        self.engine.initial_turn = 4
+        now = 10.0
+
+        def exhaust_random_candidates(**kwargs: object) -> None:
+            '''Use two seconds for the random move and return no candidate.
+            Args:
+                kwargs (object): Keyword arguments of the random move.
+            '''
+            nonlocal now
+            now += 2.0
+
+        self.player.get_random_candidate.side_effect = exhaust_random_candidates
+        with patch('deepshogi.usi.time.monotonic', side_effect=lambda: now):
+            _, message, _ = self.engine._perform_command('go byoyomi 10000')
+        self.assertEqual(message.splitlines()[-1], 'bestmove 7g7f')
+        self.assertEqual(self.player.get_random_candidate.call_args.kwargs['timelimit'], 8.0)
+        self.assertEqual(self.player.evaluate.call_args.kwargs['timelimit'], 6.0)
 
     def test_bestmove_formats_promotion_and_drop(self) -> None:
         '''Format legal PVs containing promotions and drops with predicted replies.
@@ -741,7 +897,7 @@ class UsiTest(unittest.TestCase):
         self.engine.initial_turn = 4
         self.engine._perform_command('go byoyomi 10000')
         self.assertEqual(
-            self.player.get_random_candidate.call_args.kwargs['timelimit'], 9.0)
+            self.player.get_random_candidate.call_args.kwargs['timelimit'], 8.0)
         self.player.evaluate.assert_not_called()
 
     def test_unknown_arguments(self) -> None:
@@ -750,7 +906,7 @@ class UsiTest(unittest.TestCase):
         # Handle uppercase commands and time fields surrounding unsupported options.
         self.engine._perform_command(
             'GO unknown depth 5 BTIME 600000 movestogo 10 byoyomi 0 trailing')
-        self.assertEqual(self.player.evaluate.call_args.kwargs['timelimit'], 344.0)
+        self.assertEqual(self.player.evaluate.call_args.kwargs['timelimit'], 335.0)
 
     def test_ponder_and_infinite(self) -> None:
         '''Check ponder and infinite update intervals and replies after stopping.
@@ -1187,7 +1343,7 @@ class UsiTest(unittest.TestCase):
         self.assertFalse(self.stop_notified.is_set())
         self.assertFalse(any(line.startswith('bestmove ') for line in self.output))
         self.assertEqual(self.player.evaluate.call_count, 1)
-        self.assertEqual(self.player.evaluate.call_args.kwargs['timelimit'], 59.0)
+        self.assertEqual(self.player.evaluate.call_args.kwargs['timelimit'], 58.0)
         self.assertFalse(self.player.evaluate.call_args.kwargs['ponder'])
         self.assertTrue(self.engine.ponder)
         self.search_release.set()
@@ -1235,7 +1391,7 @@ class UsiTest(unittest.TestCase):
             self._wait_output('readyok')
             self.search_release.set()
             self._wait_output('bestmove ')
-        self.assertEqual(self.player.evaluate.call_args.kwargs['timelimit'], 59.0)
+        self.assertEqual(self.player.evaluate.call_args.kwargs['timelimit'], 58.0)
         self.assertEqual(self.player.evaluate.call_args.kwargs['candidate_width'], 0)
         self.assertIs(self.engine.player, self.player)
 

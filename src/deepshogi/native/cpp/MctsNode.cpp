@@ -1,10 +1,12 @@
 #include "MctsNode.h"
 
-#include "BoardHash.h"
-
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <random>
+#include <stdexcept>
+
+#include "BoardHash.h"
 
 namespace deepshogi {
 
@@ -21,9 +23,7 @@ MctsNode::MctsNode(MctsManager* manager)
     : _mutex(),
       _condition(),
       _manager(manager),
-      _board(
-          manager->getParameter().getNyugyokuScoreBlack(),
-          manager->getParameter().getNyugyokuScoreWhite()),
+      _board(),
       _move(MOVE_INVALID),
       _probability(0.0f),
       _evaluating(false),
@@ -40,24 +40,38 @@ MctsNode::MctsNode(MctsManager* manager)
       _mctsProceeds(0),
       _checkmateMoves(),
       _checkmateMoveSearched(false),
-      _appearedBoardHashes(),
+      _appearedTurns(),
+      _lastNonCheckTurns{-1, -1},
       _waitingPolicies(),
       _waitingMoves() {
 }
 
 /**
- * Initialize this node as the root position specified by SFEN.
+ * Initialize this node as the root position specified by SFEN with the given nyugyoku scores.
  * @param sfen Position in SFEN format.
  * @param drawTurn Total move count at which the game is drawn.
+ * @param nyugyokuScoreBlack Points Black needs for nyugyoku (from -128 to 127).
+ * @param nyugyokuScoreWhite Points White needs for nyugyoku (from -128 to 127).
+ * @throws std::invalid_argument If a nyugyoku score is out of range.
  */
-void MctsNode::initialize(const std::string sfen, int32_t drawTurn) {
+void MctsNode::initialize(
+    const std::string& sfen, int32_t drawTurn,
+    int32_t nyugyokuScoreBlack, int32_t nyugyokuScoreWhite) {
+  // Reject values whose score would change when stored in the board
+  if (std::min(nyugyokuScoreBlack, nyugyokuScoreWhite) < std::numeric_limits<int8_t>::min() ||
+      std::max(nyugyokuScoreBlack, nyugyokuScoreWhite) > std::numeric_limits<int8_t>::max()) {
+    throw std::invalid_argument("Nyugyoku scores must fit in int8 range.");
+  }
+
   std::unique_lock<std::shared_mutex> node_lock(_mutex);
 
-  _resetNode();
+  // Apply the current nyugyoku scores and draw move count to reused nodes as well
+  Board board(static_cast<int8_t>(nyugyokuScoreBlack), static_cast<int8_t>(nyugyokuScoreWhite));
+  board.initialize(sfen, drawTurn);
 
-  // Apply the current game rules to reused nodes as well.
-  _board.initialize(sfen, drawTurn);
-  _move = MOVE_INVALID;
+  // Apply the position to this node after its initialization completes
+  _resetNode();
+  _board.copyFrom(&board);
 }
 
 /**
@@ -196,16 +210,24 @@ MctsNode* MctsNode::pickupNextNode(
     return this;
   }
 
-  // Treat repeated positions as repetition draws outside the root.
-  if (_parent != nullptr && _isSennichite()) {
-    // Use the current side's sign to penalize the opponent who returned to this position.
-    _nodeValue =
-        static_cast<float>(_board.getColor()) *
-        _manager->getParameter().getSennichitePenalty();
-    _evaluated = true;
-    _policies.clear();
+  // End the search at the second occurrence of a position and judge perpetual checks per side
+  if (_parent != nullptr) {
+    auto previous_turn = _parent->_findAppearedTurn(BoardHash(&_board));
+    if (previous_turn) {
+      bool black_checks = _lastNonCheckTurns[0] <= *previous_turn;
+      bool white_checks = _lastNonCheckTurns[1] <= *previous_turn;
 
-    return this;
+      if (black_checks != white_checks) {
+        // The opponent of the side that kept checking wins
+        _nodeValue = black_checks ? COLOR_WHITE : COLOR_BLACK;
+      } else {
+        // A normal repetition penalizes the side that reproduced the position
+        _nodeValue = _board.getColor() * _manager->getParameter().getSennichitePenalty();
+      }
+      _evaluated = true;
+      _policies.clear();
+      return this;
+    }
   }
 
   // Outside the root, reaching the maximum move count produces a terminal draw.
@@ -221,7 +243,9 @@ MctsNode* MctsNode::pickupNextNode(
   int32_t remain_turn = _board.getDrawTurn() - _board.getTurn() + 1;
   int32_t search_depth = std::min(5, remain_turn);
 
-  _checkmateMoves = _board.getCheckmateMoves(search_depth);
+  _checkmateMoves = _board.getCheckmateMoves(search_depth, [this](const BoardHash& hash) {
+    return _findAppearedTurn(hash).has_value();
+  });
 
   // If a checkmate sequence is found, set this node's state to terminal (win)
   if (!_checkmateMoves.empty()) {
@@ -268,7 +292,17 @@ void MctsNode::searchCheckmateMoves(PnSearchEngine* engine, int32_t depth) {
   }
 
   // Run checkmate search.
-  std::vector<Move> checkmate_moves = engine->getCheckmateMoves(&_board, depth);
+  std::vector<Move> checkmate_moves = engine->getCheckmateMoves(
+      &_board, depth, [this](const BoardHash& hash) {
+        return _findAppearedTurn(hash).has_value();
+      });
+
+  // Reset only aborted attempts to unsearched so that they can be searched again on resume
+  if (engine->isSearchAborted()) {
+    std::unique_lock<std::shared_mutex> lock(_mutex);
+    _checkmateMoveSearched = false;
+    return;
+  }
 
   // PN search can exceed its initial depth; accept only mates within the draw move limit.
   if (checkmate_moves.empty() ||
@@ -325,27 +359,27 @@ void MctsNode::setAsRootNode() {
     // Reset this node's evaluation and statistics to the unevaluated state.
     Move move = _move;
     float probability = _probability;
-    std::set<BoardHash> appeared_board_hashes = _appearedBoardHashes;
+    auto appeared_turns = std::move(_appearedTurns);
+    auto last_non_check_turns = _lastNonCheckTurns;
 
     _resetNode();
     _move = move;
     _probability = probability;
-    _appearedBoardHashes = appeared_board_hashes;
+    _appearedTurns = std::move(appeared_turns);
+    _lastNonCheckTurns = last_non_check_turns;
   }
 }
 
 /**
- * Carry the position history forward when changing the root.
+ * Carry the move numbers of earlier positions forward when changing the root.
  * @param oldRootNode Previous root node.
  */
-void MctsNode::copyAppearedBoardHashes(const MctsNode* oldRootNode) {
+void MctsNode::takeRepetitionHistory(MctsNode* oldRootNode) {
   std::unique_lock<std::shared_mutex> lock(_mutex);
 
-  // Copy the positions encountered before the previous root.
-  _appearedBoardHashes = oldRootNode->_appearedBoardHashes;
-
-  // Add the previous root position to the history.
-  _appearedBoardHashes.insert(BoardHash(&oldRootNode->_board));
+  // Transfer ownership of the history after registering the previous root position
+  oldRootNode->_appearedTurns[BoardHash(&oldRootNode->_board)] = oldRootNode->_board.getTurn();
+  _appearedTurns = std::move(oldRootNode->_appearedTurns);
 }
 
 /**
@@ -391,6 +425,31 @@ float MctsNode::getRemainingTurns() {
 std::vector<MctsPolicy> MctsNode::getPolicies() {
   std::shared_lock<std::shared_mutex> lock(_mutex);
   return _policies;
+}
+
+/**
+ * Return the policy and search evaluation of this position.
+ * @param value Output for this position's search evaluation from Black's perspective.
+ * @param remainingTurns Output for the predicted moves remaining from this position.
+ * @return Moves and their predicted probabilities.
+ */
+std::vector<std::pair<Move, float>> MctsNode::getPolicyMoves(float& value, float& remainingTurns) {
+  // Read the policy and evaluation of this position concurrently with the search
+  std::shared_lock<std::shared_mutex> lock(_mutex);
+
+  value = _mctsValue.getValue(_nodeValue);
+  remainingTurns = _remainingTurns;
+
+  // Return the moves and probabilities in the original policy order
+  std::vector<std::pair<Move, float>> moves;
+
+  moves.reserve(_policies.size());
+
+  for (const MctsPolicy& policy : _policies) {
+    moves.emplace_back(policy.getMove(), policy.getProbability());
+  }
+
+  return moves;
 }
 
 /**
@@ -443,6 +502,7 @@ MctsNode* MctsNode::getChild(const Move& move) {
     child->_resetNode();
     child->_board.copyFrom(&_board);
     child->_board.play(move);
+    child->_updateCheckHistory(*this);
     child->_move = move;
     child->_probability = 0.0f;
   } catch (...) {
@@ -510,6 +570,7 @@ std::pair<bool, float> MctsNode::getPriorityByPUCB(
   float pucb_constant_init = _manager->getParameter().getPucbConstantInit();
   float pucb_min_visits_rate = _manager->getParameter().getPucbMinVisitsRate();
   float value = _mctsValue.getValue(_nodeValue) * OPPOSITE_COLOR(_board.getColor());
+
   // Validate a finite positive base at construction and use double precision for tiny divisors.
   float c_pucb_inc = static_cast<float>(
       std::log1p((1.0 + totalVisits) / static_cast<double>(pucb_constant_base)));
@@ -622,7 +683,8 @@ void MctsNode::_resetNode() {
 
   _checkmateMoves.clear();
   _checkmateMoveSearched = false;
-  _appearedBoardHashes.clear();
+  _appearedTurns.clear();
+  _lastNonCheckTurns = {-1, -1};
 
   _waitingPolicies = std::queue<MctsPolicy>();
   _waitingMoves.clear();
@@ -640,45 +702,47 @@ void MctsNode::_incrementVisits() {
 
     while (pv_visits < visits &&
            !_parent->_pvVisits.compare_exchange_weak(
-               pv_visits, visits,
-               std::memory_order_relaxed, std::memory_order_relaxed)) {
+               pv_visits, visits, std::memory_order_relaxed, std::memory_order_relaxed)) {
     }
   }
 }
 
 /**
- * Return true if this position occurs in the history or current search path.
- * @return True if the position has appeared before.
+ * Find the most recent move number of an identical position on the path including this node
+ * and in the game history.
+ * @param hash Position to find.
+ * @return Most recent move number of the position, or empty if it has not appeared.
  */
-bool MctsNode::_isSennichite() const {
-  BoardHash board_hash(&_board);
-  const MctsNode* root_node = this;
-
-  // Follow parent links to the root.
-  while (root_node->_parent != nullptr) {
-    root_node = root_node->_parent;
-  }
-
-  // Check the position history stored at the root.
-  if (root_node->_appearedBoardHashes.find(board_hash) !=
-      root_node->_appearedBoardHashes.end()) {
-    return true;
-  }
-
-  // Check for the same position along the search path.
-  const MctsNode* current_node = _parent;
-
-  while (current_node != nullptr) {
-    BoardHash current_hash(&current_node->_board);
-
-    if (!(board_hash < current_hash) && !(current_hash < board_hash)) {
-      return true;
+std::optional<int32_t> MctsNode::_findAppearedTurn(const BoardHash& hash) const {
+  // Check positions from the nearest one, then search the game history after reaching the root
+  const MctsNode* node = this;
+  while (true) {
+    if (hash == BoardHash(&node->_board)) {
+      return node->_board.getTurn();
     }
+    if (node->_parent == nullptr) {
+      auto it = node->_appearedTurns.find(hash);
 
-    current_node = current_node->_parent;
+      return it == node->_appearedTurns.end()
+                 ? std::nullopt
+                 : std::optional(it->second);
+    }
+    node = node->_parent;
   }
+}
 
-  return false;
+/**
+ * Inherit the check history from the node before the move and reflect the move to this position.
+ * @param parent Node before the move.
+ */
+void MctsNode::_updateCheckHistory(const MctsNode& parent) {
+  // Record, for each side, the last move that was not a check
+  _lastNonCheckTurns = parent._lastNonCheckTurns;
+
+  if (!_board.isCheck(_board.getColor())) {
+    size_t index = parent._board.getColor() == COLOR_BLACK ? 0 : 1;
+    _lastNonCheckTurns[index] = _board.getTurn();
+  }
 }
 
 /**
@@ -804,6 +868,7 @@ MctsNode* MctsNode::_pickupNextNode(bool equally, int32_t width, float temperatu
       node->_resetNode();
       node->_board.copyFrom(&_board);
       node->_board.play(policy.getMove());
+      node->_updateCheckHistory(*this);
       node->_move = policy.getMove();
       node->_probability = policy.getProbability();
       node->_nodeValue = static_cast<float>(OPPOSITE_COLOR(_board.getColor()));

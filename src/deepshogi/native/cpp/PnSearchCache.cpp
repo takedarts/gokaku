@@ -33,8 +33,11 @@ PnSearchCache::PnSearchCache(uint32_t capacity)
  * Invalidate all registered entries.
  */
 void PnSearchCache::Clear() {
+  // Advance the generation number.
+  _generation += 1;
+
   // Reinitialize all slots only when the generation counter wraps around.
-  if (++_generation == 0) {
+  if (_generation == 0) {
     for (Entry& entry : _entries) {
       entry.generation = 0;
     }

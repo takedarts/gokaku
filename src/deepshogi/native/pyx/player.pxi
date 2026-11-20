@@ -3,6 +3,7 @@ from typing import List, Tuple
 cimport cython
 from libc.stdint cimport int32_t
 from libcpp cimport bool
+from libcpp.utility cimport pair
 from libcpp.vector cimport vector
 from deepshogi.validation import validate_positive_float, validate_positive_int
 from pyx.candidate cimport Candidate
@@ -69,13 +70,22 @@ cdef class NativePlayer:
         # Cython releases the retained processor reference after this method completes.
         del self.player
 
-    def initialize(self, sfen: str, draw_turn: int) -> None:
+    def initialize(
+        self, sfen: str, draw_turn: int, nyugyoku_scores: Tuple[int, int] | None = None,
+    ) -> None:
         '''Reset the game to the initial position.
         Args:
             sfen (str): Position in SFEN format.
             draw_turn (int): Total move count at which the game is drawn.
+            nyugyoku_scores (Tuple[int, int] | None): Points Black and White need for nyugyoku.
+                If omitted, the scores given when the player was created are used.
         '''
-        self.player.initialize(sfen.encode('utf-8'), draw_turn)
+        # If the scores are omitted, the native side uses the settings given at creation
+        if nyugyoku_scores is None:
+            self.player.initialize(sfen.encode('utf-8'), draw_turn)
+        else:
+            self.player.initialize(
+                sfen.encode('utf-8'), draw_turn, nyugyoku_scores[0], nyugyoku_scores[1])
 
     def get_color(self) -> int:
         '''Returns the current turn color.
@@ -183,6 +193,24 @@ cdef class NativePlayer:
             ))
 
         return results
+
+    def get_policy_moves(self) -> Tuple[float, float, List[Tuple[int, float]]]:
+        '''Return the policy and search evaluation of the current position.
+        Returns:
+            Tuple[float, float, List[Tuple[int, float]]]:
+                Search evaluation from Black's perspective, predicted moves remaining until the
+                game ends, and a list of move codes with their predicted probabilities.
+        '''
+        cdef float value = 0.0
+        cdef float remaining_turns = 0.0
+        cdef vector[pair[Move, float]] moves
+
+        # Get the evaluation of the current position while the search continues
+        with nogil:
+            moves = self.player.getPolicyMoves(value, remaining_turns)
+
+        return value, remaining_turns, [
+            (moves[i].first.getValue(), moves[i].second) for i in range(moves.size())]
 
     def get_visits(self) -> int:
         '''Return the root node's visit count.

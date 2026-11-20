@@ -18,7 +18,7 @@ cdef extern from "cpp/InferenceProcessor.h" namespace "deepshogi":
     cdef cppclass InferenceProcessor:
         InferenceProcessor(
             string model, vector[int32_t] gpus, cpp_bool fp16, cpp_bool deterministic,
-            int32_t batchSize, int32_t threadsPerGpu, int32_t cacheSize) except +
+            int32_t batchSize, int32_t threadsPerGpu, int32_t cacheSize) except + nogil
         float predict(Board* board) except +
         void execute(int32_t* inputs, int32_t* masks, float* outputs, int32_t size) except +
         float getBatchFillRate() except +

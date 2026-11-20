@@ -5,6 +5,7 @@
 #include <map>
 #include <sstream>
 
+#include "BoardHash.h"
 #include "Constant.h"
 
 namespace deepshogi {
@@ -139,9 +140,14 @@ inline void setInputBit(int32_t* inputs, int32_t index, int32_t value = 1) {
  * Note that the Board object's contents change during the search.
  * @param board Working position; contents may change during search
  * @param depth Search depth
+ * @param isPreviousPosition Function that identifies positions before the search started
+ *     (empty for the conventional search)
+ * @param path Ancestor positions during the checkmate search
  * @return List of moves leading to checkmate
  */
-static std::vector<Move> searchCheckmateMoves(Board& board, int32_t depth) {
+static std::vector<Move> searchCheckmateMoves(
+    Board& board, int32_t depth, const std::function<bool(const BoardHash&)>& isPreviousPosition,
+    std::vector<BoardHash>& path) {
   // If depth is 0 or less, no checkmate was found; return empty array
   if (depth <= 0) {
     return {};
@@ -150,6 +156,22 @@ static std::vector<Move> searchCheckmateMoves(Board& board, int32_t depth) {
   // If the draw turn count is exceeded, return empty array
   if (board.getTurn() >= board.getDrawTurn()) {
     return {};
+  }
+
+  // If the reply returns to an earlier position, do not seek checkmate beyond this branch
+  auto repeats = [&]() {
+    BoardHash hash(&board);
+
+    return isPreviousPosition(hash) ||
+           std::find(path.begin(), path.end(), hash) != path.end();
+  };
+
+  if (isPreviousPosition) {
+    if (!path.empty() && repeats()) {
+      return {};
+    }
+
+    path.emplace_back(&board);
   }
 
   // Try moves that put the opponent in check
@@ -165,11 +187,12 @@ static std::vector<Move> searchCheckmateMoves(Board& board, int32_t depth) {
     // If there are no escape moves, checkmate is found; return the move
     if (escape_moves.empty()) {
       board.undo(checkmate_result);
-      return {move};
+      shortest_moves = {move};
+      break;
     }
 
-    // If search depth is 1 or less, do not try escape moves
-    if (depth - 1 <= 0) {
+    // Stop here for checks that reach the depth limit or return to an earlier position
+    if (depth - 1 <= 0 || (isPreviousPosition && repeats())) {
       board.undo(checkmate_result);
       continue;
     }
@@ -178,12 +201,16 @@ static std::vector<Move> searchCheckmateMoves(Board& board, int32_t depth) {
     bool checkmated = true;
     std::vector<Move> longest_moves;
 
+    if (isPreviousPosition) {
+      path.emplace_back(&board);
+    }
+
     for (Move& escape_move : escape_moves) {
       // Create the next board state
       MoveResult escape_result = board.play(escape_move);
 
       // Recursively search for checkmate moves
-      std::vector<Move> moves = searchCheckmateMoves(board, depth - 2);
+      auto moves = searchCheckmateMoves(board, depth - 2, isPreviousPosition, path);
 
       // If no checkmate found, determine it is not checkmate and break the loop
       if (moves.empty()) {
@@ -202,6 +229,10 @@ static std::vector<Move> searchCheckmateMoves(Board& board, int32_t depth) {
       board.undo(escape_result);
     }
 
+    if (isPreviousPosition) {
+      path.pop_back();
+    }
+
     // If all escape moves lead to checkmate, a checkmate sequence has been found
     // Save the shortest checkmate sequence
     if (checkmated) {
@@ -215,7 +246,11 @@ static std::vector<Move> searchCheckmateMoves(Board& board, int32_t depth) {
     board.undo(checkmate_result);
   }
 
-  // Return the shortest checkmate sequence
+  // Remove this position from the ancestors and return the shortest checkmate sequence
+  if (isPreviousPosition) {
+    path.pop_back();
+  }
+
   return shortest_moves;
 }
 
@@ -282,11 +317,11 @@ void Board::initialize(const std::string& sfen, int16_t drawTurn) {
   int32_t hand_sfen_length = 0;
 
   for (int32_t i = 0; c_sfen[i] != ' '; i++) {
-    board_sfen_length++;
+    board_sfen_length += 1;
   }
 
   for (int32_t i = board_sfen_length + 3; c_sfen[i] != ' '; i++) {
-    hand_sfen_length++;
+    hand_sfen_length += 1;
   }
 
   // Apply the board SFEN information
@@ -525,6 +560,7 @@ std::vector<Position> Board::getAttackers(const Position& position) const {
  * @return Legal move list.
  */
 std::vector<Move> Board::getLegalMoves(bool removeUnpromote, bool checkOnly) const {
+  // Prepare the return vector and generate legal moves with the output-vector overload
   std::vector<Move> legal_moves;
   getLegalMoves(legal_moves, removeUnpromote, checkOnly);
   return legal_moves;
@@ -538,15 +574,19 @@ std::vector<Move> Board::getLegalMoves(bool removeUnpromote, bool checkOnly) con
  */
 void Board::getLegalMoves(
     std::vector<Move>& moves, bool removeUnpromote, bool checkOnly) const {
-  // Clear the contents while reusing the capacity retained by the node.
   auto& legal_moves = moves;
+
+  // Clear the previous result while reusing the capacity reserved by the caller
   legal_moves.clear();
+
+  // Reserve capacity for about 16 moves for checks only, or 64 moves for all candidates
   if (checkOnly) {
     legal_moves.reserve(16);
   } else {
     legal_moves.reserve(64);
   }
 
+  // Call the generator for the combination of unpromotion omission and check restriction
   if (removeUnpromote) {
     if (checkOnly) {
       _getLegalMoves<true, true>(legal_moves);
@@ -565,15 +605,19 @@ void Board::getLegalMoves(
 /**
  * Return a checkmating move sequence for the current position.
  * @param depth Checkmate search depth.
+ * @param isPreviousPosition Function that identifies positions before the search started
+ *     (empty for the conventional search).
  * @return Checkmating move sequence.
  */
-std::vector<Move> Board::getCheckmateMoves(int32_t depth) const {
+std::vector<Move> Board::getCheckmateMoves(
+    int32_t depth, const std::function<bool(const BoardHash&)>& isPreviousPosition) const {
   // Create a board copy for computation
   // Prepare a search board since the Board object's contents change during the search
   Board clone_board(*this);
 
   // Execute the checkmate search
-  std::vector<Move> moves = searchCheckmateMoves(clone_board, depth);
+  std::vector<BoardHash> path;
+  auto moves = searchCheckmateMoves(clone_board, depth, isPreviousPosition, path);
 
   // Return the checkmate move sequence (stored in reverse order, so reverse it)
   std::reverse(moves.begin(), moves.end());
@@ -706,7 +750,7 @@ std::string Board::getSfen() const {
       uint8_t piece = _cells[y + BOARD_SIZE * x];
 
       if (piece == PIECE_EMPTY) {
-        empty_count++;
+        empty_count += 1;
         continue;
       }
 

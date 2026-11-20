@@ -7,6 +7,7 @@
 #include <mutex>
 #include <queue>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "Board.h"
@@ -29,8 +30,8 @@ class Player {
    * @param processor Inference processor.
    * @param threads Number of threads.
    * @param searchMaxVisits Maximum node visit count.
-   * @param nyugyokuScoreBlack Points required for Black's entering-king declaration.
-   * @param nyugyokuScoreWhite Points required for White's entering-king declaration.
+   * @param nyugyokuScoreBlack Points Black needs for nyugyoku (from -128 to 127).
+   * @param nyugyokuScoreWhite Points White needs for nyugyoku (from -128 to 127).
    * @param sennichitePenalty Penalty assigned to repetition evaluations.
    * @param checkSearchDepth Checkmate search depth.
    * @param checkSearchNode Checkmate search node capacity.
@@ -51,11 +52,21 @@ class Player {
   virtual ~Player();
 
   /**
-   * Initializes the state of the player object.
+   * Initializes the state of the player object with the nyugyoku scores given at construction.
    * @param sfen SFEN of the initial position
    * @param drawTurn Total move count at which the game is drawn.
    */
   void initialize(const std::string& sfen, int32_t drawTurn);
+
+  /**
+   * Initializes the state of the player object with the specified nyugyoku scores.
+   * @param sfen SFEN of the initial position
+   * @param drawTurn Total move count at which the game is drawn.
+   * @param nyugyokuScoreBlack Points Black needs for nyugyoku (from -128 to 127).
+   * @param nyugyokuScoreWhite Points White needs for nyugyoku (from -128 to 127).
+   */
+  void initialize(const std::string& sfen, int32_t drawTurn,
+                  int32_t nyugyokuScoreBlack, int32_t nyugyokuScoreWhite);
 
   /**
    * Gets the next turn color.
@@ -98,6 +109,14 @@ class Player {
    * @return Candidate move list.
    */
   std::vector<Candidate> getCandidates();
+
+  /**
+   * Return the policy and search evaluation of the current position.
+   * @param value Output for the current position's search evaluation from Black's perspective.
+   * @param remainingTurns Output for the predicted moves remaining from the current position.
+   * @return Moves and their predicted probabilities.
+   */
+  std::vector<std::pair<Move, float>> getPolicyMoves(float& value, float& remainingTurns);
 
   /**
    * Gets the visit count of the root node.
@@ -178,6 +197,16 @@ class Player {
    * Thread that updates node state.
    */
   std::thread _updateThread;
+
+  /**
+   * Points Black needs for nyugyoku, specified at construction.
+   */
+  const int32_t _defaultNyugyokuScoreBlack;
+
+  /**
+   * Points White needs for nyugyoku, specified at construction.
+   */
+  const int32_t _defaultNyugyokuScoreWhite;
 
   /**
    * Object that manages search nodes.
@@ -275,6 +304,11 @@ class Player {
   std::atomic<bool> _canceled;
 
   /**
+   * True to re-register unstarted checkmate searches on resume (protected by _mutex).
+   */
+  bool _checkmateRescan;
+
+  /**
    * List of node objects being evaluated.
    */
   std::queue<MctsNode*> _evaluatingNodes;
@@ -288,6 +322,12 @@ class Player {
    * Executes search.
    */
   void _runSearch();
+
+  /**
+   * Abort running searches and defer unstarted PN searches to re-registration on the next resume.
+   * Call this function while holding _mutex.
+   */
+  void _cancelSearch();
 
   /**
    * Return true if all search work is idle.

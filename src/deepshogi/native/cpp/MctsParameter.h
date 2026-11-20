@@ -1,7 +1,5 @@
 #pragma once
 
-#include <cstdint>
-
 namespace deepshogi {
 
 /**
@@ -11,16 +9,14 @@ class MctsParameter {
  public:
   /**
    * Create the parameter object.
-   * @param nyugyokuScoreBlack Points required for Black's entering-king declaration.
-   * @param nyugyokuScoreWhite Points required for White's entering-king declaration.
    * @param sennichitePenalty Penalty assigned to repetition evaluations.
    * @param pucbConstantInit Initial PUCB exploration coefficient.
    * @param pucbConstantBase Base controlling the PUCB exploration coefficient.
    * @param pucbMinVisitsRate Minimum visit ratio for prioritizing PUCB children.
    */
   MctsParameter(
-      int32_t nyugyokuScoreBlack, int32_t nyugyokuScoreWhite, float sennichitePenalty,
-      float pucbConstantInit, float pucbConstantBase, float pucbMinVisitsRate);
+      float sennichitePenalty, float pucbConstantInit,
+      float pucbConstantBase, float pucbMinVisitsRate);
 
   /**
    * Copy the parameter object.
@@ -32,22 +28,6 @@ class MctsParameter {
    * Destroys the parameter object.
    */
   virtual ~MctsParameter() = default;
-
-  /**
-   * Gets the score required for black's entering-king declaration.
-   * @return Score required for black's entering-king declaration
-   */
-  inline int32_t getNyugyokuScoreBlack() const {
-    return _nyugyokuScoreBlack;
-  }
-
-  /**
-   * Gets the score required for white's entering-king declaration.
-   * @return Score required for white's entering-king declaration
-   */
-  inline int32_t getNyugyokuScoreWhite() const {
-    return _nyugyokuScoreWhite;
-  }
 
   /**
    * Return the penalty assigned to repetition evaluations.
@@ -82,16 +62,6 @@ class MctsParameter {
   }
 
  private:
-  /**
-   * Points required for Black's entering-king declaration.
-   */
-  int32_t _nyugyokuScoreBlack;
-
-  /**
-   * Score required for white's entering-king declaration.
-   */
-  int32_t _nyugyokuScoreWhite;
-
   /**
    * Penalty assigned to repetition evaluations.
    */

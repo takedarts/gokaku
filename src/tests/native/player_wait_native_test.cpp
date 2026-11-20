@@ -30,7 +30,10 @@
 #include "MctsPolicy.h"
 #include "MctsValue.h"
 #include "Move.h"
+// Synchronize stop points using the running state of PN search.
+#define private public
 #include "PnSearchEngine.h"
+#undef private
 
 // Check failed initialization returns temporary nodes without increasing active nodes.
 #define private public
@@ -55,7 +58,9 @@
 #define private public
 #include "InferenceProcessor.h"
 #undef private
+#define private public
 #include "PnSearchManager.h"
+#undef private
 #include "ThreadPool.h"
 
 // Control pre-visit mate detection and stop/restart ordering without starting workers.
@@ -96,7 +101,7 @@ void* operator new(std::size_t size) {
     throw std::bad_alloc();
   }
   if (track_allocations) {
-    ++tracked_live_allocations;
+    tracked_live_allocations += 1;
   }
   return pointer;
 }
@@ -162,7 +167,20 @@ static void TestMateBeforeVisit(InferenceProcessor* processor) {
     player.waitEvaluation(1000, 60.0f, true);
   });
   assert(result.wait_for(20ms) == std::future_status::timeout);
+  // Allow only PN search and keep the control thread from starting MCTS.
+  const int32_t evaluating_size = player._maxEvaluatingSize;
+  {
+    std::lock_guard<std::mutex> lock(player._mutex);
+    player._maxEvaluatingSize = 0;
+    player._checkmateRescan = false;
+    player._stopped = false;
+  }
   player._runCheckmateSearch(player._root);
+  {
+    std::lock_guard<std::mutex> lock(player._mutex);
+    player._maxEvaluatingSize = evaluating_size;
+    player._stopped = true;
+  }
   AssertReleased(player, result);
   assert(player.getVisits() == 0);
 
@@ -195,7 +213,7 @@ static void TestMateDrawTurnLimits() {
 
   for (bool child_node : {false, true}) {
     for (int32_t remaining : {-1, 0, 28, 29, mate_length - 1, mate_length, mate_length + 1}) {
-      MctsManager manager(MctsParameter(28, 27, 0.0f, 1.6f, 3200.0f, 0.0f));
+      MctsManager manager(MctsParameter(0.0f, 1.6f, 3200.0f, 0.0f));
       MctsNode* root = manager.createNode();
       MctsNode* node = root;
 
@@ -203,13 +221,13 @@ static void TestMateDrawTurnLimits() {
       if (child_node) {
         root->initialize(
             "l7l/1p2k1n2/r2ppb1+R1/pPps1g2p/Pn5N1/1GPS4P/3PP+l+p2/"
-            "bK1G1+p3/+n1+s5L b GSP3p 111", turn + remaining);
+            "bK1G1+p3/+n1+s5L b GSP3p 111", turn + remaining, 28, 27);
         Move move(Position(1, 2), Position(1, 0), false);
         root->applyInferenceResult(0.0f, 40.0f, {{move, 1.0f}});
         node = root->pickupNextNode(false, 0, 1.0f, 0.0f, []() { return false; });
         assert(node != nullptr && node != root && node->getParent() == root);
       } else {
-        root->initialize(MATE_SFEN, turn + remaining);
+        root->initialize(MATE_SFEN, turn + remaining, 28, 27);
       }
       assert(node->getBoard().getSfen() == board.getSfen());
 
@@ -263,7 +281,20 @@ static void TestSearchAfterRejectedMate(InferenceProcessor* processor) {
   player.initialize(MATE_SFEN, 139);
 
   // Run PN search before the first visit without storing an over-limit mate.
+  // Allow only PN search and keep the control thread from starting MCTS.
+  const int32_t evaluating_size = player._maxEvaluatingSize;
+  {
+    std::lock_guard<std::mutex> lock(player._mutex);
+    player._maxEvaluatingSize = 0;
+    player._checkmateRescan = false;
+    player._stopped = false;
+  }
   player._runCheckmateSearch(player._root);
+  {
+    std::lock_guard<std::mutex> lock(player._mutex);
+    player._maxEvaluatingSize = evaluating_size;
+    player._stopped = true;
+  }
   assert(player._root->isCheckmateSearched());
   assert(player._root->getCheckmateMoves().empty());
   assert(!player._root->isEvaluated());
@@ -305,14 +336,14 @@ static void TestSennichitePenalty(InferenceProcessor* processor) {
             Move(Position(5, second_rank), Position(4, second_rank), false)};
         if (from_history) {
           // Use actual moves to put the repeated position in game history only.
-          for (int32_t i = 0; i < 3; ++i) {
+          for (int32_t i = 0; i < 3; i++) {
             player.play(moves[i]);
           }
         }
 
         // Fix one candidate per node and expand the actual path to the repeating leaf.
         MctsNode* node = player._root;
-        for (int32_t i = from_history ? 3 : 0; i < 4; ++i) {
+        for (int32_t i = from_history ? 3 : 0; i < 4; i++) {
           node->applyInferenceResult(0.0f, 4.0f, {{moves[i], 1.0f}});
           MctsNode* next = node->pickupNextNode(false, 0, 1.0f, 0.0f,
                                                []() { return false; });
@@ -353,7 +384,104 @@ static void TestSennichitePenalty(InferenceProcessor* processor) {
         auto candidates = player.getCandidates();
         assert(candidates.size() == 1);
         assert(std::fabs(candidates.front().getValue() - expected_value) < 1e-6f);
+
+        if (from_history) {
+          // Native candidates and policies also include moves returning to earlier positions.
+          assert(candidates.front().getMove() == moves.back());
+          float value = 0.0f;
+          float remaining_turns = 0.0f;
+          auto policy_moves = player.getPolicyMoves(value, remaining_turns);
+          assert(policy_moves.size() == 1);
+          assert(policy_moves.front().first == moves.back());
+          assert(policy_moves.front().second == 1.0f);
+          assert(std::fabs(value - expected_value) < 1e-6f);
+          assert(remaining_turns == 4.0f);
+        }
       }
+    }
+  }
+}
+
+/**
+ * Check perpetual checks completed by either a check or an evasion, varying the attacker and
+ * the boundary of the game history.
+ * @param processor Inference processor.
+ */
+static void TestPerpetualCheck(InferenceProcessor* processor) {
+  for (int8_t attacker : {COLOR_BLACK, COLOR_WHITE}) {
+    int32_t rook_rank = attacker == COLOR_BLACK ? 3 : 5;
+    int32_t king_rank = attacker == COLOR_BLACK ? 0 : 8;
+    std::string sfen = attacker == COLOR_BLACK ? "4k4/9/9/5R3/9/9/9/9/4K4 b - 1"
+                                               : "4k4/9/9/9/9/5r3/9/9/4K4 w - 1";
+    const std::vector<Move> cycle = {
+        Move(Position(3, rook_rank), Position(4, rook_rank), false),
+        Move(Position(4, king_rank), Position(3, king_rank), false),
+        Move(Position(4, rook_rank), Position(3, rook_rank), false),
+        Move(Position(3, king_rank), Position(4, king_rank), false)};
+
+    for (bool final_check : {false, true}) {
+      // Starting right after a check makes the last move a check; otherwise it is an evasion.
+      Board board;
+      board.initialize(sfen, 512);
+      auto moves = cycle;
+      if (final_check) {
+        board.play(moves.front());
+        std::rotate(moves.begin(), moves.begin() + 1, moves.end());
+      }
+
+      for (int32_t played : {0, 2, 3}) {
+        Player player(processor, 1, 64, 28, 27, 0.2f, 1, 1, 0, 1.6f, 3200.0f, 0.0f);
+        // Make the last move reach the draw move limit so the perpetual check result wins.
+        player.initialize(board.getSfen(), board.getTurn() + 4);
+        MctsNode* node = player._root;
+        for (int32_t i = 0; i < 4; i++) {
+          node->applyInferenceResult(0.0f, 4.0f, {{moves[i], 1.0f}});
+          MctsNode* next = node->pickupNextNode(false, 0, 1.0f, 0.0f, []() { return false; });
+          assert(next != nullptr && next->getParent() == node);
+          if (i < played) {
+            // Move the expanded child to the game root and carry the check history over.
+            player.play(moves[i]);
+            assert(next == player._root);
+          }
+          node = next;
+        }
+
+        assert(node->pickupNextNode(false, 0, 1.0f, 0.0f, []() { return false; }) == node);
+        assert(node->isEvaluated() && node->getPolicies().empty());
+        assert(node->getNodeValue() == OPPOSITE_COLOR(attacker));
+      }
+    }
+  }
+}
+
+/**
+ * Check per-game nyugyoku scores are applied to terminal judgments of child nodes.
+ * @param processor Inference processor.
+ */
+static void TestNyugyokuScores(InferenceProcessor* processor) {
+  // Prepare a position where Black can declare nyugyoku after White's move if 28 points suffice.
+  Player player(processor, 1, 64, 28, 29, 0.0f, 1, 1, 0, 1.6f, 3200.0f, 0.0f);
+  const std::string sfen = "RR2K2BB/PPPPPP3/9/9/9/9/9/9/4k4 w 2G 1";
+  const Move move(Position(4, 8), Position(3, 8), false);
+
+  for (bool allowed : {true, false, true}) {
+    // Switch between the construction scores and per-game scores while expanding a child.
+    if (allowed) {
+      player.initialize(sfen, 2);
+    } else {
+      player.initialize(sfen, 2, 56, 56);
+    }
+    MctsNode* root = player._root;
+    root->applyInferenceResult(0.0f, 2.0f, {{move, 1.0f}});
+    MctsNode* child = root->pickupNextNode(false, 0, 1.0f, 0.0f, []() { return false; });
+    assert(child != nullptr && child->getParent() == root);
+
+    // End with a nyugyoku win when declarable; otherwise proceed to model evaluation.
+    assert(child->getBoard().isNyugyoku(COLOR_BLACK) == allowed);
+    assert(child->pickupNextNode(false, 0, 1.0f, 0.0f, []() { return false; }) == child);
+    assert(child->isEvaluated() == allowed);
+    if (allowed) {
+      assert(child->getNodeValue() == COLOR_BLACK);
     }
   }
 }
@@ -368,7 +496,7 @@ static void TestFailedInitializeKeepsTree(InferenceProcessor* processor) {
                   1.6f, 3200.0f, 0.0f);
     MctsNode* root = player._root;
     const std::string sfen = root->getBoard().getSfen();
-    root->initialize(sfen, 300);
+    root->initialize(sfen, 300, 31, 32);
 
     // Prepare a tree with children and values and check initialization failure preserves it.
     Move move = root->getBoard().getLegalMoves(true, false).front();
@@ -392,7 +520,7 @@ static void TestFailedInitializeKeepsTree(InferenceProcessor* processor) {
     const std::string invalid_turn = sfen.substr(0, sfen.find_last_of(' ') + 1) + "invalid";
 
     // Repeat invalid piece and turn inputs, returning and reusing the same temporary node.
-    for (int32_t attempt = 0; attempt < 4; ++attempt) {
+    for (int32_t attempt = 0; attempt < 4; attempt++) {
       bool rejected = false;
       try {
         player.initialize(attempt % 2 == 0 ? "X8/9/9/9/9/9/9/9/8K b - 1" : invalid_turn, 400);
@@ -497,10 +625,10 @@ static void TestInitializeAllocationFailure(InferenceProcessor* processor) {
  */
 static void TestFailedGetChildReturnsNode() {
   for (bool reuse_node : {false, true}) {
-    MctsManager manager(MctsParameter(28, 27, 0.0f, 1.6f, 3200.0f, 0.0f));
+    MctsManager manager(MctsParameter(0.0f, 1.6f, 3200.0f, 0.0f));
     MctsNode* root = manager.createNode();
     root->initialize(
-        "lnsgkgsnl/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL b - 1", 300);
+        "lnsgkgsnl/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL b - 1", 300, 28, 27);
     const std::string sfen = root->getBoard().getSfen();
     if (reuse_node) {
       manager.releaseNode(manager.createNode());
@@ -512,7 +640,7 @@ static void TestFailedGetChildReturnsNode() {
         Move(Position(0, 4), Position(0, 3), false),
         Move(Position(0, 4), Position(0, 2), false),
         Move(Position(BOARD_SIZE, PIECE_HAND_PAWN), Position(0, 4), false)};
-    for (int32_t attempt = 0; attempt < 6; ++attempt) {
+    for (int32_t attempt = 0; attempt < 6; attempt++) {
       bool rejected = false;
       try {
         root->getChild(invalid_moves[attempt % invalid_moves.size()]);
@@ -555,7 +683,7 @@ static void TestFailedPlayKeepsTree(InferenceProcessor* processor) {
     root->applyInferenceResult(0.25f, 20.0f, {{move, 1.0f}});
     MctsNode* child = root->pickupNextNode(false, 0, 1.0f, 0.0f, []() { return false; });
     root->updateMctsValue(0.375f);
-    root->_appearedBoardHashes.insert(BoardHash(&root->getBoard()));
+    root->_appearedTurns[BoardHash(&root->getBoard())] = root->getBoard().getTurn();
     if (state == 1) {
       player.stopEvaluation();
     }
@@ -569,13 +697,13 @@ static void TestFailedPlayKeepsTree(InferenceProcessor* processor) {
       player._searchNoise = 0.25f;
     }
     const auto children = root->getChildren();
-    const auto hashes = root->_appearedBoardHashes;
+    const auto appeared_turns = root->_appearedTurns;
     const auto used_nodes = player._manager._usedNodes;
     const int32_t visits = root->getVisits();
     const uint64_t stop_sequence = player._stopSequence;
 
     // Preserve execution state, statistics, history, and active nodes across repeated failures.
-    for (int32_t attempt = 0; attempt < 3; ++attempt) {
+    for (int32_t attempt = 0; attempt < 3; attempt++) {
       bool rejected = false;
       try {
         player.play(Move(Position(0, 4), Position(0, 2), false));
@@ -586,10 +714,7 @@ static void TestFailedPlayKeepsTree(InferenceProcessor* processor) {
       assert(rejected);
       assert(player._root == root && root->getBoard().getSfen() == sfen);
       assert(root->getChildren() == children && child->getParent() == root);
-      assert(root->_appearedBoardHashes.size() == hashes.size());
-      for (const auto& hash : hashes) {
-        assert(root->_appearedBoardHashes.count(hash) == 1);
-      }
+      assert(root->_appearedTurns == appeared_turns);
       assert(root->getVisits() == visits);
       assert(root->getNodeValue() == 0.25f && root->getMctsValue() == 0.375f);
       assert(player._paused == (state == 2) && player._stopped);
@@ -629,7 +754,7 @@ static void TestFailedPlayWhileSearching(InferenceProcessor* processor) {
   const std::string sfen = root->getBoard().getSfen();
 
   // Repeat invalid moves with real workers and inspect restored settings.
-  for (int32_t attempt = 0; attempt < 3; ++attempt) {
+  for (int32_t attempt = 0; attempt < 3; attempt++) {
     bool rejected = false;
     try {
       player.play(Move(Position(0, 4), Position(0, 3), false));
@@ -805,7 +930,7 @@ static void TestStopAndRestart(InferenceProcessor* processor) {
   // Complete stop notification and restart state changes before the waiter reacquires the mutex.
   {
     std::lock_guard<std::mutex> lock(player._mutex);
-    ++player._stopSequence;
+    player._stopSequence += 1;
     player._stopped = true;
     player._stopRequested = true;
     player._waitCondition.notify_all();
@@ -828,7 +953,7 @@ static void TestStopAndRestart(InferenceProcessor* processor) {
 static void TestLastVisitNotification(InferenceProcessor* processor) {
   Player player(processor, 1, 1, 28, 27, 0.0f, 1, 1, 0,
                 1.6f, 3200.0f, 0.0f);
-  for (int32_t i = 0; i < 100; ++i) {
+  for (int32_t i = 0; i < 100; i++) {
     // Use a position with no legal moves to race the first visit notification without inference.
     player.initialize("k8/1G7/1K7/9/9/9/9/9/9 w - 1", 512);
     auto result = std::async(std::launch::async, [&player]() {
@@ -1041,7 +1166,7 @@ static void TestInferenceRegistrationFailure(InferenceProcessor* processor) {
  * @param processor Inference processor.
  */
 static void TestInferenceWaiters(InferenceProcessor* processor) {
-  for (int32_t operation = 0; operation < 3; ++operation) {
+  for (int32_t operation = 0; operation < 3; operation++) {
     Player player(processor, 1, 1000000, 28, 27, 0.0f, 1, 1, 0,
                   1.6f, 3200.0f, 0.0f);
     Move move = player._root->getBoard().getLegalMoves(true, false).front();
@@ -1154,6 +1279,14 @@ static void TestSynchronousPrediction(InferenceProcessor* processor) {
   assert(std::isfinite(first));
   assert(first == cached);
   assert(processor->getCacheHitRate() > 0.0f);
+
+  // Standalone inference uses Black 28 and White 27 regardless of the input board's scores.
+  Board other_scores(56, 56);
+  other_scores.initialize(board.getSfen(), board.getDrawTurn());
+  const float hit_rate = processor->getCacheHitRate();
+  const float same_prediction = processor->predict(&other_scores);
+  assert(same_prediction == first);
+  assert(processor->getCacheHitRate() > hit_rate);
 }
 
 /**
@@ -1178,7 +1311,7 @@ static void TestConstructorCorrections(InferenceProcessor* processor) {
     // Acquire the normalized number of engines and reuse them after release.
     PnSearchManager manager(-1, size);
     std::vector<PnSearchEngine*> engines;
-    for (int32_t i = 0; i < expected_size; ++i) {
+    for (int32_t i = 0; i < expected_size; i++) {
       PnSearchEngine* engine = manager.acquire();
       assert(std::find(engines.begin(), engines.end(), engine) == engines.end());
       assert(engine->getCheckmateMoves(&board, 1).empty());
@@ -1231,7 +1364,7 @@ static void TestConstructorCorrections(InferenceProcessor* processor) {
  */
 static void TestPnSearchManagerAllocationFailure() {
   bool constructed = false;
-  for (int32_t failure_index = 0; failure_index < 128; ++failure_index) {
+  for (int32_t failure_index = 0; failure_index < 128; failure_index++) {
     // Vary failures from the first allocation through partial construction of multiple engines.
     allocations_until_failure = failure_index;
     tracked_live_allocations = 0;
@@ -1265,7 +1398,7 @@ static void TestPucbBaseValidation(InferenceProcessor* processor) {
                      -std::numeric_limits<float>::infinity()}) {
     bool parameter_rejected = false;
     try {
-      MctsParameter parameter(28, 27, 0.0f, 1.6f, base, 0.0f);
+      MctsParameter parameter(0.0f, 1.6f, base, 0.0f);
     } catch (const std::invalid_argument& error) {
       parameter_rejected = true;
       assert(std::string(error.what()).find("pucb_constant_base") != std::string::npos);
@@ -1299,12 +1432,12 @@ static void TestPucbPriority() {
                      0.5f, 1.0f, 3200.0f, std::numeric_limits<float>::denorm_min(),
                      std::numeric_limits<float>::max()}) {
     for (float init : {0.0f, 1.6f}) {
-      MctsManager manager(MctsParameter(28, 27, 0.0f, init, base, 0.5f));
+      MctsManager manager(MctsParameter(0.0f, init, base, 0.5f));
       const float effective_base = manager.getParameter().getPucbConstantBase();
       assert(effective_base == (base <= 0.0f ? 1.0f : base));
       MctsNode* node = manager.createNode();
       node->initialize(
-          "lnsgkgsnl/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL b - 1", 512);
+          "lnsgkgsnl/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL b - 1", 512, 28, 27);
       node->_nodeValue = 0.25f;
       node->_mctsSelects.store(3, std::memory_order_relaxed);
 
@@ -1337,7 +1470,7 @@ static void TestPucbPriority() {
 static void TestMctsParameterSettings() {
   // Preserve positive values and zero and inspect normalized penalties and PUCB constants.
   for (float value : {-1.0f, 0.0f, 0.25f, 2.0f}) {
-    MctsParameter parameter(28, 27, value, value, 3200.0f, value);
+    MctsParameter parameter(value, value, 3200.0f, value);
     const float expected = value < 0.0f ? 0.0f : value;
     assert(parameter.getSennichitePenalty() == expected);
     assert(parameter.getPucbConstantInit() == expected);
@@ -1351,7 +1484,7 @@ static void TestMctsParameterSettings() {
                         -std::numeric_limits<float>::infinity()}) {
       bool rejected = false;
       try {
-        MctsParameter parameter(28, 27, setting == 0 ? value : 0.0f,
+        MctsParameter parameter(setting == 0 ? value : 0.0f,
                                 setting == 1 ? value : 1.6f, 3200.0f,
                                 setting == 2 ? value : 0.0f);
       } catch (const std::invalid_argument&) {
@@ -1496,6 +1629,93 @@ static void TestEvaluationQueueSettings(InferenceProcessor* processor) {
   assert(player.getVisits() == 1);
 }
 
+// A position that short searches cannot solve, so PN search continues during stop checks.
+constexpr char ABORT_SFEN[] =
+    "l3+B4/1lk6/2ngsP3/2p1pp3/p6P1/1PP1P4/P1N2g3/1K5+p1/L3N3+l w RBG2SN4Prgs3p 114";
+
+/**
+ * Wait until the lent engine starts PN search.
+ * @param player Searching player.
+ */
+static void WaitForPnSearch(Player& player) {
+  const auto deadline = std::chrono::steady_clock::now() + 2s;
+  while (std::chrono::steady_clock::now() < deadline) {
+    if (player._pnsearch._engines[0]->_searchState.load() ==
+        PnSearchEngine::SearchState::RUNNING) {
+      return;
+    }
+    std::this_thread::yield();
+  }
+  assert(false && "PN search did not start.");
+}
+
+/**
+ * Check PN search can run again on the same root after normal and explicit stops.
+ * @param processor Inference processor.
+ */
+static void TestPnAbortAndRestart(InferenceProcessor* processor) {
+  Player player(processor, 1, 1000000, 28, 27, 0.0f, 31, 200000, 1,
+                1.6f, 3200.0f, 0.0f);
+  player.initialize(ABORT_SFEN, 512);
+  MctsNode* root = player._root;
+  for (bool explicit_stop : {false, true}) {
+    player.startEvaluation(false, 0, 1.0f, 0.0f);
+    WaitForPnSearch(player);
+    if (explicit_stop) {
+      player.stopEvaluation();
+    } else {
+      player.waitEvaluation(0, 0.0f, true);
+    }
+    player.getCandidates();
+    assert(player._root == root && !root->isCheckmateSearched());
+    std::lock_guard<std::mutex> lock(player._mutex);
+    assert(player._isSearchIdle() && player._checkmateRescan);
+  }
+
+  // Complete a shallow search on the same root and check normal evaluation also resumes.
+  player._checkSearchDepth = 1;
+  player.startEvaluation(false, 0, 1.0f, 0.0f);
+  player.waitEvaluation(4, 2.0f, true);
+  assert(!player.getCandidates().empty());
+  assert(player._root == root && root->isCheckmateSearched());
+}
+
+/**
+ * Check pauses for getting results, changing positions, and destruction do not keep waiting
+ * for PN search to finish.
+ * @param processor Inference processor.
+ */
+static void TestPnAbortLifecycle(InferenceProcessor* processor) {
+  for (int32_t operation = 0; operation < 5; operation++) {
+    auto player = std::make_unique<Player>(
+        processor, 1, 1000000, 28, 27, 0.0f, 31, 200000, 1, 1.6f, 3200.0f, 0.0f);
+    player->initialize(ABORT_SFEN, 512);
+    const Move move = player->_root->getBoard().getLegalMoves(true, false).front();
+    player->startEvaluation(false, 0, 1.0f, 0.0f);
+    WaitForPnSearch(*player);
+    const auto started = std::chrono::steady_clock::now();
+    if (operation == 0) {
+      player->getCandidates();
+    } else if (operation == 1) {
+      player->initialize(
+          "lnsgkgsnl/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL b - 1", 512);
+    } else if (operation == 2) {
+      player->play(move);
+    } else if (operation == 3) {
+      assert(!player->toString().empty());
+    } else {
+      player.reset();
+    }
+    assert(std::chrono::steady_clock::now() - started < 2s);
+    if (player) {
+      player->stopEvaluation();
+      player->getCandidates();
+      std::lock_guard<std::mutex> lock(player->_mutex);
+      assert(player->_isSearchIdle());
+    }
+  }
+}
+
 /**
  * Run native wait and notification regressions using the supplied model path.
  * @param argc Argument count.
@@ -1505,6 +1725,8 @@ static void TestEvaluationQueueSettings(InferenceProcessor* processor) {
 int main(int argc, char** argv) {
   assert(argc == 2);
   InferenceProcessor processor(argv[1], {-1}, false, true, 1, 1, 0);
+  TestPnAbortAndRestart(&processor);
+  TestPnAbortLifecycle(&processor);
   TestMctsParameterSettings();
   TestInferenceConstructorSettings(argv[1], &processor);
   TestInferenceConstructionFailure(argv[1]);
@@ -1518,12 +1740,14 @@ int main(int argc, char** argv) {
   TestPlayAllocationFailure(&processor);
   TestPucbBaseValidation(&processor);
   TestPucbPriority();
+  TestNyugyokuScores(&processor);
   TestFailedInitializeKeepsTree(&processor);
   TestFailedInitializeWhileSearching(&processor);
   TestInitializeAllocationFailure(&processor);
   TestMateDrawTurnLimits();
   TestSearchAfterRejectedMate(&processor);
   TestSennichitePenalty(&processor);
+  TestPerpetualCheck(&processor);
   TestMateBeforeVisit(&processor);
   TestNormalStop(&processor);
   TestStopAndRestart(&processor);

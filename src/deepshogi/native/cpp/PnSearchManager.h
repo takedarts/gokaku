@@ -40,6 +40,12 @@ class PnSearchManager {
    */
   void release(PnSearchEngine* engine);
 
+  /**
+   * Request an abort of the lent search engines.
+   * Do not wait for them to finish.
+   */
+  void abortSearch();
+
  private:
   /**
    * Mutex for synchronization.
@@ -50,6 +56,11 @@ class PnSearchManager {
    * Condition variable.
    */
   std::condition_variable _condition;
+
+  /**
+   * Number of search engines after clamping.
+   */
+  int32_t _engineSize;
 
   /**
    * Array of PN search engine objects.

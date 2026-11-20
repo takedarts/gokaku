@@ -20,7 +20,7 @@ from .exception import ShogiException
 from .player import Candidate, Player
 from .processor import Processor
 from .timelimit import get_timelimit
-from .validation import validate_positive_float, validate_positive_int
+from .validation import validate_nonnegative_float, validate_positive_float, validate_positive_int
 
 LOGGER = logging.getLogger(__name__)
 
@@ -215,7 +215,7 @@ class USIEngine(object):
 
     def __init__(
         self,
-        processor: Processor,
+        processor: Processor | None,
         threads: int,
         visits: int = 1,
         extends: int = 0,
@@ -244,10 +244,12 @@ class USIEngine(object):
         client_author: str = AUTHOR,
         reader: TextIO = sys.stdin,
         writer: TextIO = sys.stdout,
-    ):
+        *,
+        processor_factory: Callable[[], Processor] | None = None,
+    ) -> None:
         '''Create the USI engine.
         Args:
-            processor (Processor): Inference processor.
+            processor (Processor | None): Inference processor (None to create it lazily).
             threads (int): Number of search threads.
             visits (int): Target node visit count.
             extends (int): Maximum number of search extensions.
@@ -262,7 +264,7 @@ class USIEngine(object):
             initial_width (int): Number of candidates for initial random moves.
             initial_temperature (float): Temperature for initial random moves.
             initial_value_delta (float): Acceptable win probability difference for initial random
-                moves.
+                moves (finite and nonnegative).
             initial_white_only (bool): True to use initial random moves only for White.
             nyugyoku_scores (Tuple[int,int]): Points required for entering-king declarations.
             draw_turn (int): Move count at which the game is drawn.
@@ -278,11 +280,18 @@ class USIEngine(object):
             client_author (str): Displayed author name.
             reader (TextIO): Command input stream.
             writer (TextIO): Result output stream.
+            processor_factory (Callable[[], Processor] | None): Function creating the inference
+                processor.
         '''
+        # Accept exactly one of a direct processor and lazy creation
+        if (processor is None) == (processor_factory is None):
+            raise ValueError('Specify exactly one of processor and processor_factory.')
+
         # Validate search settings at construction rather than deferring errors until readiness.
         validate_positive_int('threads', threads)
         validate_positive_int('max_visits', max_visits)
         validate_positive_float('pucb_constant_base', pucb_constant_base)
+        validate_nonnegative_float('initial_value_delta', initial_value_delta)
 
         # Apply the same integer restrictions to spin defaults and input values.
         if not float(pucb_constant_base).is_integer():
@@ -291,7 +300,8 @@ class USIEngine(object):
         self.player: Player | None = None
         self._player_settings: _PlayerSettings | None = None
         self._game_in_progress = False
-        self.processor = processor
+        self.processor: Processor | None = processor
+        self._processor_factory = processor_factory
         self.threads = threads
         self.nyugyoku_scores = nyugyoku_scores
         self.draw_turn = draw_turn
@@ -728,6 +738,8 @@ class USIEngine(object):
                 validate_positive_int(var, new_value)
             elif var == 'pucb_constant_base':
                 validate_positive_float(var, new_value)
+            elif var == 'initial_value_delta':
+                validate_nonnegative_float(name, new_value)
         except ValueError as error:
             return (False, str(error), False)
 
@@ -789,6 +801,13 @@ class USIEngine(object):
         # Keep the player and active settings throughout a game, even while stopped.
         if self._game_in_progress:
             return (True, 'readyok', False)
+
+        # Create the inference processor only at the first readiness check; keep it uncreated
+        # on failure
+        if self.processor is None:
+            if self._processor_factory is None:
+                raise ShogiException('processor factory is not initialized')
+            self.processor = self._processor_factory()
 
         # Construct a player only if it is absent or its construction settings have changed.
         settings = self._get_player_settings()
@@ -963,7 +982,7 @@ class USIEngine(object):
         next_board.copy_from(board)
         next_board.play(*move)
 
-        if self.player is None or self.player.referee.judge(next_board)[0]:
+        if self.player is None or self.player.referee.judge(next_board, previous_board=board)[0]:
             return message
 
         reply = candidate.variations[1]
@@ -1115,20 +1134,25 @@ class USIEngine(object):
             and (not settings.initial_white_only or self.player.get_color() == COLOR_WHITE))
 
         # Compute the move.
+        candidates: List[Candidate] = []
         if request is not None and request.stop_event.is_set():
             # Use available results without starting a new search after stopping.
             candidates = request.candidates
         elif random_move:
             LOGGER.debug('RandomMove: turn=%d', len(self.moves))
             # Choose a random candidate.
-            candidates = [self.player.get_random_candidate(
+            random_candidate = self.player.get_random_candidate(
                 width=settings.initial_width,
                 timelimit=timelimit,
                 temperature=settings.initial_temperature,
                 delta=settings.initial_value_delta,
                 ponder=False,
-                stop_event=request.stop_event if request is not None else None)]
-        else:
+                stop_event=request.stop_event if request is not None else None)
+            if random_candidate is not None:
+                candidates.append(random_candidate)
+
+        # Without a random candidate, run a normal search with the remaining time
+        if not candidates and (request is None or not request.stop_event.is_set()):
             LOGGER.debug(
                 'Evaluate: visits=%d, timelimit=%.1f, ponder=%s',
                 visits, timelimit, deferred)
@@ -1137,7 +1161,8 @@ class USIEngine(object):
             candidates = self.player.evaluate(
                 visits=visits,
                 extends=0 if board.get_turn() <= 20 else settings.extends,
-                timelimit=timelimit,
+                timelimit=max(timelimit - (time.monotonic() - prev_time), 0.0)
+                if random_move else timelimit,
                 criterion=settings.criterion,
                 equally=(settings.multipv > 1),
                 candidate_width=settings.multipv if settings.multipv > 1 else 0,

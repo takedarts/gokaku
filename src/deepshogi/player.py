@@ -6,7 +6,7 @@ from threading import Event
 from typing import Dict, List, Tuple
 
 from .board import Board, is_hand_position
-from .config import (BOARD_SIZE, COLOR_NONE, COLOR_WHITE,
+from .config import (BOARD_SIZE, COLOR_NONE,
                      DEFAULT_ALLOWED_REPEATS, DEFAULT_CHECK_NODE_DEPTH,
                      DEFAULT_CHECK_SEARCH_DEPTH, DEFAULT_CHECK_SEARCH_NODE,
                      DEFAULT_DRAW_TURN, DEFAULT_INITIAL_SFEN,
@@ -19,7 +19,8 @@ from .exception import ShogiException
 from .native import NativePlayer
 from .processor import Processor
 from .psfen import convert_sfen_to_psfen
-from .validation import INT32_MAX, validate_positive_float, validate_positive_int
+from .validation import (INT32_MAX, validate_nonnegative_float, validate_positive_float,
+                         validate_positive_int)
 
 LOGGER = logging.getLogger(__name__)
 
@@ -141,35 +142,34 @@ class Referee(object):
         self.draw_turn = draw_turn
 
         self.board_repeats: Dict[bytes, Tuple[int, int]] = {}
-        self.check_counts = [0, 0]
+        self.check_history: Dict[int, Tuple[int, bool]] = {}
 
     def clear(self) -> None:
         '''Clear the state.'''
         self.board_repeats.clear()
-        self.check_counts = [0, 0]
+        self.check_history.clear()
 
     def update(self, board: Board) -> None:
-        '''Update the state.
+        '''Register the position and whether the move leading to it was a check.
         Args:
-            board (Board): Position to register in the repetition and consecutive-check history.
+            board (Board): Position to register in the history.
         '''
         # Register the current board position in the history
         repeat_key = convert_sfen_to_psfen(board.get_sfen())
         repeat_values = self.board_repeats.get(repeat_key, (0, board.get_turn()))
         self.board_repeats[repeat_key] = (repeat_values[0] + 1, repeat_values[1])
 
-        # If in check, count consecutive checks
-        color_index = 0 if board.get_color() == COLOR_WHITE else 1
+        # Store whether the move by the opponent of the side to move was a check
+        self.check_history[board.get_turn()] = (
+            get_opposite_color(board.get_color()), board.is_check())
 
-        if board.is_check():
-            self.check_counts[color_index] += 1
-        else:
-            self.check_counts[color_index] = 0
-
-    def judge(self, board: Board) -> Tuple[bool, int, int]:
+    def judge(
+        self, board: Board, previous_board: Board | None = None,
+    ) -> Tuple[bool, int, int]:
         '''Judge the game result.
         Args:
             board (Board): Board data
+            previous_board (Board | None): Unregistered position immediately before a trial move
         Returns:
             Tuple[bool, int, int]: True if the game is over, winner's side, end reason
         '''
@@ -181,25 +181,38 @@ class Referee(object):
         if board.is_nyugyoku():
             return True, board.get_color(), RESULT_NYUGYOKU
 
-        # If the number of moves exceeds the draw threshold, judge as a draw
-        if board.get_turn() >= self.draw_turn:
-            return True, COLOR_NONE, RESULT_MAX_MOVES
-
         # Judge whether it is repetition (sennichite)
         repeat_key = convert_sfen_to_psfen(board.get_sfen())
-        repeat_values = self.board_repeats.get(repeat_key, (0, board.get_turn()))
+        current_turn = board.get_turn()
+        repeat_values = self.board_repeats.get(repeat_key, (0, current_turn))
         repeat_count, repeat_turn = repeat_values
-        sennichite = (repeat_count >= self.allowed_repeats)
 
-        if sennichite:
-            color_index = 0 if board.get_color() == COLOR_WHITE else 1
-            check_count = self.check_counts[color_index]
-            sennichioute = (check_count >= (board.get_turn() - repeat_turn) // 2)
+        if repeat_count >= self.allowed_repeats:
+            # Add the judged position and the unregistered position before the trial move
+            # only for this judgment
+            pending = {current_turn: (get_opposite_color(board.get_color()), board.is_check())}
+            if previous_board is not None:
+                pending[previous_board.get_turn()] = (
+                    get_opposite_color(previous_board.get_color()), previous_board.is_check())
 
-            if sennichioute:
-                return True, board.get_color(), RESULT_SENNICHITE
-            else:
-                return True, COLOR_NONE, RESULT_SENNICHITE
+            # Check all moves of each side, excluding the move to the first identical position
+            checking_colors: set[int] = set()
+            other_colors: set[int] = set()
+            for turn in range(repeat_turn + 1, current_turn + 1):
+                entry = pending.get(turn, self.check_history.get(turn))
+                if entry is None:
+                    return True, COLOR_NONE, RESULT_SENNICHITE
+                color, check = entry
+                (checking_colors if check else other_colors).add(color)
+
+            # If exactly one side kept checking, the opponent of that side wins
+            continuous = checking_colors - other_colors
+            winner = get_opposite_color(continuous.pop()) if len(continuous) == 1 else COLOR_NONE
+            return True, winner, RESULT_SENNICHITE
+
+        # If no repetition occurs and the maximum move count is reached, judge as a draw
+        if current_turn >= self.draw_turn:
+            return True, COLOR_NONE, RESULT_MAX_MOVES
 
         # Otherwise, judge that the game is ongoing
         return False, COLOR_NONE, RESULT_NONE
@@ -280,17 +293,21 @@ class Player(object):
         self,
         sfen: str = DEFAULT_INITIAL_SFEN,
         draw_turn: int = DEFAULT_DRAW_TURN,
+        *,
+        nyugyoku_scores: Tuple[int, int] | None = None,
     ) -> None:
         '''Initialize state.
         Args:
             sfen (str): Initial board in SFEN format
             draw_turn (int): Total move count at which the game is drawn.
+            nyugyoku_scores (Tuple[int, int] | None): Points Black and White need for nyugyoku.
+                If omitted, the scores given when the player was created are used.
         '''
         # Stop pondering if it is active.
         self.native.wait_evaluation(0, 0.0, True)
 
-        # Initialize the position.
-        self.native.initialize(sfen, draw_turn)
+        # Update the referee state after the position and game conditions are initialized
+        self.native.initialize(sfen, draw_turn, nyugyoku_scores)
         self.referee.clear()
         self.referee.draw_turn = draw_turn
 
@@ -335,19 +352,24 @@ class Player(object):
         delta: float = 0.1,
         ponder: bool = False,
         stop_event: Event | None = None,
-    ) -> Candidate:
+    ) -> Candidate | None:
         '''Return a candidate sampled from the policy distribution.
         Args:
             width (int): Number of candidate moves.
             timelimit (float): Time limit in seconds.
             temperature (float): Temperature parameter.
             noise (float): Strength of Gumbel noise during search.
-            delta (float): Acceptable drop in win probability.
+            delta (float): Acceptable drop in win probability (finite and nonnegative).
             ponder (bool): True to continue searching.
             stop_event (Event | None): Optional event requesting cancellation.
         Returns:
-            Candidate: Selected candidate move.
+            Candidate | None: Selected candidate move, or None if no legal move avoids repetition.
+        Raises:
+            ValueError: If delta is not finite or is negative.
         '''
+        # Validate the tolerance used to compare win probabilities before the native search
+        validate_nonnegative_float('delta', delta)
+
         # Evaluate the position.
         if stop_event is None or not stop_event.is_set():
             self.native.start_evaluation(True, width, 1.0, noise)
@@ -358,19 +380,15 @@ class Player(object):
 
             self.native.wait_evaluation(width + 1, timelimit, not ponder)
 
-        # Build the candidate list.
-        candidates = [Candidate(*c) for c in self.native.get_candidates()]
-
-        # Return a legal fallback move when stopped before the first evaluation.
-        if not candidates and stop_event is not None and stop_event.is_set():
-            board = self.get_board()
-            src, dst, promote = board.get_legal_moves()[0]
-            return Candidate(src, dst, promote, board.get_color(), 0, 1.0, 0.0, 0.0, [])
+        # Exclude candidates that repeat game history before comparing win probabilities
+        candidates = self._get_random_candidates()
+        if not candidates:
+            return None
 
         # Get the maximum predicted win rate
         max_win_chance = max(c.win_chance for c in candidates)
 
-        # Exclude candidate moves whose predicted win rate is more than delta below the maximum
+        # Keep only candidates within the tolerance of the maximum win probability
         candidates = [
             c for c in candidates if c.win_chance >= max_win_chance - delta]
 
@@ -394,6 +412,52 @@ class Player(object):
             LOGGER.debug(candidate)
 
         return candidate
+
+    def _get_random_candidates(self) -> List[Candidate]:
+        '''Get candidates for a random move that do not return to an earlier position.
+        Returns:
+            List[Candidate]: Search candidates, one fallback move, or an empty list if none.
+        '''
+        # Without earlier positions, the search candidates can be used as is
+        candidates = [Candidate(*c) for c in self.native.get_candidates()]
+        if candidates and not self.referee.board_repeats:
+            return candidates
+
+        board = self.get_board()
+
+        def is_new_position(move: Tuple[Tuple[int, int], Tuple[int, int], bool]) -> bool:
+            '''Play a trial move on a board copy and check whether the result is in the history.
+            Args:
+                move (Tuple[Tuple[int, int], Tuple[int, int], bool]): Legal move to try.
+            Returns:
+                bool: True if the position after the move has not appeared.
+            '''
+            result = board.play(*move)
+            try:
+                return self.referee.get_repeats(board) == 0
+            finally:
+                board.undo(*result)
+
+        # Use the remaining search candidates if any
+        candidates = [c for c in candidates if is_new_position((c.src, c.dst, c.promote))]
+        if candidates:
+            return candidates
+
+        # Search for a nonrepeating fallback from the highest-policy moves, including those
+        # outside the search width
+        value, remaining_turns, policy_moves = self.native.get_policy_moves()
+        ordered_moves = sorted(policy_moves, key=lambda item: item[1], reverse=True)
+        policy_choices = (parse_move16(code) for code, _ in ordered_moves)
+        move = next((choice for choice in policy_choices if is_new_position(choice)), None)
+
+        # If none can be chosen from the policy, check all legal moves including unpromotions
+        if move is None:
+            legal_moves = board.get_legal_moves(remove_unpromote=False)
+            move = next((choice for choice in legal_moves if is_new_position(choice)), None)
+        if move is None:
+            return []
+
+        return [Candidate(*move, board.get_color(), 0, 1.0, value, remaining_turns - 1, [])]
 
     def evaluate(
         self,
@@ -468,18 +532,21 @@ class Player(object):
             if not candidates:
                 break
 
-            # Reflect adjudicated game results in the evaluations.
+            # Keep the position before the trial moves and reflect adjudicated game results in the
+            # evaluations.
+            previous_board = self.get_board()
             for candidate in candidates:
                 # Skip further candidate adjudication after stopping.
                 if stop_event is not None and stop_event.is_set():
                     break
 
                 # Create a board after making the candidate move
-                board = self.get_board()
-                board.play(candidate.src, candidate.dst, candidate.promote)
+                next_board = self.get_board()
+                next_board.play(candidate.src, candidate.dst, candidate.promote)
 
                 # Judge the end of the game on the board after making the candidate move
-                game_over, winner, result = self.referee.judge(board)
+                game_over, winner, result = self.referee.judge(
+                    next_board, previous_board=previous_board)
 
                 # Use the winner's color as the evaluation when the game has ended.
                 if game_over:

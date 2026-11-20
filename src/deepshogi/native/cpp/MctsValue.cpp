@@ -41,7 +41,7 @@ void MctsValue::reset() {
 void MctsValue::update(float value) {
   std::lock_guard<std::mutex> lock(_mutex);
   _value += value;
-  _count++;
+  _count += 1;
 }
 
 /**

@@ -59,7 +59,7 @@ class MctsPolicy {
    * Increments the number of times this move has been searched by 1.
    */
   inline void incrementVisits() {
-    _visits++;
+    _visits += 1;
   }
 
  private:

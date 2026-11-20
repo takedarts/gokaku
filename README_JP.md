@@ -8,8 +8,8 @@ Gokakuはコンピュータ囲碁プログラム[Maru](https://github.com/takeda
 棋力向上の経過は[こちらのページ](https://takeda-lab.jp/gokaku/)で確認できます。
 
 Gokakuを実行するためにはモデルファイルが必要です。
-TorchScriptモデルは[こちら](https://github.com/takedarts/gokaku/releases/tag/v2.4)からダウンロードできます。
-TensorRTモデルは`src/compile.py`を使ってTorchScriptモデルから作成してください。
+GokakuはExportedProgram形式のモデル（`.ep`）か、`src/compile.py`を使ってExportedProgramからコンパイルしたPT2パッケージ（`.pt2`）を使用します。
+モデルファイルは[リリースページ](https://github.com/takedarts/gokaku/releases)で公開しています。
 
 **注意** Gokaku version 2.4では、出力の形式を含めたモデルの仕様が変更されたため、Gokaku version 2.3以前のモデルは使用できません。
 
@@ -60,15 +60,19 @@ python src/build.py --clean
 
 ### 実行方法
 起動スクリプト`src/run.py`を実行することでGokakuを起動できます。
-引数にはTorchScriptモデルかTensorRTモデルを指定します（TorchScriptモデルは[こちら](https://github.com/takedarts/gokaku/releases/tag/v2.4)からダウンロードできます。TensorRTモデルは`src/compile.py`を使って作成してください）。
+引数にはExportedProgram形式のモデル（`.ep`）か、`src/compile.py`で作成したPT2パッケージ（`.pt2`）を指定します。
 ```
 python src/run.py <model_file>
 ```
 
+モデルは最初の`isready`コマンドを受け取ったときに読み込まれます。
+ExportedProgramを指定した場合は、このときに実行デバイス向けのコンパイルを行うため、C++コンパイラが必要となり、時間もかかります。
+起動のたびにコンパイルしないようにするには、`src/compile.py`で事前にコンパイルしてください（[モデルのコンパイル](#モデルのコンパイル)を参照）。
+
 Gokakuの操作はUSI（Universal Shogi Interface）プロトコルを介して行います。
 以下に簡単な操作例を示します。
 ```
-% python src/run.py b10c512-1000.model
+% python src/run.py b10c512-1000.ep
 usi
 id name Gokaku 2.4
 id author Atsushi Takeda
@@ -111,28 +115,29 @@ GokakuはUSIプロトコルに準拠しているため、[ShogiHome](https://sun
 python src/run.py --help
 ```
 
-### TensorRTを使用した実行
-Torch-TensorRTがインストールされた環境でビルドした場合、TensorRTを使用してGokakuを実行できます。
-まず、TensorRTを使用するために、Gokakuの推論モデルをTensorRTモデルへコンパイルする必要があります。
-以下のコマンドを実行して、モデルファイルをTensorRTモデルへコンパイルしてください。
+### モデルのコンパイル
+`src/compile.py`を使って、ExportedProgram形式のモデルを実行デバイス向けのPT2パッケージへ事前にコンパイルできます。
 ```
-python src/compile.py <torch-script-file> <tensorrt-file>
+python src/compile.py <exported-program-file> <pt2-file>
 ```
 
-`<torch-script-file>`にはTorchScriptモデルを指定してください。
-上記のコマンドを実行すると、`<tensorrt-file>`にTensorRTモデルが生成されます。
+バックエンドはオプション`--backend`（`auto`・`aoti`・`tensorrt`）で選択します。
+`auto`（デフォルト）の場合、NVIDIA CUDAのGPUを搭載したLinux環境でTorch-TensorRTを使用できればTensorRTを、それ以外ではAOTInductorを使用します。
+コンパイル対象のデバイスはオプション`--gpu`で指定します（CPUは`-1`）。指定しない場合は、CUDA/ROCmのGPU 0、MPSのGPU 0、CPUの順に選択します。
+デバイスの種類・GPUランタイム・精度・バッチサイズはPT2パッケージに保存され、`src/run.py`はモデルの読み込み時にそれらを使用するため、Gokakuの起動時に指定する必要はありません。
+PT2パッケージは、コンパイルしたときと同じ種類のデバイスとランタイムでのみ使用できます。
 
-作成されたTensorRTモデルを引数に指定して起動スクリプトを実行することで、TensorRTを使用してGokakuを起動できます。
+作成したPT2パッケージを引数に指定して起動スクリプトを実行することで、Gokakuを起動できます。
 ```
-python src/run.py <tensorrt-file>
+python src/run.py <pt2-file>
 ```
 
-ただし、TensorRTを使用してGokakuを実行する場合、TensorRTモデルのコンパイルオプションと`src/run.py`の実行オプションを同じものにする必要があります。
-TensorRTモデルをコンパイルする際に`--fp16`や`--batch-size`オプションを指定した場合、`src/run.py`の実行コマンドにも同じオプションを指定してください。
-以下はTensorRTモデルを半精度浮動小数点数（FP16）でバッチサイズ16に設定してコンパイルし、そのモデルを使用してGokakuを起動する例です（TensorRTモデルのコンパイルは1度だけで行います）。
+バッチ次元を動的にしてexportしたExportedProgramであれば、コンパイル時に任意の精度（`--fp16`）とバッチサイズ（`--batch-size`）を指定できます。
+バッチサイズを固定してexportしたExportedProgramの場合は、ExportedProgramに保存された精度とバッチサイズに一致させてください。
+以下はGPU 0でTensorRT向けにモデルをコンパイルし、そのモデルを使用してGokakuを起動する例です（コンパイルは1度だけ行います）。
 ```
-python src/compile.py --fp16 --batch-size 16 b10c512-1000.model b10c512-1000.rt.model
-python src/run.py --fp16 --batch-size 16 b10c512-1000.rt.model
+python src/compile.py --backend tensorrt --gpu 0 b10c512-1000.ep b10c512-1000.pt2
+python src/run.py b10c512-1000.pt2
 ```
 
 ## Dockerを使用した実行
@@ -208,9 +213,7 @@ docker run -iq --rm -v .:/workspace takedarts/gokaku:v2.4-arm /opt/run.sh <model
 | `--client-name <S>`         | 表示するクライアント名                            | `Gokaku`              |
 | `--client-version <S>`      | 表示するバージョン情報                            | `2.4`                 |
 | `--threads <N>`             | 探索に使用するスレッド数                          | 16                    |
-| `--batch-size <N>`          | 盤面評価のバッチサイズ                            | 32                    |
-| `--gpus <N>`                | 使用するGPUのID（複数指定する場合はコンマ区切り） | 使用可能なすべてのGPU |
-| `--fp16`                    | 半精度浮動小数点数（FP16）を使用する              | False                 |
+| `--gpus <N>`                | 使用するGPUのID（複数指定する場合はコンマ区切り・CPUは-1）。`.ep`は先頭のデバイスでコンパイル | `.ep`は先頭のGPUと同じ機種のすべてのGPU、`.pt2`は適合するすべてのデバイス |
 | `--threads-per-gpu <N>`     | GPUごとに使用する推論スレッド数                   | 2                     |
 | `--cache-size <N>`          | 推論結果のキャッシュサイズ                        | visits |
 | `--verbose`                 | 標準エラー出力へのログ出力を有効にする            | False                 |
@@ -224,16 +227,17 @@ docker run -iq --rm -v .:/workspace takedarts/gokaku:v2.4-arm /opt/run.sh <model
 - 最も多く訪問された子ノードの訪問数が`--visits`で指定された目標の60%を超えた場合は、探索を早期に終了します。
 - `--extends N`を指定すると、選択手の勝率が5%より大きく95%未満で、別候補の訪問数が選択手の2/3以上の場合に、最大N回再探索します。再探索ごとに目標訪問数を最初の指定値の半分ずつ増やします。制限時間が残り1秒未満となった場合は再探索を行いません。
 - 探索木は着手後も再利用されます。
+- `go`で残り時間が指定された場合は、思考時間から余裕時間を差し引きます。余裕時間は秒読みが2秒以上なら2秒、それ以外は10秒です。
 
 ## 実行例
-モデルファイル`b10c512-1000.model`を使用してGokakuを起動する場合、以下のコマンドを実行します。
+モデルファイル`b10c512-1000.ep`を使用してGokakuを起動する場合、以下のコマンドを実行します。
 ```
-python src/run.py b10c512-1000.model
+python src/run.py b10c512-1000.ep
 ```
 
 訪問回数を1000回に設定し、思考時間の上限を5秒に設定してGokakuを起動する場合、以下のコマンドを実行します。
 ```
-python src/run.py b10c512-1000.model --visits 1000 --timelimit 5
+python src/run.py b10c512-1000.ep --visits 1000 --timelimit 5
 ```
 
 ## テスト
@@ -243,7 +247,8 @@ PYTHONPATH=src python -m unittest discover -s src/tests -p '*_test.py' -v
 MYPYPATH=src python -m mypy --explicit-package-bases src
 ```
 
-テストは小さなモデルを生成して使用するため、学習済みモデルやGPUは不要です。
+テストは小さなモデルを生成・コンパイルして使用するため、学習済みモデルやGPUは不要です（CMakeとC++コンパイラは必要です）。
+C++のテストはCMakeでビルドされ、Pythonのテストの中で実行されます。
 詳しくは[src/tests/README.md](src/tests/README.md)を参照してください。
 
 ## ライセンス

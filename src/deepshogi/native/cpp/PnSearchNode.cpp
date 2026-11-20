@@ -81,10 +81,10 @@ void PnSearchNode::initialize(const Board* board, int32_t depth) {
           bool& seen = unique_hand_moves[move.getDst().getIndex()];
           if (!seen) {
             seen = true;
-            ++hand_move_count;
+            hand_move_count += 1;
           }
         } else {
-          board_move_count++;
+          board_move_count += 1;
         }
       }
 
@@ -128,9 +128,13 @@ void PnSearchNode::copyFrom(const PnSearchNode* node) {
  * Expand the node into children, retaining already expanded children.
  * @param engine Search engine.
  * @param board Working position, restored on return.
- * @return False only when node capacity is exhausted.
+ * @param isPreviousPosition Function that identifies positions before the search started
+ *     (empty for the conventional search).
+ * @return False when node capacity is exhausted or an abort is requested, otherwise true.
  */
-bool PnSearchNode::expand(PnSearchEngine* engine, Board* board) {
+bool PnSearchNode::expand(
+    PnSearchEngine* engine, Board* board,
+    const std::function<bool(const BoardHash&)>& isPreviousPosition) {
   // Retain connections without generating children for solved, depth-zero, or expanded nodes.
   if (_contPn == 0 || _contDn == 0 || _depth == 0 || !_children.empty()) {
     return true;
@@ -144,11 +148,11 @@ bool PnSearchNode::expand(PnSearchEngine* engine, Board* board) {
     MoveResult result = board->play(move);
 
     // Obtain regular children at depth zero and detect checkmate during initialization.
-    PnSearchNode* child_node = engine->_getNode(board, child_depth, false);
+    PnSearchNode* child_node = engine->_getNode(board, child_depth, false, isPreviousPosition);
 
     board->undo(result);
 
-    // nullptr signals capacity exhaustion; return false only in this case,
+    // nullptr signals capacity exhaustion or an abort request; return false,
     // so the caller restores the root position and aborts the entire search.
     if (child_node == nullptr) {
       return false;

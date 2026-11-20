@@ -1,5 +1,7 @@
 #include "InferenceExecutor.h"
 
+#include <torch/torch.h>
+
 #include <algorithm>
 #include <limits>
 #include <stdexcept>
@@ -280,12 +282,12 @@ InferenceExecutor::InferenceExecutor(
       _inputBuffers(),
       _maskBuffers(),
       _outputBuffers() {
-  // Validate the required processor pointer.
+  // Ensure a processor is specified, since it is needed to access the inference request queue.
   if (processor == nullptr) {
     throw std::invalid_argument("processor must not be null.");
   }
 
-  // Validate inference buffer capacities.
+  // Compute the maximum elements per entry and ensure the batch total fits in int32_t.
   const int32_t buffer_width =
       std::max({MODEL_INPUT_PACK_SIZE, MODEL_OUTPUT_PACK_SIZE, MODEL_OUTPUT_SIZE});
 
@@ -293,18 +295,20 @@ InferenceExecutor::InferenceExecutor(
     throw std::invalid_argument("batch_size is too large for inference buffers.");
   }
 
-  // Validate the device and load the model during construction so errors reach the caller.
+  // Validate the device and load the inference model before starting workers.
   _model = std::make_unique<InferenceModel>(file, gpu, fp16, deterministic);
 
-  // Allocate all per-thread buffers and statistics before starting workers.
+  // Clamp the number of worker threads to at least one.
   const int32_t thread_size = std::max(threads, 1);
 
+  // Reserve storage for threads, statistics, and buffers before starting workers.
   _threads.reserve(thread_size);
   _batchFillRates = std::vector<std::atomic<float>>(thread_size);
   _inputBuffers.resize(thread_size);
   _maskBuffers.resize(thread_size);
   _outputBuffers.resize(thread_size);
 
+  // Allocate dedicated input/output buffers for each thread and initialize batch fill rates.
   for (int32_t i = 0; i < thread_size; i++) {
     _inputBuffers[i].resize(_batchSize * MODEL_INPUT_PACK_SIZE);
     _maskBuffers[i].resize(_batchSize * MODEL_OUTPUT_PACK_SIZE);
@@ -312,22 +316,27 @@ InferenceExecutor::InferenceExecutor(
     _batchFillRates[i].store(0.0f, std::memory_order_relaxed);
   }
 
+  // Start inference workers after all buffers have been allocated.
   try {
     for (int32_t i = 0; i < thread_size; i++) {
       _threads.emplace_back(&InferenceExecutor::_run, this, i);
     }
   } catch (...) {
+    // If startup fails midway, set the termination flag while holding the queue lock.
     {
       std::lock_guard<std::mutex> lock(_processor->_queueMutex);
       _terminated = true;
     }
 
+    // Notify waiting workers of the updated termination flag.
     _processor->_queueCondition.notify_all();
 
+    // Wait for all started workers to finish so threads are reclaimed on construction failure.
     for (auto& thread : _threads) {
       thread.join();
     }
 
+    // Rethrow the startup exception to the caller after reclaiming the workers.
     throw;
   }
 }

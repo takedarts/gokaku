@@ -1,6 +1,7 @@
 from typing import List
 
 from libc.stdint cimport int32_t
+from libcpp.string cimport string
 from libcpp.vector cimport vector
 
 import numpy
@@ -86,12 +87,23 @@ cdef class NativeInferenceProcessor:
         for gpu in gpus:
             gpu_vector.push_back(gpu)
 
-        self.processor = new InferenceProcessor(
-            model.encode('utf-8'), gpu_vector, fp16, deterministic,
-            batch_size, threads_per_gpu, cache_size)
+        # Convert Python arguments to C++ types, then release the GIL to load the processor.
+        cdef string model_path = model.encode('utf-8')
+        cdef bint use_fp16 = fp16
+        cdef bint use_deterministic = deterministic
+        cdef int32_t batch_size_int = batch_size
+        cdef int32_t threads_per_gpu_int = threads_per_gpu
+        cdef int32_t cache_size_int = cache_size
+        with nogil:
+            self.processor = new InferenceProcessor(
+                model_path, gpu_vector, use_fp16, use_deterministic,
+                batch_size_int, threads_per_gpu_int, cache_size_int)
 
     def __dealloc__(self) -> None:
-        del self.processor
+        '''Destroy the processor and wait for its workers to finish.'''
+        # Allow other Python threads to run while waiting for the inference workers to finish.
+        with nogil:
+            del self.processor
 
     def predict(self, board: NativeBoard) -> float:# type: ignore
         '''Runs inference on the given board.

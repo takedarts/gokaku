@@ -1,10 +1,12 @@
 #pragma once
 
+#include <array>
 #include <atomic>
 #include <condition_variable>
 #include <cstdint>
 #include <functional>
 #include <map>
+#include <optional>
 #include <queue>
 #include <set>
 #include <shared_mutex>
@@ -15,7 +17,6 @@
 #include "Board.h"
 #include "BoardHash.h"
 #include "MctsManager.h"
-#include "MctsParameter.h"
 #include "MctsPolicy.h"
 #include "MctsValue.h"
 #include "Move.h"
@@ -35,11 +36,15 @@ class MctsNode {
   MctsNode(MctsManager* manager);
 
   /**
-   * Sets this node as the initial board node specified in SFEN format.
+   * Initialize this node as the root position specified by SFEN with the given nyugyoku scores.
    * @param sfen Board in SFEN format
    * @param drawTurn Total move count at which the game is drawn.
+   * @param nyugyokuScoreBlack Points Black needs for nyugyoku (from -128 to 127).
+   * @param nyugyokuScoreWhite Points White needs for nyugyoku (from -128 to 127).
+   * @throws std::invalid_argument If a nyugyoku score is out of range.
    */
-  void initialize(const std::string sfen, int32_t drawTurn);
+  void initialize(const std::string& sfen, int32_t drawTurn,
+                  int32_t nyugyokuScoreBlack, int32_t nyugyokuScoreWhite);
 
   /**
    * Apply inference results to this node's evaluation and move probabilities.
@@ -80,6 +85,7 @@ class MctsNode {
 
   /**
    * Performs checkmate search.
+   * Only an aborted search is reset to unsearched so that it can be searched again on resume.
    * @param engine Checkmate search engine
    * @param depth Search depth for checkmate search
    */
@@ -96,10 +102,10 @@ class MctsNode {
   void setAsRootNode();
 
   /**
-   * Carry the position history forward when changing the root.
+   * Carry the move numbers of earlier positions forward when changing the root.
    * @param oldRootNode Previous root node.
    */
-  void copyAppearedBoardHashes(const MctsNode* oldRootNode);
+  void takeRepetitionHistory(MctsNode* oldRootNode);
 
   /**
    * Return true if this node's position has been evaluated.
@@ -130,6 +136,14 @@ class MctsNode {
    * @return Predicted next-move probabilities.
    */
   std::vector<MctsPolicy> getPolicies();
+
+  /**
+   * Return the policy and search evaluation of this position.
+   * @param value Output for this position's search evaluation from Black's perspective.
+   * @param remainingTurns Output for the predicted moves remaining from this position.
+   * @return Moves and their predicted probabilities.
+   */
+  std::vector<std::pair<Move, float>> getPolicyMoves(float& value, float& remainingTurns);
 
   /**
    * Returns the parent node.
@@ -345,9 +359,14 @@ class MctsNode {
   bool _checkmateMoveSearched;
 
   /**
-   * Position hashes encountered before reaching the root.
+   * Most recent move number of each position that appeared before the root position.
    */
-  std::set<BoardHash> _appearedBoardHashes;
+  std::map<BoardHash, int32_t> _appearedTurns;
+
+  /**
+   * Move number right after each side last played a non-checking move, or -1 if none.
+   */
+  std::array<int32_t, 2> _lastNonCheckTurns;
 
   /**
    * Candidate moves waiting to be registered as children.
@@ -381,10 +400,19 @@ class MctsNode {
   MctsNode* _pickupNextNode(bool equally, int32_t width, float temperature, float noise);
 
   /**
-   * Return true if this position occurs in the history or current search path.
-   * @return True if the position has appeared before.
+   * Find the most recent move number of an identical position on the path including this node
+   * and in the game history.
+   * @param hash Position to find.
+   * @return Most recent move number of the position, or empty if it has not appeared.
    */
-  bool _isSennichite() const;
+  std::optional<int32_t> _findAppearedTurn(const BoardHash& hash) const;
+
+  /**
+   * Inherit the check history from the node before the move and reflect the move to this
+   * position.
+   * @param parent Node before the move.
+   */
+  void _updateCheckHistory(const MctsNode& parent);
 };
 
 }  // namespace deepshogi

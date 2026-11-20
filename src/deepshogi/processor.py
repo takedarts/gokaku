@@ -42,6 +42,35 @@ class Processor(object):
         self.native = NativeInferenceProcessor(
             str(model), gpus, fp16, deterministic, batch_size, threads_per_gpu, cache_size)
 
+        # Keep the settings applied to the running processor so that they can be referenced.
+        self._gpus = tuple(gpus)
+        self._fp16 = fp16
+        self._batch_size = batch_size
+
+    @property
+    def gpus(self) -> tuple[int, ...]:
+        '''Return the device IDs in the specified order.
+        Returns:
+            tuple[int, ...]: GPU IDs in use. -1 means the CPU.
+        '''
+        return self._gpus
+
+    @property
+    def fp16(self) -> bool:
+        '''Return the precision setting of the processor.
+        Returns:
+            bool: True if FP16 is used.
+        '''
+        return self._fp16
+
+    @property
+    def batch_size(self) -> int:
+        '''Return the fixed batch size of the processor.
+        Returns:
+            int: Number of positions in one model batch.
+        '''
+        return self._batch_size
+
     def evaluate(self, boards: List[Board]) -> np.ndarray:
         '''Evaluate multiple positions in one batch.
         Args:

@@ -1,6 +1,8 @@
 #pragma once
 
+#include <atomic>
 #include <cstdint>
+#include <functional>
 #include <limits>
 #include <utility>
 #include <vector>
@@ -18,13 +20,30 @@ namespace deepshogi {
  */
 class PnSearchEngine {
  private:
+  // Allow only the manager class to prepare engines when lending and change state on return
+  friend class PnSearchManager;
+
+  /**
+   * State representing preparation, execution, and completion of a search and abort requests.
+   */
+  enum class SearchState {
+    IDLE,
+    READY,
+    RUNNING,
+    ABORT_REQUESTED,
+    COMPLETED,
+    ABORTED
+  };
+
   /**
    * Allow PnSearchNode::expand() to obtain search nodes.
    * @param engine Search engine.
    * @param board Working search position.
-   * @return False only when node capacity is exhausted.
+   * @return False when node capacity is exhausted or an abort is requested.
    */
-  friend bool PnSearchNode::expand(PnSearchEngine* engine, Board* board);
+  friend bool PnSearchNode::expand(
+      PnSearchEngine* engine, Board* board,
+      const std::function<bool(const BoardHash&)>& isRepeated);
 
   /**
    * Store the requested depth and continuation conditions for a search path.
@@ -111,16 +130,33 @@ class PnSearchEngine {
   /**
    * Destroy the DF-PN search engine.
    */
-  virtual ~PnSearchEngine();
+  virtual ~PnSearchEngine() = default;
 
   /**
    * Search for and return a checkmating move sequence.
-   * Return an empty vector if no checkmate is found.
+   * Return an empty vector if no checkmate is found or the search is aborted.
+   * Searches using the same engine must be called serially.
    * @param board Object holding the board position.
    * @param depth Initial depth, rounded to odd; may increase during search.
-   * @return Checkmating move sequence.
+   * @param isPreviousPosition Function that identifies positions before the search started
+   *     (empty for the conventional search).
+   * @return Checkmating move sequence (use isSearchAborted() to detect an abort).
    */
-  std::vector<Move> getCheckmateMoves(const Board* board, int32_t depth);
+  std::vector<Move> getCheckmateMoves(
+      const Board* board, int32_t depth,
+      const std::function<bool(const BoardHash&)>& isPreviousPosition = {});
+
+  /**
+   * Request an abort of a prepared or running search. Do not wait for it to finish.
+   */
+  void abortSearch();
+
+  /**
+   * Return whether the previous search was aborted. Check it after the search returns and
+   * before the engine is returned or the next search starts.
+   * @return True if the search ended because of an abort.
+   */
+  bool isSearchAborted() const;
 
   /**
    * Return the number of search nodes in use.
@@ -139,6 +175,51 @@ class PnSearchEngine {
   }
 
  private:
+  /** State synchronizing abort requests from other threads with search completion. */
+  std::atomic<SearchState> _searchState;
+
+  /**
+   * Invalidate the previous result before lending and accept aborts before the start.
+   */
+  void _prepareSearch();
+
+  /**
+   * Return whether an abort has been requested.
+   * @return True if an abort request has been received.
+   */
+  bool _isAbortRequested() const;
+
+  /**
+   * Resolve a race between completion and abort and finalize the search result.
+   * @return True if completion was finalized before the abort.
+   */
+  bool _finishSearch();
+
+  /**
+   * Initialize the search state and run the DF-PN search synchronously.
+   * @param board Input position.
+   * @param depth Initial search depth.
+   * @param isPreviousPosition Function that identifies positions before the search started
+   *     (empty for the conventional search).
+   * @return Checkmating sequence, or an empty vector if not found, out of capacity, or aborted.
+   */
+  std::vector<Move> _searchCheckmateMoves(
+      const Board* board, int32_t depth,
+      const std::function<bool(const BoardHash&)>& isPreviousPosition);
+
+  /**
+   * Follow all replies of the proof and check that checkmate holds before any repetition on
+   * that path.
+   * @param node Node that proved checkmate.
+   * @param board Corresponding position (the same position on return).
+   * @param path Positions that have appeared so far in the proof.
+   * @param isPreviousPosition Function that identifies positions before the search started.
+   * @return True if checkmate holds before any repetition for all replies.
+   */
+  bool _validateMateProof(
+      PnSearchNode* node, Board& board, std::vector<BoardHash>& path,
+      const std::function<bool(const BoardHash&)>& isPreviousPosition) const;
+
   /**
    * Whether to adjust PN thresholds using drop groups.
    */
@@ -204,14 +285,17 @@ class PnSearchEngine {
   /**
    * Obtain a search node.
    * Obtain a regular node even when the remaining depth is zero.
-   * Return nullptr when the node capacity is exhausted.
+   * Return nullptr when the node capacity is exhausted or an abort is requested.
    * @param board Position to search.
    * @param depth Remaining search depth in moves.
    * @param noCache True to skip both cache lookup and insertion.
+   * @param isPreviousPosition Function that identifies positions before the search started
+   *     (empty for the conventional search).
    * @return Pointer to the search node.
    */
   PnSearchNode* _getNode(
-      const Board* board, int32_t depth, bool noCache);
+      const Board* board, int32_t depth, bool noCache,
+      const std::function<bool(const BoardHash&)>& isPreviousPosition = {});
 
   /**
    * Replace the detected path's defensive node with the shared terminal and align the path.
@@ -222,7 +306,7 @@ class PnSearchEngine {
    * @param loopIndex Index of the loop ancestor.
    * @param node Regular node where the loop was detected.
    * @param attacker True if the current position is attacking.
-   * @return False on capacity exhaustion, without changing connections.
+   * @return False on capacity exhaustion or an abort request, without changing connections.
    */
   bool _replaceLoop(
       Board* board, std::vector<PnSearchNode*>& parents,
@@ -235,7 +319,7 @@ class PnSearchEngine {
    * @param parents Reference to the ancestor array; updated over the cloned segment.
    * @param history Move history from the root.
    * @param loopIndex Index of the loop ancestor.
-   * @return False on capacity exhaustion, without changing connections.
+   * @return False on capacity exhaustion or an abort request, without changing connections.
    */
   bool _detachLoop(
       Board* board, std::vector<PnSearchNode*>& parents,
