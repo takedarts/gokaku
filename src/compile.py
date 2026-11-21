@@ -2,10 +2,12 @@ import argparse
 import importlib
 import json
 import logging
+import os
 import platform
 import sys
 import tempfile
-from contextlib import nullcontext
+from collections.abc import Generator
+from contextlib import contextmanager, nullcontext
 from copy import deepcopy
 from pathlib import Path
 from types import ModuleType
@@ -22,6 +24,11 @@ from deepshogi.fileutil import move_file
 from deepshogi.log import start_logging
 
 LOGGER = logging.getLogger(__name__)
+
+# Torch-TensorRT loggers whose messages below WARNING are suppressed.
+# The conversion context logger has a space in its name and is not a child of torch_tensorrt,
+# so it is specified separately.
+TENSORRT_LOGGER_NAMES = ('torch_tensorrt', 'torch_tensorrt [TensorRT Conversion Context]')
 
 
 def parse_args() -> argparse.Namespace:
@@ -353,6 +360,28 @@ def create_metadata(
     return metadata
 
 
+@contextmanager
+def redirect_stdout_to_stderr() -> Generator[None, None, None]:
+    '''Redirect stdout to stderr at the file descriptor level, including C++ library output.
+    Used to keep warnings printed by TensorRT on import out of stdout, the USI channel.
+    Returns:
+        Generator[None, None, None]: Context in which stdout is redirected.
+    '''
+    # Flush the Python buffer before redirecting to keep the output order.
+    sys.stdout.flush()
+    saved_fd = os.dup(1)
+
+    try:
+        # Point file descriptor 1 to stderr so that output such as C++ std::cout also moves.
+        os.dup2(2, 1)
+        yield
+    finally:
+        # Flush the buffer written while redirected to stderr, then restore stdout.
+        sys.stdout.flush()
+        os.dup2(saved_fd, 1)
+        os.close(saved_fd)
+
+
 def load_tensorrt() -> ModuleType:
     '''Import Torch-TensorRT when checking TensorRT availability or converting.
     Returns:
@@ -360,9 +389,14 @@ def load_tensorrt() -> ModuleType:
     Raises:
         ImportError: If the module or its shared libraries are unavailable.
     '''
+    # Output only WARNING or higher before import to suppress the many INFO logs during conversion.
+    for name in TENSORRT_LOGGER_NAMES:
+        logging.getLogger(name).setLevel(logging.WARNING)
+
     # Do not require Torch-TensorRT in environments that use only AOTI.
     try:
-        return importlib.import_module('torch_tensorrt')
+        with redirect_stdout_to_stderr():
+            return importlib.import_module('torch_tensorrt')
     except Exception as error:
         # Also handle Torch-TensorRT wrapping dependency load failures in a plain Exception.
         raise ImportError(f'torch_tensorrt is not available: {error}') from error

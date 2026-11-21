@@ -145,22 +145,24 @@ python src/run.py b10c512-1000.pt2
 ### CUDAを使用できる環境での実行
 Gokakuを実行できるDockerイメージが用意されており、これを使用することで簡単にGokakuを実行できます（TensorRTはサポートしていません）。
 
-GPUを使用してDocker版のGokakuを実行するためには、Version 12.6以降のCUDAに対応したNVIDIAドライバとNVIDIA Container Toolkitがインストールされている必要があります。
-以下のコマンドを実行してDockerからGPUにアクセスできるのであれば、GPUを使用してDocker版のGokakuを実行できます。
-```
-docker run --rm -i --gpus all pytorch/pytorch:2.12.0-cuda12.6-cudnn9-runtime nvidia-smi
-```
+GPUを使用してDocker版のGokakuを実行するためには、Version 13.2以降のCUDAに対応したNVIDIAドライバとNVIDIA Container Toolkitがインストールされている必要があります。
 
 最初に実行する際にはDockerイメージをダウンロードする必要があります。
-CUDAを使用することを想定したDockerイメージ `takedarts/gokaku:v2.4-cuda12.6` は、イメージサイズが約4GBとなっているため、ダウンロードに時間がかかる場合があります。
+CUDAを使用することを想定したDockerイメージ `takedarts/gokaku:v2.4-cuda13.2` は、ダウンロードサイズ（圧縮後のサイズ）が約3.2GBとなっているため、ダウンロードに時間がかかる場合があります。
 以下のコマンドを実行して、あらかじめDockerイメージをダウンロードしておくことをおすすめします。
 ```
-docker pull takedarts/gokaku:v2.4-cuda12.6
+docker pull takedarts/gokaku:v2.4-cuda13.2
+```
+
+ダウンロードしたDockerイメージで以下のコマンドを実行し、DockerからGPUにアクセスできることを確認してください。
+GPUの情報が表示されれば、GPUを使用してDocker版のGokakuを実行できます。
+```
+docker run --rm --gpus all takedarts/gokaku:v2.4-cuda13.2 nvidia-smi
 ```
 
 CUDAを使用できる環境で以下のコマンドを実行することで、GokakuのDockerイメージを実行できます。
 ```
-docker run -iq --rm --gpus all -v .:/workspace takedarts/gokaku:v2.4-cuda12.6 /opt/run.sh <model_file>
+docker run -iq --rm --gpus all -v .:/workspace takedarts/gokaku:v2.4-cuda13.2 /opt/run.sh <model_file>
 ```
 オプション`--gpus`で使用するGPUを指定し、`-v .:/workspace`でカレントディレクトリをコンテナ内の`/workspace`にマウントします。
 モデルファイルをカレントディレクトリ以下に置き、`<model_file>`にそのファイルパスを指定してください。
@@ -168,11 +170,11 @@ docker run -iq --rm --gpus all -v .:/workspace takedarts/gokaku:v2.4-cuda12.6 /o
 実行コマンドに続けてオプションを指定することもできます。
 実行コマンドに`--help`を指定すると、指定可能なオプションの一覧が表示されます。
 ```
-docker run -iq --rm --gpus all -v .:/workspace takedarts/gokaku:v2.4-cuda12.6 /opt/run.sh --help
+docker run -iq --rm --gpus all -v .:/workspace takedarts/gokaku:v2.4-cuda13.2 /opt/run.sh --help
 ```
 
 ### CPUでの実行
-CPU（AMD64）での実行を想定したDockerイメージ `takedarts/gokaku:v2.4-cpu` も用意されています（イメージサイズはCUDA版よりも小さくなっています）。
+CPU（AMD64）での実行を想定したDockerイメージ `takedarts/gokaku:v2.4-cpu` も用意されています（ダウンロードサイズは約400MBで、CUDA版よりも小さくなっています）。
 CPUで計算を実行する場合は以下のコマンドを実行してください。
 ```
 docker run -iq --rm -v .:/workspace takedarts/gokaku:v2.4-cpu /opt/run.sh <model_file>
@@ -182,6 +184,26 @@ ARM64アーキテクチャのCPUで実行する場合は `takedarts/gokaku:v2.4-
 ```
 docker run -iq --rm -v .:/workspace takedarts/gokaku:v2.4-arm /opt/run.sh <model_file>
 ```
+
+### Dockerイメージでのモデルのコンパイル
+ExportedProgram形式のモデル（`.ep`）を指定した場合は、起動するたびにモデルのコンパイルが行われます。
+起動のたびにコンパイルしないようにするには、`/opt/compile.sh`を使用して、事前にモデルをPT2パッケージ（`.pt2`）にコンパイルしてください。
+```
+docker run -iq --rm --gpus all -v .:/workspace takedarts/gokaku:v2.4-cuda13.2 /opt/compile.sh <exported-program-file> <pt2-file>
+```
+
+作成したPT2パッケージを引数に指定して、Gokakuを起動できます。
+```
+docker run -iq --rm --gpus all -v .:/workspace takedarts/gokaku:v2.4-cuda13.2 /opt/run.sh <pt2-file>
+```
+
+CPU版とARM版のDockerイメージでも、同様に`/opt/compile.sh`を使用できます（その場合は`--gpus all`を指定する必要はありません）。
+`/opt/compile.sh`は`src/compile.py`を実行するスクリプトで、`--fp16`や`--batch-size`などのオプションも指定できます（[モデルのコンパイル](#モデルのコンパイル)を参照）。
+ただし、DockerイメージにはTorch-TensorRTが含まれていないため、コンパイルには常にAOTInductorが使用されます。
+
+PT2パッケージは、コンパイルしたときと同じ種類のデバイスでのみ使用できます。
+CUDA版のDockerイメージで作成したPT2パッケージはCUDA版で、CPU版やARM版のDockerイメージで作成したPT2パッケージはコンパイルしたときと同じ環境で使用してください。
+作成されたPT2パッケージのファイルの所有者は、カレントディレクトリの所有者となります。
 
 ## 実行オプション
 起動スクリプト`src/run.py`を実行する際に以下のオプションを指定できます。

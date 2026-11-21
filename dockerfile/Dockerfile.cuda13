@@ -1,0 +1,91 @@
+# syntax=docker/dockerfile:1
+
+# PyTorch version and CUDA variant shared by the build and runtime stages
+ARG TORCH_VERSION=2.15.0
+ARG TORCH_CUDA=cu132
+
+############################
+# 1. Base stage (runtime environment shared by the build and runtime stages)
+############################
+FROM ubuntu:24.04 AS base
+
+ARG TORCH_VERSION
+ARG TORCH_CUDA
+
+LABEL maintainer="Atsushi TAKEDA @takedarts"
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Add the CUDA apt repository
+ADD https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/cuda-keyring_1.1-1_all.deb /tmp/cuda-keyring.deb
+
+# Install runtime dependencies and python modules in a single layer to minimize the image size
+# - g++, python3.12-dev and the CUDA runtime headers/libraries are required
+#   to compile ExportedProgram models with AOTInductor
+# - pip is used only for installation and removed afterwards
+# - torch/test contains test binaries of PyTorch, which are not needed at runtime
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        g++ python3 python3.12 python3.12-dev libpython3.12t64 python3-pip ca-certificates \
+    && dpkg -i /tmp/cuda-keyring.deb \
+    && rm /tmp/cuda-keyring.deb \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends \
+        cuda-cudart-dev-13-2 cuda-crt-13-2 \
+    && pip3 install --no-cache-dir --break-system-packages \
+        numpy \
+    && pip3 install --no-cache-dir --break-system-packages \
+        torch==${TORCH_VERSION} --index-url https://download.pytorch.org/whl/${TORCH_CUDA} \
+    && rm -rf /usr/local/lib/python3.12/dist-packages/torch/test \
+    && apt-get purge -y python3-pip \
+    && apt-get autoremove -y --purge \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set the CUDA root used by AOTInductor
+ENV CUDA_HOME=/usr/local/cuda
+
+############################
+# 2. Build stage
+############################
+FROM base AS builder
+
+WORKDIR /opt/prod
+
+# Install build dependencies (the CUDA toolkit is required to find CUDA with CMake)
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        git make python3-pip cuda-toolkit-13-2 \
+    && pip3 install --no-cache-dir --break-system-packages \
+        cython cmake \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# Make nvcc available to CMake
+ENV PATH=/usr/local/cuda/bin:${PATH}
+
+# Clone the repository and build the project
+ARG BRANCH=main
+RUN git clone --branch ${BRANCH} --depth=1 https://github.com/takedarts/gokaku . \
+    && python3 src/build.py \
+    && rm -rf src/deepshogi/native/build
+
+############################
+# 3. Runtime stage
+############################
+FROM base AS runtime
+
+WORKDIR /opt/prod
+
+# Copy the built project from the builder stage
+COPY --from=builder /opt/prod /opt/prod
+
+# Copy the launcher scripts
+COPY --chmod=755 run.sh /opt/run.sh
+COPY --chmod=755 compile.sh /opt/compile.sh
+COPY --chmod=755 pnsolver.sh /opt/pnsolver.sh
+
+WORKDIR /workspace
+
+# Set the default command to display help
+CMD ["/opt/run.sh", "--help"]
