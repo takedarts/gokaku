@@ -157,7 +157,8 @@ InferenceModel::InferenceModel(
       _device(getSuitableDevice(gpu)),
       _dtype(fp16 ? at::kHalf : at::kFloat),
       _batchSize(0),
-      _bitShift() {
+      _bitShift(),
+      _cpuBitShift() {
   // Protect the shared area used by JSON loading in PyTorch 2.11 and the shared CuDNN settings.
   static std::mutex initialization_mutex;
   std::lock_guard<std::mutex> initialization_lock(initialization_mutex);
@@ -252,8 +253,10 @@ InferenceModel::InferenceModel(
     _model.reset(new Loader(filename, "model", false, 1, device_index));
   }
 
-  // After restoring the log settings, create the tensor used to unpack board inputs.
-  _bitShift = torch::arange(0, 32, torch::TensorOptions().dtype(torch::kInt32)).to(_device);
+  // After restoring the log settings, create the tensors used to unpack board inputs and output
+  // masks. Output masks are also unpacked on the CPU, so create a CPU tensor as well.
+  _cpuBitShift = torch::arange(0, 32, torch::TensorOptions().dtype(torch::kInt32));
+  _bitShift = _cpuBitShift.to(_device);
 }
 
 /**
@@ -261,16 +264,12 @@ InferenceModel::InferenceModel(
  * @param inputs Array containing size rows of packed board inputs
  * @param masks Array containing size rows of packed output masks
  * @param outputs Array receiving size rows of FP32 outputs, with zeros outside the mask
- * @param size Number of evaluations; zero returns without accessing the arrays
- * @throws std::invalid_argument If size is negative or a nonempty array is null
- * @throws std::runtime_error If the model output does not match the evaluation format
+ * @param size Number of evaluations, at least zero; zero returns without accessing the arrays
+ * @throws std::runtime_error If the model returns no output
  */
 void InferenceModel::forward(int32_t* inputs, int32_t* masks, float* outputs, int32_t size) {
-  // Do not use pointers for empty inputs, and reject negative sizes or null nonempty buffers.
-  if (size < 0 || (size > 0 && (inputs == nullptr || masks == nullptr || outputs == nullptr))) {
-    throw std::invalid_argument("Invalid inference size or null buffer.");
-  }
-
+  // Prioritize execution speed and do not validate the arguments.
+  // Return for empty inputs without acquiring the lock.
   if (size == 0) {
     return;
   }
@@ -307,19 +306,24 @@ void InferenceModel::forward(int32_t* inputs, int32_t* masks, float* outputs, in
           .copy_(input_values.narrow(0, 0, 1).expand({_batchSize - count, MODEL_INPUT_PACK_SIZE}));
     }
 
-    // Treat all outputs of padded rows as invalid and copy the masks without changing the
-    // caller's array.
+    // Outputs of padded rows are not used, so transfer only the masks of the actual rows.
     const auto mask_values = torch::from_blob(
         masks + offset * MODEL_OUTPUT_PACK_SIZE, {count, MODEL_OUTPUT_PACK_SIZE}, packed_options);
-    auto out_masks = torch::zeros({_batchSize, MODEL_OUTPUT_PACK_SIZE}, packed_options);
 
-    out_masks.narrow(0, 0, count).copy_(mask_values);
     in_values = in_values.to(_device);
-    out_masks = out_masks.to(_device);
+    auto out_masks = mask_values.to(_device);
 
-    // Unpack and slice bits as before, then convert to the model's input precision.
+    // Unpack the masks used to write back to the output array on the CPU for the actual rows.
+    // They use the same expression as on the device, so the order matches masked_select.
+    auto cpu_masks = torch::bitwise_right_shift(mask_values.unsqueeze(2), _cpuBitShift);
+    cpu_masks = torch::bitwise_and(cpu_masks, 1).reshape({count, -1});
+    cpu_masks = cpu_masks.narrow(1, 0, MODEL_OUTPUT_SIZE).to(torch::kBool).reshape({-1});
+
+    // Unpack and slice the elements except the trailing real values, then convert them to the
+    // model's input precision.
     auto unpacked = torch::bitwise_right_shift(
-        in_values.narrow(1, 0, MODEL_INPUT_PACK_SIZE - 3).unsqueeze(2), _bitShift);
+        in_values.narrow(1, 0, MODEL_INPUT_PACK_SIZE - MODEL_INPUT_VALUE_NUM).unsqueeze(2),
+        _bitShift);
 
     unpacked = torch::bitwise_and(unpacked, 1).reshape({_batchSize, -1});
 
@@ -329,33 +333,33 @@ void InferenceModel::forward(int32_t* inputs, int32_t* masks, float* outputs, in
 
     in_data.copy_(unpacked.narrow(1, 0, MODEL_INPUT_SIZE));
 
-    // Normalize the last five elements in FP32, convert them to the input precision, and store
-    // them at the same positions as before.
-    auto info_values = in_values.narrow(1, MODEL_INPUT_PACK_SIZE - 5, 5);
+    // Normalize the trailing real values in FP32, convert them to the input precision, and
+    // store them from index 77 of the game information.
+    auto info_values = in_values.narrow(
+        1, MODEL_INPUT_PACK_SIZE - MODEL_INPUT_VALUE_NUM, MODEL_INPUT_VALUE_NUM);
 
     info_values = (info_values.to(torch::kFloat32) / 0xfffff).to(_dtype);
-    in_data.slice(1, MODEL_INFO_OFFSET + 77, MODEL_INFO_OFFSET + 82).copy_(info_values);
+    in_data.slice(1, MODEL_INFO_OFFSET + 77, MODEL_INFO_OFFSET + 77 + MODEL_INPUT_VALUE_NUM)
+        .copy_(info_values);
 
-    // Unpack the output masks in the same order as before and limit them to the valid width.
+    // Unpack the output masks of the actual rows and limit them to the valid width.
     out_masks = torch::bitwise_right_shift(out_masks.unsqueeze(2), _bitShift);
-    out_masks = torch::bitwise_and(out_masks, 1).reshape({_batchSize, -1});
-    out_masks = out_masks.narrow(1, 0, MODEL_OUTPUT_SIZE).to(torch::kBool);
+    out_masks = torch::bitwise_and(out_masks, 1).reshape({count, -1});
+    out_masks = out_masks.narrow(1, 0, MODEL_OUTPUT_SIZE).to(torch::kBool).reshape({-1});
 
     // Run AOTI and TensorRT through the common API, matching PT2's fixed shape and stride.
     const auto result = _model->run({in_data});
 
-    if (result.size() != 1 || !result[0].defined() || result[0].dim() != 2 ||
-        result[0].size(0) != _batchSize || result[0].size(1) != MODEL_OUTPUT_SIZE ||
-        !result[0].is_floating_point() || result[0].device() != _device) {
-      throw std::runtime_error(
-          "Expected one PT2 output of shape (batch_size, MODEL_OUTPUT_SIZE).");
+    // The shape and device are guaranteed by the metadata checks at load time, so only check
+    // that an output exists.
+    if (result.empty()) {
+      throw std::runtime_error("PT2 model returned no output.");
     }
 
-    // Take only the actual rows, then apply mask compression and transfer to the CPU as before.
+    // Take only the actual rows and transfer only the masked values to the CPU.
+    // The unpacked masks already exist on the CPU, so they are not transferred from the device.
     auto out_data = result[0].narrow(0, 0, count).reshape({-1});
-    out_masks = out_masks.narrow(0, 0, count).reshape({-1});
     out_data = out_data.masked_select(out_masks).to(torch::kCPU);
-    out_masks = out_masks.to(torch::kCPU);
 
     // Zero values outside the mask and expand the FP32 outputs into the caller's array.
     auto out_values = torch::from_blob(
@@ -363,7 +367,7 @@ void InferenceModel::forward(int32_t* inputs, int32_t* masks, float* outputs, in
         torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCPU));
 
     out_values.fill_(0.0f);
-    out_values.masked_scatter_(out_masks, out_data.to(torch::kFloat32));
+    out_values.masked_scatter_(cpu_masks, out_data.to(torch::kFloat32));
   }
 }
 

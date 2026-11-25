@@ -14,7 +14,8 @@ import torch
 from deepshogi.board import Board
 from deepshogi.config import (
     COLOR_BLACK, COLOR_WHITE, DEFAULT_BATCH_SIZE, MODEL_INFO_OFFSET, MODEL_INPUT_PACK_SIZE,
-    MODEL_INPUT_SIZE, MODEL_OUTPUT_PACK_SIZE, MODEL_OUTPUT_SIZE, MODEL_VALUE_OFFSET,
+    MODEL_INPUT_SIZE, MODEL_INPUT_VALUE_NUM, MODEL_OUTPUT_PACK_SIZE, MODEL_OUTPUT_SIZE,
+    MODEL_VALUE_OFFSET,
 )
 from deepshogi.loader import open_processor
 from deepshogi.native import NativeInferenceModel
@@ -31,9 +32,10 @@ def unpack(inputs: np.ndarray) -> np.ndarray:
         np.ndarray: Unpacked floating-point model input features.
     '''
     # Decode the binary region independently using NumPy, then restore scalar features.
-    bits = ((inputs[:, :-5, None].astype(np.uint32) >> np.arange(32)) & 1)
+    bits = ((inputs[:, :-MODEL_INPUT_VALUE_NUM, None].astype(np.uint32) >> np.arange(32)) & 1)
     expanded = bits.reshape(len(inputs), -1)[:, :MODEL_INPUT_SIZE].astype(np.float32)
-    expanded[:, MODEL_INFO_OFFSET + 77:MODEL_INFO_OFFSET + 82] = inputs[:, -5:] / 0xfffff
+    values = inputs[:, -MODEL_INPUT_VALUE_NUM:] / 0xfffff
+    expanded[:, MODEL_INFO_OFFSET + 77:MODEL_INFO_OFFSET + 77 + MODEL_INPUT_VALUE_NUM] = values
     return expanded
 
 

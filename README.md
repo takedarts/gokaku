@@ -9,7 +9,7 @@ You can track Gokaku's playing strength improvements on [this page](https://take
 
 A model file is required to run Gokaku.
 Gokaku runs an ExportedProgram model (`.ep`) or a PT2 package (`.pt2`) compiled from an ExportedProgram with `src/compile.py`.
-Model files are published on the [releases page](https://github.com/takedarts/gokaku/releases).
+Model files are published on the [releases page](https://github.com/takedarts/gokaku/releases/tag/v2.4).
 
 **Note:** Gokaku version 2.4 changes the model specification, including its output format,
 so models from Gokaku version 2.3 or earlier cannot be used.

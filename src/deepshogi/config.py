@@ -195,7 +195,8 @@ MODEL_INPUT_SIZE = MODEL_FEATURE_SIZE + MODEL_INFO_SIZE
 #  - Our total piece score.
 #  - The opponent's total piece score.
 #  - Normalized proximity to the maximum-move draw limit.
-MODEL_INPUT_PACK_SIZE = (MODEL_INPUT_SIZE + 31) // 32 + 5
+MODEL_INPUT_VALUE_NUM = 5
+MODEL_INPUT_PACK_SIZE = (MODEL_INPUT_SIZE + 31) // 32 + MODEL_INPUT_VALUE_NUM
 # Size of the model output.
 MODEL_OUTPUT_SIZE = MODEL_POLICY_SIZE + MODEL_REPLY_SIZE + MODEL_VALUE_SIZE
 # Number of int32 elements in the packed model output mask.

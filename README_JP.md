@@ -9,7 +9,7 @@ Gokakuはコンピュータ囲碁プログラム[Maru](https://github.com/takeda
 
 Gokakuを実行するためにはモデルファイルが必要です。
 GokakuはExportedProgram形式のモデル（`.ep`）か、`src/compile.py`を使ってExportedProgramからコンパイルしたPT2パッケージ（`.pt2`）を使用します。
-モデルファイルは[リリースページ](https://github.com/takedarts/gokaku/releases)で公開しています。
+モデルファイルは[リリースページ](https://github.com/takedarts/gokaku/releases/tag/v2.4)で公開しています。
 
 **注意** Gokaku version 2.4では、出力の形式を含めたモデルの仕様が変更されたため、Gokaku version 2.3以前のモデルは使用できません。
 

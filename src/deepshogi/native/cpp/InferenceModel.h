@@ -71,9 +71,8 @@ class InferenceModel {
    * @param inputs Array containing size rows of packed board inputs
    * @param masks Array containing size rows of packed output masks
    * @param outputs Array receiving size rows of FP32 outputs, with zeros outside the mask
-   * @param size Number of evaluations; zero returns without accessing the arrays
-   * @throws std::invalid_argument If size is negative or a nonempty array is null
-   * @throws std::runtime_error If the model output does not match the evaluation format
+   * @param size Number of evaluations, at least zero; zero returns without accessing the arrays
+   * @throws std::runtime_error If the model returns no output
    */
   void forward(int32_t* inputs, int32_t* masks, float* outputs, int32_t size);
 
@@ -139,6 +138,11 @@ class InferenceModel {
    * Bit-shift tensor used to unpack packed inputs and output masks.
    */
   at::Tensor _bitShift;
+
+  /**
+   * Bit-shift tensor on the CPU used to unpack the masks for writing back to the output array.
+   */
+  at::Tensor _cpuBitShift;
 };
 
 }  // namespace deepshogi
